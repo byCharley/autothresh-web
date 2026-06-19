@@ -1,3 +1,5 @@
+import { AppIcon } from './AppIcon';
+
 export function MobileBlock() {
   return (
     <div style={{
@@ -7,12 +9,9 @@ export function MobileBlock() {
       padding: '32px 24px', textAlign: 'center',
       fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
     }}>
-      {/* Icon */}
-      <div style={{ marginBottom: 28 }}>
-        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-          <line x1="12" y1="18" x2="12.01" y2="18"/>
-        </svg>
+      {/* App icon */}
+      <div style={{ marginBottom: 24 }}>
+        <AppIcon size={72} color="#e8a530" />
       </div>
 
       {/* Branding */}

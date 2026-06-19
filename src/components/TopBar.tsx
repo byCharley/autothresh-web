@@ -1,4 +1,5 @@
 import { useStore } from '../store/useStore';
+import { AppIcon } from './AppIcon';
 
 interface TopBarProps {
   onExport: () => void;
@@ -20,7 +21,8 @@ export function TopBar({ onExport, onLogout, userEmail, firstName }: TopBarProps
 
   return (
     <header className="topbar">
-      <div className="topbar-logo">
+      <div className="topbar-logo" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <AppIcon size={22} color="var(--accent)" />
         <span>AutoThresh Web </span><span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
       </div>
 

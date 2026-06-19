@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AppIcon } from './AppIcon';
 
 interface Props {
   onLogin: () => Promise<void>;
@@ -20,6 +21,9 @@ export function LoginPage({ onLogin }: Props) {
     }}>
       {/* Logo */}
       <div style={{ marginBottom: 40, textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+          <AppIcon size={80} color="var(--accent)" />
+        </div>
         <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
           AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
         </div>

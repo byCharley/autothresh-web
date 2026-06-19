@@ -1,3 +1,5 @@
+import { AppIcon } from './AppIcon';
+
 const PRODUCT_URL = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefined
   ?? 'https://charleypangus.com/products/autothreshweb';
 
@@ -15,6 +17,9 @@ export function SubscribePage({ firstName, onLogout }: Props) {
     }}>
       {/* Logo */}
       <div style={{ marginBottom: 36, textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+          <AppIcon size={56} color="var(--accent)" />
+        </div>
         <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
           AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
         </div>
