@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from './auth/useAuth';
 import { LoginPage } from './components/LoginPage';
 import { SubscribePage } from './components/SubscribePage';
+import { MobileBlock } from './components/MobileBlock';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { writePsd } from 'ag-psd';
@@ -43,9 +44,25 @@ async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> 
   return new Uint8Array(await blob.arrayBuffer());
 }
 
+function isMobileDevice(): boolean {
+  const ua = navigator.userAgent;
+  const mobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  const smallScreen = window.innerWidth < 1024;
+  return mobileUA || smallScreen;
+}
+
 function App() {
   const { status, session, login, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => isMobileDevice());
+
+  useEffect(() => {
+    const check = () => setIsMobile(isMobileDevice());
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  if (isMobile) return <MobileBlock />;
 
   if (status === 'loading') {
     return (
@@ -241,7 +258,7 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onLogout={logout} firstName={session?.firstName} />
+      <TopBar onExport={() => setShowExport(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} />
       <div className="workspace">
         <LayerPanel />
         <CanvasView />

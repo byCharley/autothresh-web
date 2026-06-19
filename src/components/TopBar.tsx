@@ -3,10 +3,11 @@ import { useStore } from '../store/useStore';
 interface TopBarProps {
   onExport: () => void;
   onLogout?: () => void;
+  userEmail?: string;
   firstName?: string;
 }
 
-export function TopBar({ onExport, onLogout, firstName }: TopBarProps) {
+export function TopBar({ onExport, onLogout, userEmail, firstName }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage } = useStore();
 
   const toggleTheme = () => {
@@ -14,6 +15,8 @@ export function TopBar({ onExport, onLogout, firstName }: TopBarProps) {
     setTheme(next);
     document.documentElement.setAttribute('data-theme', next);
   };
+
+  const displayName = firstName || userEmail || '';
 
   return (
     <header className="topbar">
@@ -48,19 +51,47 @@ export function TopBar({ onExport, onLogout, firstName }: TopBarProps) {
 
       <div className="topbar-divider" />
 
-      {firstName && (
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginRight: 4 }}>
-          {firstName}
-        </span>
+      {/* Signed-in user badge */}
+      {displayName && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 7,
+          padding: '4px 10px', marginRight: 6,
+          border: '1px solid var(--border)',
+          background: 'var(--surface-2)',
+        }}>
+          {/* Green status dot */}
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: '#3ecf4f', flexShrink: 0,
+            boxShadow: '0 0 4px #3ecf4f88',
+          }} />
+          <span style={{
+            fontSize: 11, color: 'var(--text)', fontFamily: 'var(--font-mono)',
+            maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {displayName}
+          </span>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Sign out"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '0 2px', display: 'flex', alignItems: 'center',
+                color: 'var(--text-dim)', opacity: 0.6,
+              }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.6')}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
+          )}
+        </div>
       )}
-
-      {onLogout && (
-        <button className="btn btn-ghost" onClick={onLogout} title="Sign out" style={{ fontSize: 11 }}>
-          Sign out
-        </button>
-      )}
-
-      <div className="topbar-divider" />
 
       <button
         className="btn btn-primary"
