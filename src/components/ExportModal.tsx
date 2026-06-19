@@ -1,0 +1,196 @@
+import { useState } from 'react';
+
+export type ExportFormat = 'png' | 'psd' | 'pdf' | 'tiff';
+
+export interface ExportConfig {
+  mode:     'screen' | 'dtg';
+  format:   ExportFormat;
+  fileName: string;
+}
+
+interface Props {
+  onClose:      () => void;
+  onExport:     (config: ExportConfig) => Promise<void>;
+  defaultFileName: string;
+}
+
+const FORMATS: { value: ExportFormat; label: string; ext: string }[] = [
+  { value: 'png',  label: 'PNG',  ext: '.png'  },
+  { value: 'psd',  label: 'PSD',  ext: '.psd'  },
+  { value: 'pdf',  label: 'PDF',  ext: '.pdf'  },
+  { value: 'tiff', label: 'TIFF', ext: '.tiff' },
+];
+
+function details(mode: 'screen' | 'dtg', format: ExportFormat) {
+  if (mode === 'screen') {
+    switch (format) {
+      case 'png':  return { pkg: 'ZIP archive',   layers: 'One PNG per separation + composite',    bg: 'Transparent', marks: 'Included' };
+      case 'psd':  return { pkg: 'Single file',   layers: 'One Photoshop layer per separation',    bg: 'Transparent', marks: 'Included' };
+      case 'pdf':  return { pkg: 'Single file',   layers: 'One page per separation',               bg: 'Transparent', marks: 'Included' };
+      case 'tiff': return { pkg: 'ZIP archive',   layers: 'One TIFF per separation + composite',   bg: 'Transparent', marks: 'Included' };
+    }
+  } else {
+    switch (format) {
+      case 'png':  return { pkg: 'Single file',   layers: 'All colors composited',   bg: 'Transparent', marks: 'Not included' };
+      case 'psd':  return { pkg: 'Single file',   layers: 'All colors composited',   bg: 'Transparent', marks: 'Not included' };
+      case 'pdf':  return { pkg: 'Single file',   layers: 'All colors composited',   bg: 'Transparent', marks: 'Not included' };
+      case 'tiff': return { pkg: 'Single file',   layers: 'All colors composited',   bg: 'Transparent', marks: 'Not included' };
+    }
+  }
+}
+
+export function ExportModal({ onClose, onExport, defaultFileName }: Props) {
+  const [mode,      setMode]      = useState<'screen' | 'dtg'>('screen');
+  const [format,    setFormat]    = useState<ExportFormat>('png');
+  const [fileName,  setFileName]  = useState(defaultFileName);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    await onExport({ mode, format, fileName: fileName.trim() || defaultFileName });
+    setExporting(false);
+    onClose();
+  };
+
+  const d = details(mode, format);
+  const fmt = FORMATS.find(f => f.value === format)!;
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+        zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          width: 480, maxWidth: '90vw', zIndex: 41,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)',
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+            Export
+          </span>
+          <button className="btn btn-ghost btn-icon" onClick={onClose}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Mode selector */}
+        <div style={{ padding: '14px 16px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+            Export Mode
+          </div>
+          <div style={{ display: 'flex', gap: 8, paddingBottom: 14 }}>
+            {(['screen', 'dtg'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                style={{
+                  flex: 1, padding: '12px 12px',
+                  border: `1px solid ${mode === m ? 'var(--accent)' : 'var(--border)'}`,
+                  background: mode === m ? 'var(--accent-dim)' : 'var(--surface-2)',
+                  cursor: 'pointer', textAlign: 'left', transition: 'all 0.1s',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: mode === m ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                  {m === 'screen' ? 'Screen Print' : 'DTG'}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.5 }}>
+                  {m === 'screen' ? 'Separated layers, one file per color.' : 'Single composited image, transparent bg.'}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Format selector */}
+        <div style={{ padding: '14px 16px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+            File Format
+          </div>
+          <div style={{ display: 'flex', gap: 6, paddingBottom: 14 }}>
+            {FORMATS.map(({ value, label, ext }) => (
+              <button
+                key={value}
+                onClick={() => setFormat(value)}
+                style={{
+                  flex: 1, padding: '10px 8px',
+                  border: `1px solid ${format === value ? 'var(--accent)' : 'var(--border)'}`,
+                  background: format === value ? 'var(--accent-dim)' : 'var(--surface-2)',
+                  cursor: 'pointer', textAlign: 'center', transition: 'all 0.1s',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', color: format === value ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                  {label}
+                </div>
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
+                  {ext}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Details */}
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <DetailRow label="Package"    value={d.pkg}    />
+            <DetailRow label="Layers"     value={d.layers} />
+            <DetailRow label="Background" value={d.bg}     />
+            <DetailRow label="Reg Marks"  value={d.marks}  />
+          </div>
+        </div>
+
+        {/* File name */}
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>
+            File Name
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+            <input
+              type="text"
+              value={fileName}
+              onChange={(e) => setFileName(e.target.value)}
+              placeholder="filename"
+              style={{
+                flex: 1, background: 'none', border: 'none', outline: 'none',
+                padding: '7px 10px', fontSize: 12, color: 'var(--text)',
+                fontFamily: 'var(--font-mono)',
+              }}
+            />
+            <span style={{ padding: '7px 10px', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
+              {fmt.ext}
+            </span>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button className="btn" onClick={onClose} disabled={exporting}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleExport} disabled={exporting}>
+            {exporting ? 'Exporting…' : `Export ${fmt.label}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', width: 100, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <span style={{ fontSize: 11, color: 'var(--text)' }}>{value}</span>
+    </div>
+  );
+}
