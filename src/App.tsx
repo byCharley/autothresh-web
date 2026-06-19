@@ -52,7 +52,7 @@ function isMobileDevice(): boolean {
 }
 
 function App() {
-  const { status, session, login, logout } = useAuth();
+  const { status, session, initiateLogin, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
 
@@ -75,7 +75,7 @@ function App() {
   }
 
   if (status === 'unauthenticated') {
-    return <LoginPage onLogin={login} />;
+    return <LoginPage onLogin={initiateLogin} />;
   }
 
   if (status === 'no-subscription') {

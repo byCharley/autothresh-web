@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { generateCodeVerifier, generateCodeChallenge, generateState } from './pkce';
 
 export interface Session {
   token:           string;
@@ -8,7 +9,9 @@ export interface Session {
   hasSubscription: boolean;
 }
 
-const SESSION_KEY = 'at_session';
+const SESSION_KEY  = 'at_session';
+const VERIFIER_KEY = 'at_pkce_verifier';
+const STATE_KEY    = 'at_pkce_state';
 
 function loadSession(): Session | null {
   try {
@@ -20,22 +23,59 @@ function loadSession(): Session | null {
   } catch { return null; }
 }
 
-function saveSession(s: Session) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(s));
-}
+function saveSession(s: Session) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+function clearSession() { localStorage.removeItem(SESSION_KEY); }
 
-function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
-}
-
-type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated';
+export type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated';
 
 export function useAuth() {
   const [status,  setStatus]  = useState<AuthStatus>('loading');
   const [session, setSession] = useState<Session | null>(null);
 
-  // ── Verify stored session on mount ────────────────────────────────────────
   useEffect(() => {
+    const params   = new URLSearchParams(window.location.search);
+    const code     = params.get('code');
+    const retState = params.get('state');
+
+    if (window.location.pathname === '/auth/callback' && code) {
+      // ── OAuth callback ──────────────────────────────────────────────────────
+      const storedState    = sessionStorage.getItem(STATE_KEY);
+      const codeVerifier   = sessionStorage.getItem(VERIFIER_KEY);
+      sessionStorage.removeItem(STATE_KEY);
+      sessionStorage.removeItem(VERIFIER_KEY);
+
+      if (!codeVerifier || retState !== storedState) {
+        window.history.replaceState({}, '', '/');
+        setStatus('unauthenticated');
+        return;
+      }
+
+      fetch('/api/auth-callback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, codeVerifier }),
+      })
+        .then((r) => r.json() as Promise<Partial<Session> & { error?: string }>)
+        .then((data) => {
+          window.history.replaceState({}, '', '/');
+          if (data.error || !data.token) { setStatus('unauthenticated'); return; }
+          const s: Session = {
+            token:           data.token!,
+            expiresAt:       data.expiresAt!,
+            email:           data.email!,
+            firstName:       data.firstName!,
+            hasSubscription: data.hasSubscription!,
+          };
+          saveSession(s);
+          setSession(s);
+          setStatus(s.hasSubscription ? 'authenticated' : 'no-subscription');
+        })
+        .catch(() => { window.history.replaceState({}, '', '/'); setStatus('unauthenticated'); });
+
+      return;
+    }
+
+    // ── Verify stored session ───────────────────────────────────────────────
     const stored = loadSession();
     if (!stored) { setStatus('unauthenticated'); return; }
 
@@ -53,32 +93,23 @@ export function useAuth() {
         setStatus(data.hasSubscription ? 'authenticated' : 'no-subscription');
       })
       .catch(() => {
-        // Network error — trust cached session to avoid locking out on flaky connections
+        // Network error — trust cached session
         setSession(stored);
         setStatus(stored.hasSubscription ? 'authenticated' : 'no-subscription');
       });
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<string | null> => {
-    const r = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await r.json() as Partial<Session> & { error?: string };
-    if (!r.ok || data.error) return data.error ?? 'Login failed';
+  const initiateLogin = useCallback(async () => {
+    const verifier   = await generateCodeVerifier();
+    const challenge  = await generateCodeChallenge(verifier);
+    const state      = generateState();
 
-    const s: Session = {
-      token:           data.token!,
-      expiresAt:       data.expiresAt!,
-      email:           data.email!,
-      firstName:       data.firstName!,
-      hasSubscription: data.hasSubscription!,
-    };
-    saveSession(s);
-    setSession(s);
-    setStatus(s.hasSubscription ? 'authenticated' : 'no-subscription');
-    return null;
+    sessionStorage.setItem(VERIFIER_KEY, verifier);
+    sessionStorage.setItem(STATE_KEY, state);
+
+    const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}`);
+    const { redirectUrl } = await r.json() as { redirectUrl: string };
+    window.location.href = redirectUrl;
   }, []);
 
   const logout = useCallback(() => {
@@ -87,5 +118,5 @@ export function useAuth() {
     setStatus('unauthenticated');
   }, []);
 
-  return { status, session, login, logout };
+  return { status, session, initiateLogin, logout };
 }

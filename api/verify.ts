@@ -1,28 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const STORE    = process.env.SHOPIFY_STORE_DOMAIN!;
-const SF_TOKEN = process.env.storefront!;
-const ADM_TOKEN = process.env.shopify_private_access_token!;
+const ADM_TOKEN    = process.env.shopify_private_access_token!;
+const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN!;
+const ADM_URL      = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json`;
 
-const SF_URL  = `https://${STORE}/api/2024-10/graphql.json`;
-const ADM_URL = `https://${STORE}/admin/api/2024-10/graphql.json`;
-
-async function storefront(query: string, variables: Record<string, unknown>) {
-  const r = await fetch(SF_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Shopify-Storefront-Access-Token': SF_TOKEN },
-    body: JSON.stringify({ query, variables }),
-  });
-  return r.json() as Promise<{ data?: Record<string, unknown>; errors?: unknown[] }>;
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const [, payload] = token.split('.');
+    const padded = payload + '='.repeat((4 - payload.length % 4) % 4);
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+  } catch { return null; }
 }
 
-async function admin(query: string, variables: Record<string, unknown>) {
+async function adminQuery(query: string, variables: Record<string, unknown>) {
   const r = await fetch(ADM_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': ADM_TOKEN },
     body: JSON.stringify({ query, variables }),
   });
-  return r.json() as Promise<{ data?: Record<string, unknown>; errors?: unknown[] }>;
+  return r.json() as Promise<{ data?: Record<string, unknown> }>;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -35,36 +31,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { token } = req.body as { token?: string };
   if (!token) return res.status(400).json({ valid: false, error: 'Token required' });
 
-  // ── 1. Re-fetch customer with stored token ─────────────────────────────────
-  const custData = await storefront(`
-    query GetCustomer($token: String!) {
-      customer(customerAccessToken: $token) { id email firstName }
-    }
-  `, { token });
+  // ── 1. Decode JWT — check expiry ──────────────────────────────────────────
+  const claims = decodeJwtPayload(token);
+  if (!claims) return res.status(200).json({ valid: false });
 
-  const customer = (custData.data as { customer?: { id: string; email: string; firstName: string } })?.customer;
-  if (!customer) return res.status(200).json({ valid: false });
+  const exp = claims.exp as number | undefined;
+  if (exp && exp * 1000 < Date.now()) return res.status(200).json({ valid: false });
 
-  // ── 2. Recheck subscription ────────────────────────────────────────────────
-  const subData = await admin(`
-    query GetSubs($id: ID!) {
+  const customerGid = claims.sub as string;
+  if (!customerGid) return res.status(200).json({ valid: false });
+
+  // ── 2. Admin API — recheck subscription ───────────────────────────────────
+  const admData = await adminQuery(`
+    query GetCustomer($id: ID!) {
       customer(id: $id) {
+        firstName
+        email
         subscriptionContracts(first: 10) {
           edges { node { status } }
         }
       }
     }
-  `, { id: customer.id });
+  `, { id: customerGid });
 
-  const edges = ((subData.data as { customer?: { subscriptionContracts?: { edges: { node: { status: string } }[] } } })
-    ?.customer?.subscriptionContracts?.edges) ?? [];
+  const cust = (admData.data as {
+    customer?: { firstName: string; email: string; subscriptionContracts: { edges: { node: { status: string } }[] } }
+  })?.customer;
 
-  const hasSubscription = edges.some((e) => e.node.status === 'ACTIVE');
+  if (!cust) return res.status(200).json({ valid: false });
+
+  const hasSubscription = cust.subscriptionContracts.edges.some((e) => e.node.status === 'ACTIVE');
 
   return res.status(200).json({
     valid: true,
     hasSubscription,
-    email:     customer.email,
-    firstName: customer.firstName,
+    email:     cust.email,
+    firstName: cust.firstName,
   });
 }

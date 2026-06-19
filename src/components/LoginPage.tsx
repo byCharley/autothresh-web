@@ -1,23 +1,15 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
 
 interface Props {
-  onLogin: (email: string, password: string) => Promise<string | null>;
+  onLogin: () => Promise<void>;
 }
 
 export function LoginPage({ onLogin }: Props) {
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [error,    setError]    = useState('');
-  const [loading,  setLoading]  = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError('');
+  const handleSignIn = async () => {
     setLoading(true);
-    const err = await onLogin(email.trim(), password);
-    setLoading(false);
-    if (err) setError(err);
+    await onLogin(); // redirects away, so loading stays true until redirect
   };
 
   return (
@@ -27,79 +19,64 @@ export function LoginPage({ onLogin }: Props) {
       fontFamily: 'var(--font-sans)',
     }}>
       {/* Logo */}
-      <div style={{ marginBottom: 36, textAlign: 'center' }}>
-        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
+      <div style={{ marginBottom: 40, textAlign: 'center' }}>
+        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
           AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-          Tonal Separation Tool
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+          Professional Tonal Separation Tool
         </div>
       </div>
 
       {/* Card */}
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
-        width: 360, maxWidth: '90vw', padding: '28px 24px',
+        width: 360, maxWidth: '90vw', padding: '32px 28px', textAlign: 'center',
       }}>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 20, fontFamily: 'var(--font-mono)' }}>
-          Sign In
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 28 }}>
+          Sign in with your{' '}
+          <span style={{ color: 'var(--text)', fontWeight: 600 }}>Charley Pangus</span>
+          {' '}store account to access AutoThresh Web.
+          <br />
+          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+            You'll receive a one-time passcode by email.
+          </span>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Field label="Email" type="email" value={email} onChange={setEmail} placeholder="you@example.com" />
-          <Field label="Password" type="password" value={password} onChange={setPassword} placeholder="••••••••" />
-
-          {error && (
-            <div style={{
-              background: 'rgba(220,50,50,0.1)', border: '1px solid rgba(220,50,50,0.35)',
-              padding: '8px 10px', fontSize: 11, color: '#e06060',
-              fontFamily: 'var(--font-mono)',
-            }}>
-              {error}
-            </div>
+        <button
+          onClick={handleSignIn}
+          disabled={loading}
+          style={{
+            width: '100%', padding: '12px 20px',
+            background: loading ? 'var(--surface-2)' : 'var(--accent)',
+            border: '1px solid transparent',
+            cursor: loading ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            fontSize: 13, fontWeight: 600, letterSpacing: '0.04em',
+            color: loading ? 'var(--text-muted)' : '#000',
+            fontFamily: 'var(--font-mono)',
+            transition: 'opacity 0.15s',
+          }}
+        >
+          {loading ? (
+            <>
+              <span style={{ opacity: 0.5 }}>Redirecting…</span>
+            </>
+          ) : (
+            <>
+              {/* Shopify bag icon */}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.1 8.5h-1.4c-.3-2.2-2.1-3.9-4.4-3.9S7 6.3 6.7 8.5H5.3c-.7 0-1.3.6-1.3 1.3v8.5c0 .7.6 1.2 1.3 1.2h11.5c.7 0 1.2-.5 1.2-1.2V9.8c0-.7-.5-1.3-1.2-1.3zm-4.8-2.4c1.4 0 2.6 1 2.9 2.4H9.5c.2-1.4 1.4-2.4 2.8-2.4zm0 8.4c-1.3 0-2.3-1-2.3-2.3s1-2.3 2.3-2.3 2.3 1 2.3 2.3-1 2.3-2.3 2.3z"/>
+              </svg>
+              Sign In with Shopify
+            </>
           )}
+        </button>
 
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={loading || !email || !password}
-            style={{ marginTop: 4, width: '100%', justifyContent: 'center', opacity: (loading || !email || !password) ? 0.5 : 1 }}
-          >
-            {loading ? 'Signing in…' : 'Sign In'}
-          </button>
-        </form>
-
-        <div style={{ marginTop: 18, fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
-          Use your Charley Pangus store account.
+        <div style={{ marginTop: 20, fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
+          Access requires an active AutoThresh subscription.
         </div>
       </div>
-    </div>
-  );
-}
-
-function Field({ label, type, value, onChange, placeholder }: {
-  label: string; type: string; value: string;
-  onChange: (v: string) => void; placeholder: string;
-}) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      <label style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-        {label}
-      </label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoComplete={type === 'password' ? 'current-password' : 'email'}
-        style={{
-          background: 'var(--surface-2)', border: '1px solid var(--border)',
-          outline: 'none', padding: '8px 10px', fontSize: 13, color: 'var(--text)',
-          fontFamily: 'var(--font-sans)', width: '100%', boxSizing: 'border-box',
-        }}
-        onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
-        onBlur={(e)  => (e.target.style.borderColor = 'var(--border)')}
-      />
     </div>
   );
 }
