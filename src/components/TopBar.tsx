@@ -2,9 +2,11 @@ import { useStore } from '../store/useStore';
 
 interface TopBarProps {
   onExport: () => void;
+  onLogout?: () => void;
+  firstName?: string;
 }
 
-export function TopBar({ onExport }: TopBarProps) {
+export function TopBar({ onExport, onLogout, firstName }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage } = useStore();
 
   const toggleTheme = () => {
@@ -43,6 +45,20 @@ export function TopBar({ onExport }: TopBarProps) {
           </svg>
         )}
       </button>
+
+      <div className="topbar-divider" />
+
+      {firstName && (
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginRight: 4 }}>
+          {firstName}
+        </span>
+      )}
+
+      {onLogout && (
+        <button className="btn btn-ghost" onClick={onLogout} title="Sign out" style={{ fontSize: 11 }}>
+          Sign out
+        </button>
+      )}
 
       <div className="topbar-divider" />
 

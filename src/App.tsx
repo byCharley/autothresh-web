@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useAuth } from './auth/useAuth';
+import { LoginPage } from './components/LoginPage';
+import { SubscribePage } from './components/SubscribePage';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { writePsd } from 'ag-psd';
@@ -41,7 +44,26 @@ async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> 
 }
 
 function App() {
+  const { status, session, login, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
+
+  if (status === 'loading') {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>
+          Verifying…
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'unauthenticated') {
+    return <LoginPage onLogin={login} />;
+  }
+
+  if (status === 'no-subscription') {
+    return <SubscribePage firstName={session?.firstName} onLogout={logout} />;
+  }
   const {
     originalImage, layers, globalPattern, knockoutEnabled,
     bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor,
@@ -219,7 +241,7 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} />
+      <TopBar onExport={() => setShowExport(true)} onLogout={logout} firstName={session?.firstName} />
       <div className="workspace">
         <LayerPanel />
         <CanvasView />
