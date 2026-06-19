@@ -12,6 +12,7 @@ export interface Session {
 const SESSION_KEY  = 'at_session';
 const VERIFIER_KEY = 'at_pkce_verifier';
 const STATE_KEY    = 'at_pkce_state';
+const NONCE_KEY    = 'at_pkce_nonce';
 
 function loadSession(): Session | null {
   try {
@@ -103,11 +104,13 @@ export function useAuth() {
     const verifier   = await generateCodeVerifier();
     const challenge  = await generateCodeChallenge(verifier);
     const state      = generateState();
+    const nonce      = generateState();
 
     sessionStorage.setItem(VERIFIER_KEY, verifier);
     sessionStorage.setItem(STATE_KEY, state);
+    sessionStorage.setItem(NONCE_KEY, nonce);
 
-    const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}`);
+    const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
     const { redirectUrl } = await r.json() as { redirectUrl: string };
     window.location.href = redirectUrl;
   }, []);
