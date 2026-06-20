@@ -31,11 +31,23 @@ function clearSession() { localStorage.removeItem(SESSION_KEY); }
 
 export type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated';
 
+const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS_AUTH === 'true';
+
+const DEV_SESSION: Session = {
+  token: 'dev-bypass',
+  expiresAt: new Date(Date.now() + 86400 * 1000 * 365).toISOString(),
+  email: 'dev@localhost',
+  firstName: 'Dev',
+  hasSubscription: true,
+};
+
 export function useAuth() {
-  const [status,  setStatus]  = useState<AuthStatus>('loading');
-  const [session, setSession] = useState<Session | null>(null);
+  const [status,  setStatus]  = useState<AuthStatus>(DEV_BYPASS ? 'authenticated' : 'loading');
+  const [session, setSession] = useState<Session | null>(DEV_BYPASS ? DEV_SESSION : null);
 
   useEffect(() => {
+    if (DEV_BYPASS) return;
+
     // Returning from Shopify logout (switch account flow) — auto-start fresh login
     if (sessionStorage.getItem('at_post_logout')) {
       sessionStorage.removeItem('at_post_logout');
