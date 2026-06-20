@@ -659,6 +659,13 @@ export function renderComposite(
 
 // ─── Registration Marks ───────────────────────────────────────────────────────
 
+// Returns black or white depending on which contrasts better against the given hex background.
+export function contrastColor(bgHex: string): '#000000' | '#ffffff' {
+  const [r, g, b] = hexToRgb(bgHex);
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 128 ? '#000000' : '#ffffff';
+}
+
 export function drawRegistrationMarks(
   ctx: CanvasRenderingContext2D,
   canvasW: number,

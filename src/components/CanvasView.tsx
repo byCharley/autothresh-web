@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore';
 import {
   processImage, renderComposite, scaleImageData, scaleImageDataExact,
   computeBackgroundMask, detectBackgroundColor, hexToRgb, registerPatternTexture,
-  cmykSeparate, renderCmykComposite,
+  cmykSeparate, renderCmykComposite, contrastColor,
 } from '../engine/imageProcessor';
 import type { LayerConfig, PatternConfig } from '../engine/imageProcessor';
 import { generateTextureMask } from '../engine/textureGenerator';
@@ -461,7 +461,7 @@ export function CanvasView() {
               <svg style={{
                 position: 'absolute', overflow: 'visible', top: 0, left: 0,
                 width: canvasDims.w, height: canvasDims.h,
-                pointerEvents: 'none', color: 'var(--text)',
+                pointerEvents: 'none', color: contrastColor(canvasColor),
               }}>
                 {artworkBounds && (
                   <rect

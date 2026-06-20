@@ -16,7 +16,7 @@ import type { ExportConfig } from './components/ExportModal';
 import { useStore } from './store/useStore';
 import {
   processImage, renderComposite, renderCmykComposite, drawRegistrationMarks, computeBackgroundMask,
-  cmykSeparate,
+  cmykSeparate, contrastColor,
 } from './engine/imageProcessor';
 import type { LayerConfig, PatternConfig, ProcessedLayer } from './engine/imageProcessor';
 import { generateTextureMask } from './engine/textureGenerator';
@@ -155,7 +155,7 @@ function App() {
       }
       const canvas = canvasFromImageData(data);
       if (withMarks && showRegistrationMarks) {
-        drawRegistrationMarks(canvas.getContext('2d')!, docPxW, docPxH, regPaddingPx, '#000000');
+        drawRegistrationMarks(canvas.getContext('2d')!, docPxW, docPxH, regPaddingPx, contrastColor(canvasColor));
       }
       return canvas;
     };
