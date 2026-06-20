@@ -380,7 +380,7 @@ function CmykScreenSection() {
   const dotPx = (documentDpi / cmykLpi).toFixed(1);
   return (
     <Section title="CMYK Screen">
-      <Slider label="Screen Ruling" value={cmykLpi} min={25} max={85} step={5}
+      <Slider label="Screen Ruling" value={cmykLpi} min={25} max={100} step={5}
         onChange={setCmykLpi} unit=" LPI" />
       <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8, marginTop: 4 }}>
         <div>~{dotPx}px per dot @ {documentDpi} DPI</div>

@@ -738,7 +738,7 @@ export function cmykSeparate(
   scaleFactor = 1,
 ): ProcessedLayer[] {
   const { width: w, height: h, data } = imageData;
-  const cs = Math.max(2, cellSize * scaleFactor);
+  const cs = Math.max(1, cellSize * scaleFactor);
 
   // Pre-compute CMYK channels (0–1 float)
   const chanK = new Float32Array(w * h);

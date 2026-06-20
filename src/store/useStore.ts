@@ -157,7 +157,7 @@ export const useStore = create<AppState>((set) => ({
   palettePool: [],
   activePaletteIdx: 0,
   separationMode: 'threshold',
-  cmykLpi: 45,
+  cmykLpi: 65,
   cmykVisibility: { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true },
 
   processedLayers: [],

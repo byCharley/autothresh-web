@@ -176,8 +176,9 @@ export function CanvasView() {
 
         let processed: ReturnType<typeof processImage>;
         if (separationMode === 'cmyk') {
-          // Cell size in preview pixels, minimum 4px so dots are always visible
-          const cmykPreviewCellSize = Math.max(4, artPrevW / documentWidthIn / cmykLpi);
+          // Cell size in preview pixels — no artificial minimum so 65 LPI gives ~1.3px
+          // cells that blend into continuous tone at normal zoom (photographic appearance)
+          const cmykPreviewCellSize = Math.max(1, artPrevW / documentWidthIn / cmykLpi);
           processed = cmykSeparate(artScaled, cmykPreviewCellSize, localBgMask);
           // Apply visibility from store
           for (const layer of processed) layer.visible = cmykVisibility[layer.id] ?? true;
