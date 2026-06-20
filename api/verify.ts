@@ -24,18 +24,13 @@ async function adminCheckSubscription(email: string): Promise<{ hasSub: boolean;
                   lines(first: 10) { edges { node { title } } }
                 } }
               }
-              orders(first: 20, query: "status:any") {
-                edges { node {
-                  lineItems(first: 10) { edges { node { title } } }
-                } }
-              }
             } }
           }
         }`,
         variables: { q: `email:${email}` },
       }),
     });
-    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; nextBillingDate?: string; lines: { edges: { node: { title: string } }[] } } }[] }; orders: { edges: { node: { lineItems: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
+    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; nextBillingDate?: string; lines: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
     const cust = body?.data?.customers?.edges?.[0]?.node;
     if (!cust) return { hasSub: false };
     let nextBillingDate: string | undefined;
@@ -45,10 +40,7 @@ async function adminCheckSubscription(email: string): Promise<{ hasSub: boolean;
       if (match && n.nextBillingDate) nextBillingDate = n.nextBillingDate;
       return match;
     });
-    const hasOrder = cust.orders.edges.some(({ node: o }) =>
-      o.lineItems.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
-    );
-    return { hasSub: hasSub || hasOrder, nextBillingDate };
+    return { hasSub, nextBillingDate };
   } catch { return { hasSub: false }; }
 }
 
@@ -86,15 +78,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   }
                 }
               }
-              orders(first: 20) {
-                edges {
-                  node {
-                    lineItems(first: 10) {
-                      edges { node { title } }
-                    }
-                  }
-                }
-              }
             }
           }
         `,
@@ -108,31 +91,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   type LineEdge = { node: { title: string } };
   type SubNode  = { status: string; lines: { edges: LineEdge[] } };
-  type OrdNode  = { lineItems: { edges: LineEdge[] } };
   type CustNode = {
     firstName?: string;
     emailAddress?: { emailAddress: string };
     subscriptionContracts?: { edges: { node: SubNode }[] };
-    orders?: { edges: { node: OrdNode }[] };
   };
 
   const cust = (custData.data as { customer?: CustNode })?.customer;
   if (!cust) return res.status(200).json({ valid: false });
 
   const subEdges = cust.subscriptionContracts?.edges ?? [];
-  const ordEdges = cust.orders?.edges ?? [];
 
   const hasSub = subEdges.some(({ node: n }) =>
     ['ACTIVE', 'PAUSED'].includes(n.status) &&
     n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
-  const hasOrder = ordEdges.some(({ node: o }) =>
-    o.lineItems.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
-  );
-
   const email = cust.emailAddress?.emailAddress ?? '';
-  let finalHasSub = hasSub || hasOrder;
+  let finalHasSub = hasSub;
   let subscriptionExpiresAt: string | undefined;
   if (!finalHasSub) {
     const adminResult = await adminCheckSubscription(email);

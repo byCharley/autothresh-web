@@ -1,7 +1,7 @@
 import { AppIcon } from './AppIcon';
 
 const PRODUCT_URL = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefined
-  ?? 'https://charleypangus.com/products/autothreshweb';
+  ?? 'https://charleypangus.com/collections/webapps';
 
 interface Props {
   firstName?: string;
