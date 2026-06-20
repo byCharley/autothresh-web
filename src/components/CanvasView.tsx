@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback, useState } from 'react';
 import { useStore } from '../store/useStore';
 import {
   processImage, renderComposite, scaleImageData, scaleImageDataExact,
-  computeBackgroundMask, detectBackgroundColor, hexToRgb,
+  computeBackgroundMask, detectBackgroundColor, hexToRgb, registerPatternTexture,
 } from '../engine/imageProcessor';
 import type { LayerConfig, PatternConfig } from '../engine/imageProcessor';
 import { generateTextureMask } from '../engine/textureGenerator';
@@ -121,6 +121,23 @@ export function CanvasView() {
     });
   }, []);
 
+  // Load film grain PNG and register it as a pattern texture.
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext('2d')!;
+      ctx.drawImage(img, 0, 0);
+      const data = ctx.getImageData(0, 0, c.width, c.height).data;
+      const pixels = new Float32Array(c.width * c.height);
+      for (let i = 0; i < pixels.length; i++) pixels[i] = data[i * 4] / 255;
+      registerPatternTexture('film-grain', c.width, c.height, pixels);
+      setTextureVersion((v) => v + 1);
+    };
+    img.src = '/textures/film-grain.png';
+  }, []);
+
   // Debounce zoom → renderDim.
   // When the user zooms in, wait 200 ms for them to stop, then re-render at a
   // proportionally higher resolution so each screen pixel maps to one canvas pixel.
@@ -146,20 +163,16 @@ export function CanvasView() {
         // Always use the fixed base resolution — never zoom-scaled.
         const layout = computeDocLayout(MAX_PREVIEW_DIM);
         if (!layout) { setIsProcessing(false); return; }
-        const { docPrevW, docPrevH, artPrevW, artPrevH, artPrevOffX, artPrevOffY, artScaleW } = layout;
-
-        // dpiScaleFactor < 1 at high DPI: makes pattern scale proportional to output resolution.
-        // scale=4 at 300 DPI → 4/artScaleW density (fine). scale=4 at 72 DPI → 4/artScaleW density (coarser).
-        const dpiScaleFactor = artPrevW / artScaleW;
+        const { docPrevW, docPrevH, artPrevW, artPrevH, artPrevOffX, artPrevOffY } = layout;
 
         // Single high-quality scale from original → exact slot size.
         const artScaled    = scaleImageDataExact(originalImage, artPrevW, artPrevH);
         const localBgMask  = bgRemovalEnabled ? computeBackgroundMask(artScaled, bgTolerance) : null;
         const resolved     = resolvePatterns(layers, globalPattern);
-        const processed    = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments, dpiScaleFactor);
+        const processed    = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
 
         if (textureEnabled) {
-          const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale * dpiScaleFactor, textureWidth, textureSeed);
+          const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
           for (const layer of processed) {
             for (let i = 0; i < layer.mask.length; i++) {
               if (texMask[i] === 0) layer.mask[i] = 0;

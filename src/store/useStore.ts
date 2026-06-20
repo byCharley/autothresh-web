@@ -7,7 +7,7 @@ const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
 };
 
 const DEFAULT_GLOBAL_PATTERN: PatternConfig = {
-  pattern: 'grain',
+  pattern: 'noise',
   patternScale: 1,
   patternAngle: 45,
   patternDensity: 50,
@@ -19,14 +19,14 @@ const DEFAULT_LAYERS: LayerConfig[] = [
     thresholdMin: 0, thresholdMax: 64,
     exposure: 0, blur: 0, opacity: 100,
     useGlobalPattern: true,
-    pattern: 'grain', patternScale: 1, patternAngle: 45, patternDensity: 80,
+    pattern: 'noise', patternScale: 1, patternAngle: 45, patternDensity: 80,
   },
   {
     id: 'midtones', name: 'Midtones', color: '#8B1A1A', visible: true,
     thresholdMin: 65, thresholdMax: 140,
     exposure: 0, blur: 0, opacity: 100,
     useGlobalPattern: true,
-    pattern: 'grain', patternScale: 1, patternAngle: 45, patternDensity: 75,
+    pattern: 'noise', patternScale: 1, patternAngle: 45, patternDensity: 75,
   },
   {
     id: 'highlights', name: 'Highlights', color: '#FF6B1A', visible: true,

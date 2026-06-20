@@ -103,9 +103,13 @@ function App() {
     const artOffY   = Math.round((docPxH - artScaleH) / 2);
 
     // ── Scale the artwork to export resolution ───────────────────────────────
-    // Pattern scale is per-output-pixel: scale=4 at 300 DPI → 4px grain blocks
-    // in the 3600px canvas (0.013" per block). Same value at 72 DPI → 4px in an
-    // 864px canvas (0.056" per block). Higher DPI = physically finer patterns.
+    // exportScaleFactor maps preview pattern density → export resolution so
+    // grain/halftone density matches what the user sees in the canvas preview.
+    const MAX_PREVIEW_DIM = 1200;
+    const pds = Math.min(MAX_PREVIEW_DIM / Math.max(docPxW, docPxH), 1.0);
+    const artPrevW = Math.round(artScaleW * pds);
+    const exportScaleFactor = artScaleW / Math.max(1, artPrevW);
+
     const artSrcCanvas = canvasFromImageData(originalImage);
     const artExpCanvas = document.createElement('canvas');
     artExpCanvas.width = artScaleW; artExpCanvas.height = artScaleH;
@@ -114,11 +118,10 @@ function App() {
 
     const artBgMask = bgRemovalEnabled ? computeBackgroundMask(artImageData, bgTolerance) : null;
     const resolved  = resolvePatterns(layers, globalPattern);
-    // No exportScaleFactor: scale is per-output-pixel so 300 DPI produces finer grain than 72 DPI
-    const artLayers = processImage(artImageData, resolved, knockoutEnabled, artBgMask, imageAdjustments);
+    const artLayers = processImage(artImageData, resolved, knockoutEnabled, artBgMask, imageAdjustments, exportScaleFactor);
 
     if (textureEnabled) {
-      const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+      const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
       for (const layer of artLayers) {
         for (let i = 0; i < layer.mask.length; i++) {
           if (texMask[i] === 0) layer.mask[i] = 0;

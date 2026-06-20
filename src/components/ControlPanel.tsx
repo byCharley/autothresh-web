@@ -86,9 +86,12 @@ function SwitchRow({ label, checked, onChange, hint }: {
 
 const PATTERN_LABELS: Record<PatternType, string> = {
   'none':                'None (Solid fill)',
-  'grain':               'Grain · Standard',
-  'grain-soft':          'Grain · Soft',
-  'grain-coarse':        'Grain · Coarse',
+  'noise':               'Noise · Standard',
+  'noise-coarse':        'Noise · Coarse',
+  'film-grain':          'Film Grain',
+  'grain':               'Noise · Standard',
+  'grain-soft':          'Noise · Standard',
+  'grain-coarse':        'Noise · Coarse',
   'halftone-round':      'Halftone · Round',
   'halftone-diamond':    'Halftone · Diamond',
   'halftone-ellipse':    'Halftone · Ellipse',
@@ -109,10 +112,10 @@ function PatternSelect({ value, onChange }: { value: PatternType; onChange: (v: 
   return (
     <select className="at-select" value={value} onChange={(e) => onChange(e.target.value as PatternType)}>
       <option value="none">None (Solid fill)</option>
-      <optgroup label="─ Film Grain ─">
-        <option value="grain">Grain · Standard</option>
-        <option value="grain-soft">Grain · Soft</option>
-        <option value="grain-coarse">Grain · Coarse</option>
+      <optgroup label="─ Noise ─">
+        <option value="noise">Noise · Standard</option>
+        <option value="noise-coarse">Noise · Coarse</option>
+        <option value="film-grain">Film Grain</option>
       </optgroup>
       <optgroup label="─ Halftone Dots ─">
         <option value="halftone-round">Halftone · Round</option>
@@ -152,7 +155,7 @@ function PatternControls({
   onAngle: (v: number) => void;
 }) {
   const isHalftone = pattern.startsWith('halftone-');
-  const isGrain = pattern.startsWith('grain-') || pattern === 'grain';
+  const isGrain = pattern.startsWith('grain') || pattern.startsWith('noise') || pattern === 'film-grain';
   const hasPattern = pattern !== 'none';
   const scaleMin  = isGrain ? 0.5 : 1;
   const scaleMax  = isGrain ? 6  : 40;

@@ -2,9 +2,12 @@
 
 export type PatternType =
   | 'none'
-  | 'grain'
-  | 'grain-soft'
-  | 'grain-coarse'
+  | 'noise'
+  | 'noise-coarse'
+  | 'film-grain'
+  | 'grain'        // legacy alias → noise
+  | 'grain-soft'   // legacy alias → noise
+  | 'grain-coarse' // legacy alias → noise-coarse
   | 'halftone-round'
   | 'halftone-diamond'
   | 'halftone-ellipse'
@@ -124,43 +127,63 @@ function normalizeF32(arr: F32): F32 {
 //     Used as luminance MODULATION — 0.5 = neutral, 0 = push dark, 1 = push bright.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function grainValues(w: number, h: number, scale: number, seed: number): F32 {
-  // Film grain: white noise + single blur pass at half-radius + contrast sharpening.
-  // Half-radius keeps particle SIZE comparable to the old block algorithm.
-  // The sqrt contrast boost converts Gaussian-shaped blur output back to
-  // a near-uniform distribution so grain particles stay small and distinct.
-  const raw = new Float32Array(w * h) as F32;
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      raw[y * w + x] = pseudoRandom(x, y, seed);
-  const r = Math.max(0.5, scale * 0.5);
-  const normed = normalizeF32(boxBlur(raw, w, h, r));
-  const out = new Float32Array(normed.length) as F32;
-  for (let i = 0; i < normed.length; i++) {
-    const v = (normed[i] - 0.5) * 2;            // [-1, 1]
-    out[i] = 0.5 + Math.sign(v) * Math.sqrt(Math.abs(v)) * 0.5;  // expand toward 0/1
+// ─── Pattern Texture Cache (for image-based patterns like film grain) ─────────
+
+const _patternTextures = new Map<string, { w: number; h: number; pixels: Float32Array }>();
+
+export function registerPatternTexture(key: string, w: number, h: number, pixels: Float32Array): void {
+  _patternTextures.set(key, { w, h, pixels });
+}
+
+function samplePatternTexture(key: string, ow: number, oh: number, scale: number, seed: number): F32 | null {
+  const tex = _patternTextures.get(key);
+  if (!tex) return null;
+  const out = new Float32Array(ow * oh) as F32;
+  const ox = ((pseudoRandom(seed, 0, 99) * tex.w) | 0);
+  const oy = ((pseudoRandom(0, seed, 99) * tex.h) | 0);
+  const ts = 1 / Math.max(0.1, scale);
+  for (let y = 0; y < oh; y++) {
+    for (let x = 0; x < ow; x++) {
+      const txf = ((x * ts + ox) % tex.w + tex.w) % tex.w;
+      const tyf = ((y * ts + oy) % tex.h + tex.h) % tex.h;
+      const tx0 = Math.floor(txf) | 0, ty0 = Math.floor(tyf) | 0;
+      const tx1 = (tx0 + 1) % tex.w,  ty1 = (ty0 + 1) % tex.h;
+      const fx = txf - tx0,            fy = tyf - ty0;
+      out[y * ow + x] =
+        tex.pixels[ty0 * tex.w + tx0] * (1 - fx) * (1 - fy) +
+        tex.pixels[ty0 * tex.w + tx1] * fx       * (1 - fy) +
+        tex.pixels[ty1 * tex.w + tx0] * (1 - fx) * fy       +
+        tex.pixels[ty1 * tex.w + tx1] * fx       * fy;
+    }
   }
-  return out as F32;
+  return out;
 }
 
-function grainSoftValues(w: number, h: number, scale: number, seed: number): F32 {
-  // Soft grain: two blur passes for larger, more diffuse particles.
-  const raw = new Float32Array(w * h) as F32;
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      raw[y * w + x] = pseudoRandom(x, y, seed);
-  const r = Math.max(0.5, scale * 0.6);
-  return normalizeF32(boxBlur(boxBlur(raw, w, h, r), w, h, r));
+// ─── Noise Patterns ───────────────────────────────────────────────────────────
+
+function noiseValues(w: number, h: number, scale: number, seed: number): F32 {
+  // Block noise: each scale×scale region gets one seeded random value.
+  // 85% block + 15% per-pixel jitter gives organic edges without grid artifacts.
+  const vals = new Float32Array(w * h) as F32;
+  const s = Math.max(1, Math.round(scale));
+  for (let y = 0; y < h; y++) {
+    const gy = Math.floor(y / s);
+    for (let x = 0; x < w; x++) {
+      const block = pseudoRandom(Math.floor(x / s), gy, seed);
+      const pixel = pseudoRandom(x, y, seed ^ 0xDEAD);
+      vals[y * w + x] = block * 0.85 + pixel * 0.15;
+    }
+  }
+  return vals;
 }
 
-function grainCoarseValues(w: number, h: number, scale: number, seed: number): F32 {
-  // Coarse grain: two blur passes at a larger radius for chunky organic clusters.
-  const raw = new Float32Array(w * h) as F32;
+function noiseCoarseValues(w: number, h: number, scale: number, seed: number): F32 {
+  const noise = new Float32Array(w * h) as F32;
+  const s = Math.max(1, scale);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++)
-      raw[y * w + x] = pseudoRandom(x, y, seed);
-  const r = Math.max(1, scale * 0.8);
-  return normalizeF32(boxBlur(boxBlur(raw, w, h, r), w, h, r));
+      noise[y * w + x] = pseudoRandom(Math.floor(x / s), Math.floor(y / s), seed);
+  return noise;
 }
 
 function halftoneValues(
@@ -304,9 +327,12 @@ function buildPatternValues(w: number, h: number, layer: LayerConfig, idx: numbe
   const { pattern, patternScale, patternAngle, patternDensity } = layer;
   const seed = idx + 1;
   switch (pattern) {
-    case 'grain':            return grainValues(w, h, patternScale, seed);
-    case 'grain-soft':       return grainSoftValues(w, h, patternScale, seed);
-    case 'grain-coarse':     return grainCoarseValues(w, h, patternScale, seed);
+    case 'noise':
+    case 'grain':
+    case 'grain-soft':       return noiseValues(w, h, patternScale, seed);
+    case 'noise-coarse':
+    case 'grain-coarse':     return noiseCoarseValues(w, h, patternScale, seed);
+    case 'film-grain':       return samplePatternTexture('film-grain', w, h, patternScale, seed) ?? noiseValues(w, h, patternScale, seed);
     case 'halftone-round':   return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'round');
     case 'halftone-diamond': return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'diamond');
     case 'halftone-ellipse': return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'ellipse');
