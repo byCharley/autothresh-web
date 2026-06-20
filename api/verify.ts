@@ -78,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
           }
         }
-        orders(first: 20, query: "financial_status:paid") {
+        orders(first: 20, query: "financial_status:paid status:any") {
           edges {
             node {
               lineItems(first: 10) {

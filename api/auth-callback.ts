@@ -107,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
           }
         }
-        orders(first: 20, query: "financial_status:paid") {
+        orders(first: 20, query: "financial_status:paid status:any") {
           edges {
             node {
               lineItems(first: 10) {
@@ -129,6 +129,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   const cust = (admData.data as CustData)?.customer;
+  console.log('SHOPIFY CUSTOMER DATA:', JSON.stringify({
+    subs: cust?.subscriptionContracts.edges.map(e => ({ status: e.node.status, lines: e.node.lines.edges.map(l => l.node.title) })),
+    orders: cust?.orders.edges.map(o => o.node.lineItems.edges.map(l => l.node.title)),
+  }));
   const firstName       = cust?.firstName ?? '';
   const hasSubscription = cust
     ? hasAutoThreshAccess(
