@@ -430,15 +430,19 @@ export function computeBackgroundMask(imageData: ImageData, tolerance: number): 
   // by the fill and stay as foreground.
   let transparentPixels = 0;
   for (let i = 0; i < n; i++) {
-    if (data[i * 4 + 3] < 128) transparentPixels++;
+    if (data[i * 4 + 3] < 32) transparentPixels++;
   }
   if (transparentPixels > n * 0.005) {
+    // Only flood-fill through pixels with alpha < 32 (nearly fully transparent).
+    // Using < 128 was too aggressive — it followed semi-transparent chains of
+    // anti-aliased or textured design pixels through narrow passages into the art.
+    // The real outer background has alpha ~0 in properly-exported PNGs.
     const alphaVisited = new Uint8Array(n);
     const alphaQueue: number[] = [];
     const addAlpha = (idx: number) => {
       if (alphaVisited[idx]) return;
       alphaVisited[idx] = 1;
-      if (data[idx * 4 + 3] < 128) { mask[idx] = 255; alphaQueue.push(idx); }
+      if (data[idx * 4 + 3] < 32) { mask[idx] = 255; alphaQueue.push(idx); }
     };
     for (let x = 0; x < width; x++) { addAlpha(x); addAlpha((height - 1) * width + x); }
     for (let y = 1; y < height - 1; y++) { addAlpha(y * width); addAlpha(y * width + width - 1); }
