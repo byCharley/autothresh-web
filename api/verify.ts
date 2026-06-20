@@ -1,20 +1,25 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const STORE_ID        = process.env.SHOPIFY_STORE_ID!;
+const STORE_DOMAIN    = process.env.SHOPIFY_STORE_DOMAIN!;
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
 
-const CUST_API_URL = `https://shopify.com/authentication/${STORE_ID}/account/customer/api/2024-10/graphql`;
-
-async function customerApiQuery(accessToken: string, query: string) {
-  const r = await fetch(CUST_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ query }),
-  });
-  return r.json() as Promise<{ data?: Record<string, unknown>; errors?: unknown[] }>;
+async function customerApiQuery(accessToken: string, query: string): Promise<{ data?: Record<string, unknown>; errors?: unknown[] }> {
+  const url = `https://${STORE_DOMAIN}/account/customer/api/2024-10/graphql`;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ query }),
+    });
+    const text = await r.text();
+    return JSON.parse(text);
+  } catch (e) {
+    console.error('customerApiQuery error:', e);
+    return {};
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

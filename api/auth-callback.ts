@@ -2,12 +2,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
+const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN!;
 const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh.com/auth/callback';
 
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
-
-// Customer Account API — authenticated with the customer's own OAuth access token
-const CUST_API_URL = `https://shopify.com/authentication/${STORE_ID}/account/customer/api/2024-10/graphql`;
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const [, payload] = token.split('.');
@@ -15,16 +13,24 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
   return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
 }
 
-async function customerApiQuery(accessToken: string, query: string) {
-  const r = await fetch(CUST_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ query }),
-  });
-  return r.json() as Promise<{ data?: Record<string, unknown>; errors?: unknown[] }>;
+async function customerApiQuery(accessToken: string, query: string): Promise<{ data?: Record<string, unknown>; errors?: unknown[] }> {
+  const url = `https://${STORE_DOMAIN}/account/customer/api/2024-10/graphql`;
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ query }),
+    });
+    const text = await r.text();
+    console.log('Customer API status:', r.status, 'body:', text.slice(0, 500));
+    return JSON.parse(text);
+  } catch (e) {
+    console.error('customerApiQuery error:', e);
+    return {};
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -98,10 +104,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('Customer API response:', JSON.stringify(custData));
 
   type CustNode = {
-    firstName: string;
+    firstName?: string;
     emailAddress?: { emailAddress: string };
-    orders: { nodes: { lineItems: { nodes: { title: string }[] } }[] };
-    subscriptionContracts: { nodes: { status: string; lines: { nodes: { title: string }[] } }[] };
+    orders?: { nodes: { lineItems?: { nodes: { title: string }[] } }[] };
+    subscriptionContracts?: { nodes: { status: string; lines?: { nodes: { title: string }[] } }[] };
   };
 
   const cust = (custData.data as { customer?: CustNode })?.customer;
@@ -114,22 +120,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  console.log('Subs:', JSON.stringify(cust.subscriptionContracts.nodes.map(n => ({
-    status: n.status, lines: n.lines.nodes.map(l => l.title)
+  const subNodes = cust.subscriptionContracts?.nodes ?? [];
+  const ordNodes = cust.orders?.nodes ?? [];
+
+  console.log('Subs:', JSON.stringify(subNodes.map(n => ({
+    status: n.status, lines: n.lines?.nodes?.map(l => l.title) ?? []
   }))));
-  console.log('Orders:', JSON.stringify(cust.orders.nodes.map(o =>
-    o.lineItems.nodes.map(l => l.title)
+  console.log('Orders:', JSON.stringify(ordNodes.map(o =>
+    o.lineItems?.nodes?.map(l => l.title) ?? []
   )));
 
   // Active or paused subscription with AutoThresh in the title
-  const hasSub = cust.subscriptionContracts.nodes.some(n =>
+  const hasSub = subNodes.some(n =>
     ['ACTIVE', 'PAUSED'].includes(n.status) &&
-    n.lines.nodes.some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+    (n.lines?.nodes ?? []).some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
   // Fallback: any order containing the product
-  const hasOrder = cust.orders.nodes.some(o =>
-    o.lineItems.nodes.some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+  const hasOrder = ordNodes.some(o =>
+    (o.lineItems?.nodes ?? []).some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
   return res.status(200).json({
