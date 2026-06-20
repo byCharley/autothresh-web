@@ -486,10 +486,16 @@ export function CanvasView() {
 
           <div style={{
             position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
-            fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)',
-            letterSpacing: '0.06em', background: 'var(--surface)',
-            padding: '3px 10px', border: '1px solid var(--border)',
+            fontFamily: 'var(--font-mono)', fontSize: 10,
+            letterSpacing: '0.06em', padding: '3px 10px',
             pointerEvents: 'none', textTransform: 'uppercase',
+            background: showFabricBg
+              ? (contrastColor(canvasColor) === '#000000' ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)')
+              : 'var(--surface)',
+            color: showFabricBg ? contrastColor(canvasColor) : 'var(--text-dim)',
+            border: showFabricBg
+              ? `1px solid ${contrastColor(canvasColor) === '#000000' ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.18)'}`
+              : '1px solid var(--border)',
           }}>
             {documentWidthIn}" × {documentHeightIn}" · {documentDpi} DPI
           </div>
