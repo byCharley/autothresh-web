@@ -125,25 +125,32 @@ function normalizeF32(arr: F32): F32 {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function grainValues(w: number, h: number, scale: number, seed: number): F32 {
-  // Film grain: per-pixel white noise filtered through two box-blur passes.
-  // Multi-pass blur approximates a Gaussian, creating organic smooth clusters
-  // with no pixel-grid alignment — matches real photographic grain/noise.
+  // Film grain: white noise + single blur pass at half-radius + contrast sharpening.
+  // Half-radius keeps particle SIZE comparable to the old block algorithm.
+  // The sqrt contrast boost converts Gaussian-shaped blur output back to
+  // a near-uniform distribution so grain particles stay small and distinct.
   const raw = new Float32Array(w * h) as F32;
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++)
       raw[y * w + x] = pseudoRandom(x, y, seed);
-  const r = Math.max(0.5, scale);
-  return normalizeF32(boxBlur(boxBlur(raw, w, h, r), w, h, r));
+  const r = Math.max(0.5, scale * 0.5);
+  const normed = normalizeF32(boxBlur(raw, w, h, r));
+  const out = new Float32Array(normed.length) as F32;
+  for (let i = 0; i < normed.length; i++) {
+    const v = (normed[i] - 0.5) * 2;            // [-1, 1]
+    out[i] = 0.5 + Math.sign(v) * Math.sqrt(Math.abs(v)) * 0.5;  // expand toward 0/1
+  }
+  return out as F32;
 }
 
 function grainSoftValues(w: number, h: number, scale: number, seed: number): F32 {
-  // Soft grain: three blur passes for larger, more diffuse particles.
+  // Soft grain: two blur passes for larger, more diffuse particles.
   const raw = new Float32Array(w * h) as F32;
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++)
       raw[y * w + x] = pseudoRandom(x, y, seed);
-  const r = Math.max(1, scale * 1.5);
-  return normalizeF32(boxBlur(boxBlur(boxBlur(raw, w, h, r), w, h, r), w, h, r));
+  const r = Math.max(0.5, scale * 0.6);
+  return normalizeF32(boxBlur(boxBlur(raw, w, h, r), w, h, r));
 }
 
 function grainCoarseValues(w: number, h: number, scale: number, seed: number): F32 {
@@ -152,7 +159,7 @@ function grainCoarseValues(w: number, h: number, scale: number, seed: number): F
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++)
       raw[y * w + x] = pseudoRandom(x, y, seed);
-  const r = Math.max(2, scale * 2.5);
+  const r = Math.max(1, scale * 0.8);
   return normalizeF32(boxBlur(boxBlur(raw, w, h, r), w, h, r));
 }
 
