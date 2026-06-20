@@ -1,79 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const ADM_TOKEN    = process.env.shopify_private_access_token!;
-const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN!;
-const ADM_URL      = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json`;
-
+const STORE_ID        = process.env.SHOPIFY_STORE_ID!;
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
-const VALID_SUB_STATUSES = new Set(['ACTIVE', 'PAUSED']);
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const [, payload] = token.split('.');
-    const padded = payload + '='.repeat((4 - payload.length % 4) % 4);
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-  } catch { return null; }
-}
+const CUST_API_URL = `https://shopify.com/authentication/${STORE_ID}/account/customer/api/2024-10/graphql`;
 
-async function adminQuery(query: string, variables: Record<string, unknown>) {
-  const r = await fetch(ADM_URL, {
+async function customerApiQuery(accessToken: string, query: string) {
+  const r = await fetch(CUST_API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': ADM_TOKEN },
-    body: JSON.stringify({ query, variables }),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ query }),
   });
-  return r.json() as Promise<{ data?: Record<string, unknown> }>;
+  return r.json() as Promise<{ data?: Record<string, unknown>; errors?: unknown[] }>;
 }
-
-type SubEdge = { node: { status: string; lines: { edges: { node: { title: string } }[] } } };
-type OrdEdge = { node: { lineItems: { edges: { node: { title: string } }[] } } };
-
-function hasAutoThreshAccess(subEdges: SubEdge[], ordEdges: OrdEdge[]): boolean {
-  const activeSub = subEdges.some(({ node }) =>
-    VALID_SUB_STATUSES.has(node.status) &&
-    node.lines.edges.some(({ node: line }) =>
-      line.title.toLowerCase().includes(PRODUCT_KEYWORD)
-    )
-  );
-  if (activeSub) return true;
-
-  return ordEdges.some(({ node: order }) =>
-    order.lineItems.edges.some(({ node: item }) =>
-      item.title.toLowerCase().includes(PRODUCT_KEYWORD)
-    )
-  );
-}
-
-const CUSTOMER_QUERY = `
-  query GetCustomerByEmail($query: String!) {
-    customers(first: 1, query: $query) {
-      edges {
-        node {
-          firstName
-          email
-          subscriptionContracts(first: 20) {
-            edges {
-              node {
-                status
-                lines(first: 10) {
-                  edges { node { title } }
-                }
-              }
-            }
-          }
-          orders(first: 20, query: "financial_status:paid status:any") {
-            edges {
-              node {
-                lineItems(first: 10) {
-                  edges { node { title } }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -85,34 +27,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { token } = req.body as { token?: string };
   if (!token) return res.status(400).json({ valid: false, error: 'Token required' });
 
-  // ── 1. Decode JWT — check expiry + get email ──────────────────────────────
-  const claims = decodeJwtPayload(token);
-  if (!claims) return res.status(200).json({ valid: false });
-
-  const exp = claims.exp as number | undefined;
-  if (exp && exp * 1000 < Date.now()) return res.status(200).json({ valid: false });
-
-  const email = claims.email as string;
-  if (!email) return res.status(200).json({ valid: false });
-
-  // ── 2. Admin API — look up by email ───────────────────────────────────────
-  const admData = await adminQuery(CUSTOMER_QUERY, { query: `email:${email}` });
+  // Query Customer Account API using the stored OAuth access token
+  const custData = await customerApiQuery(token, `
+    query {
+      customer {
+        firstName
+        emailAddress { emailAddress }
+        orders(first: 20) {
+          nodes {
+            lineItems(first: 10) {
+              nodes { title }
+            }
+          }
+        }
+        subscriptionContracts(first: 20) {
+          nodes {
+            status
+            lines(first: 10) {
+              nodes { title }
+            }
+          }
+        }
+      }
+    }
+  `);
 
   type CustNode = {
     firstName: string;
-    email: string;
-    subscriptionContracts: { edges: SubEdge[] };
-    orders: { edges: OrdEdge[] };
+    emailAddress?: { emailAddress: string };
+    orders: { nodes: { lineItems: { nodes: { title: string }[] } }[] };
+    subscriptionContracts: { nodes: { status: string; lines: { nodes: { title: string }[] } }[] };
   };
-  type CustData = { customers?: { edges: { node: CustNode }[] } };
 
-  const cust = (admData.data as CustData)?.customers?.edges[0]?.node;
-  if (!cust) return res.status(200).json({ valid: false });
+  const cust = (custData.data as { customer?: CustNode })?.customer;
+
+  if (!cust) {
+    // Token may be expired or invalid
+    console.error('Verify: no customer data. Errors:', JSON.stringify(custData.errors));
+    return res.status(200).json({ valid: false });
+  }
+
+  const hasSub = cust.subscriptionContracts.nodes.some(n =>
+    ['ACTIVE', 'PAUSED'].includes(n.status) &&
+    n.lines.nodes.some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+  );
+
+  const hasOrder = cust.orders.nodes.some(o =>
+    o.lineItems.nodes.some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+  );
 
   return res.status(200).json({
     valid:           true,
-    hasSubscription: hasAutoThreshAccess(cust.subscriptionContracts.edges, cust.orders.edges),
-    email:           cust.email,
+    hasSubscription: hasSub || hasOrder,
+    email:           cust.emailAddress?.emailAddress ?? '',
     firstName:       cust.firstName,
   });
 }
