@@ -77,11 +77,17 @@ function applyImageTexture(
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const tx = Math.floor(((x * ts + ox) % tex.w + tex.w) % tex.w);
-      const ty = Math.floor(((y * ts + oy) % tex.h + tex.h) % tex.h);
-      if (tex.pixels[ty * tex.w + tx] < threshold) {
-        mask[y * w + x] = 0;
-      }
+      // Bilinear interpolation — eliminates pixel-grid aliasing in the tiled texture
+      const txf = ((x * ts + ox) % tex.w + tex.w) % tex.w;
+      const tyf = ((y * ts + oy) % tex.h + tex.h) % tex.h;
+      const tx0 = Math.floor(txf), ty0 = Math.floor(tyf);
+      const tx1 = (tx0 + 1) % tex.w, ty1 = (ty0 + 1) % tex.h;
+      const fx = txf - tx0, fy = tyf - ty0;
+      const v = tex.pixels[ty0 * tex.w + tx0] * (1 - fx) * (1 - fy)
+              + tex.pixels[ty0 * tex.w + tx1] * fx       * (1 - fy)
+              + tex.pixels[ty1 * tex.w + tx0] * (1 - fx) * fy
+              + tex.pixels[ty1 * tex.w + tx1] * fx       * fy;
+      if (v < threshold) mask[y * w + x] = 0;
     }
   }
 

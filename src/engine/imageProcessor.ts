@@ -125,46 +125,35 @@ function normalizeF32(arr: F32): F32 {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function grainValues(w: number, h: number, scale: number, seed: number): F32 {
-  // Deterministic per-block noise — NO blur, NO smoothing.
-  // grain[x,y] = hash(floor(x/scale), floor(y/scale), seed)
-  // This matches Photoshop "Add Noise": each location gets a seeded random value,
-  // and scale controls how many pixels share one value (block size).
-  // scale=1 → per-pixel speckle; scale=4 → 4-px ink-dot blocks.
-  // Blend 85% block + 15% per-pixel variation so blocks have organic edges.
-  const vals = new Float32Array(w * h) as F32;
-  const s = Math.max(1, Math.round(scale));
-  for (let y = 0; y < h; y++) {
-    const gy = Math.floor(y / s);
-    for (let x = 0; x < w; x++) {
-      const block = pseudoRandom(Math.floor(x / s), gy, seed);
-      const pixel = pseudoRandom(x, y, seed ^ 0xDEAD);
-      vals[y * w + x] = block * 0.85 + pixel * 0.15;
-    }
-  }
-  return vals;
+  // Film grain: per-pixel white noise filtered through two box-blur passes.
+  // Multi-pass blur approximates a Gaussian, creating organic smooth clusters
+  // with no pixel-grid alignment — matches real photographic grain/noise.
+  const raw = new Float32Array(w * h) as F32;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      raw[y * w + x] = pseudoRandom(x, y, seed);
+  const r = Math.max(0.5, scale);
+  return normalizeF32(boxBlur(boxBlur(raw, w, h, r), w, h, r));
 }
 
 function grainSoftValues(w: number, h: number, scale: number, seed: number): F32 {
-  // Block noise + one blur pass for slightly rounded dot edges.
-  // Visually: coarser, softer speckle — like "Add Noise + slight Gaussian" in Photoshop.
-  let vals = new Float32Array(w * h) as F32;
-  const s = Math.max(1, Math.round(scale));
-  for (let y = 0; y < h; y++) {
-    const gy = Math.floor(y / s);
+  // Soft grain: three blur passes for larger, more diffuse particles.
+  const raw = new Float32Array(w * h) as F32;
+  for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++)
-      vals[y * w + x] = pseudoRandom(Math.floor(x / s), gy, seed);
-  }
-  vals = boxBlur(vals, w, h, Math.max(1, scale * 0.6));
-  return normalizeF32(vals);
+      raw[y * w + x] = pseudoRandom(x, y, seed);
+  const r = Math.max(1, scale * 1.5);
+  return normalizeF32(boxBlur(boxBlur(boxBlur(raw, w, h, r), w, h, r), w, h, r));
 }
 
 function grainCoarseValues(w: number, h: number, scale: number, seed: number): F32 {
-  const noise = new Float32Array(w * h) as F32;
-  const s = Math.max(1, scale);
+  // Coarse grain: two blur passes at a larger radius for chunky organic clusters.
+  const raw = new Float32Array(w * h) as F32;
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++)
-      noise[y * w + x] = pseudoRandom(Math.floor(x / s), Math.floor(y / s), seed);
-  return noise;
+      raw[y * w + x] = pseudoRandom(x, y, seed);
+  const r = Math.max(2, scale * 2.5);
+  return normalizeF32(boxBlur(boxBlur(raw, w, h, r), w, h, r));
 }
 
 function halftoneValues(
