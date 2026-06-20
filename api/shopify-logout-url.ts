@@ -7,6 +7,12 @@ const APP_ORIGIN   = new URL(REDIRECT_URI).origin;
 export default function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  const logoutUrl = `https://shopify.com/authentication/${STORE_ID}/logout?return_to=${encodeURIComponent(APP_ORIGIN)}`;
+
+  const { id_token_hint } = req.query as { id_token_hint?: string };
+
+  const params = new URLSearchParams({ return_to: APP_ORIGIN });
+  if (id_token_hint) params.set('id_token_hint', id_token_hint);
+
+  const logoutUrl = `https://shopify.com/authentication/${STORE_ID}/logout?${params}`;
   return res.status(200).json({ logoutUrl });
 }

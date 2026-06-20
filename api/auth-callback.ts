@@ -210,6 +210,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   return res.status(200).json({
     token:                tokens.access_token,
+    idToken:              tokens.id_token,
     expiresAt,
     email:                custEmail,
     firstName:            cust.firstName ?? '',

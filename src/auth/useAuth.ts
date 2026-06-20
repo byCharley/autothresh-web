@@ -3,6 +3,7 @@ import { generateCodeVerifier, generateCodeChallenge, generateState } from './pk
 
 export interface Session {
   token:                   string;
+  idToken?:                string;
   expiresAt:               string;
   email:                   string;
   firstName:               string;
@@ -75,12 +76,13 @@ export function useAuth() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, codeVerifier }),
       })
-        .then((r) => r.json() as Promise<Partial<Session> & { error?: string; subscriptionExpiresAt?: string }>)
+        .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; subscriptionExpiresAt?: string }>)
         .then((data) => {
           window.history.replaceState({}, '', '/');
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
           const s: Session = {
             token:                   data.token!,
+            idToken:                 data.idToken,
             expiresAt:               data.expiresAt!,
             email:                   data.email!,
             firstName:               data.firstName!,
@@ -136,11 +138,11 @@ export function useAuth() {
   }, []);
 
   const switchAccount = useCallback(async () => {
+    const currentSession = loadSession();
     clearSession();
     sessionStorage.setItem('at_post_logout', '1');
-    // return_to is the app homepage — Shopify rejects full OAuth URLs as return_to.
-    // The at_post_logout flag triggers auto-login once the app reloads after logout.
-    const r = await fetch('/api/shopify-logout-url');
+    const idTokenHint = currentSession?.idToken ?? '';
+    const r = await fetch(`/api/shopify-logout-url?id_token_hint=${encodeURIComponent(idTokenHint)}`);
     const { logoutUrl } = await r.json() as { logoutUrl: string };
     window.location.href = logoutUrl;
   }, []);

@@ -56,7 +56,7 @@ export function SubscribePage({ firstName, onLogout, onSwitchAccount }: Props) {
           target="_blank"
           rel="noopener noreferrer"
           className="btn btn-primary"
-          style={{ display: 'inline-flex', justifyContent: 'center', textDecoration: 'none', marginBottom: 12, minWidth: 200 }}
+          style={{ display: 'inline-flex', justifyContent: 'center', textDecoration: 'none', marginBottom: 12, minWidth: 200, color: '#000' }}
         >
           Subscribe Now
         </a>

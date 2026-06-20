@@ -75,7 +75,7 @@ export function EulaModal({ onClose }: Props) {
           <button
             className="btn btn-primary"
             onClick={onClose}
-            style={{ width: '100%' }}
+            style={{ width: '100%', color: '#000' }}
           >
             I Understand
           </button>
