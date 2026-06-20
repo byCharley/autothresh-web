@@ -47,7 +47,6 @@ export interface LayerConfig extends PatternConfig {
   thresholdMax: number;
   exposure: number;    // -100 to 100
   blur: number;        // 0–20
-  opacity: number;     // 0–100
   useGlobalPattern: boolean;
 }
 

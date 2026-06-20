@@ -475,10 +475,7 @@ export function ControlPanel() {
               )}
             </Section>
 
-            <Section title="Opacity" defaultOpen={false}>
-              <Slider label="Opacity" value={layer.opacity} min={0} max={100}
-                onChange={(v) => updateLayer(layer.id, { opacity: v })} unit="%" />
-            </Section>
+
           </>
         ) : (
           <div className="no-layer-selected" style={{ flex: 'none', padding: '16px 14px' }}>
