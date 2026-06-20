@@ -372,10 +372,28 @@ function DocumentSection() {
   );
 }
 
+// ─── CMYK Screen Section ──────────────────────────────────────────────────────
+
+function CmykScreenSection() {
+  const { separationMode, cmykScale, setCmykScale, documentDpi } = useStore();
+  if (separationMode !== 'cmyk') return null;
+  const lpi = Math.round(documentDpi / Math.max(1, cmykScale));
+  return (
+    <Section title="CMYK Screen">
+      <Slider label="Cell Size" value={cmykScale} min={4} max={24} step={1}
+        onChange={setCmykScale} />
+      <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8, marginTop: 4 }}>
+        <div>~{lpi} LPI at {documentDpi} DPI</div>
+        <div>Angles: K 45° · C 15° · M 75° · Y 90°</div>
+      </div>
+    </Section>
+  );
+}
+
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export function ControlPanel() {
-  const { layers, selectedLayerId, updateLayer, globalPattern, originalImage } = useStore();
+  const { layers, selectedLayerId, updateLayer, globalPattern, originalImage, separationMode } = useStore();
   const layer = layers.find((l) => l.id === selectedLayerId);
 
   if (!originalImage) {
@@ -392,7 +410,9 @@ export function ControlPanel() {
   return (
     <aside className="panel-right">
       <div className="panel-header">
-        {layer ? (
+        {separationMode === 'cmyk' ? (
+          <span className="panel-title">CMYK</span>
+        ) : layer ? (
           <>
             <span className="panel-title">{layer.name}</span>
             <div style={{ width: 14, height: 14, background: layer.color, border: '1px solid var(--border-2)' }} />
@@ -404,11 +424,11 @@ export function ControlPanel() {
 
       <div className="control-scroll">
         <DocumentSection />
-        <GlobalPatternSection />
+        {separationMode === 'cmyk' ? <CmykScreenSection /> : <GlobalPatternSection />}
         <ImageAdjustmentsSection />
 
-        {/* Per-layer controls */}
-        {layer ? (
+        {/* Per-layer controls — threshold mode only */}
+        {separationMode === 'threshold' && layer ? (
           <>
             <Section title="Color">
               <div className="field">
@@ -474,14 +494,12 @@ export function ControlPanel() {
                 </div>
               )}
             </Section>
-
-
           </>
-        ) : (
+        ) : separationMode === 'threshold' && !layer ? (
           <div className="no-layer-selected" style={{ flex: 'none', padding: '16px 14px' }}>
             <span className="no-layer-label">Select a layer to edit</span>
           </div>
-        )}
+        ) : null}
 
       </div>
     </aside>

@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import {
   processImage, renderComposite, scaleImageData, scaleImageDataExact,
   computeBackgroundMask, detectBackgroundColor, hexToRgb, registerPatternTexture,
+  cmykSeparate, renderCmykComposite,
 } from '../engine/imageProcessor';
 import type { LayerConfig, PatternConfig } from '../engine/imageProcessor';
 import { generateTextureMask } from '../engine/textureGenerator';
@@ -49,6 +50,7 @@ export function CanvasView() {
     canvasColor, showFabricBg,
     imageAdjustments,
     documentDpi, documentWidthIn, documentHeightIn,
+    separationMode, cmykScale, cmykVisibility,
     isProcessing, setOriginalImage, setProcessedLayers, setIsProcessing, setCanvasColor,
   } = useStore();
 
@@ -171,10 +173,18 @@ export function CanvasView() {
         // Single high-quality scale from original → exact slot size.
         const artScaled    = scaleImageDataExact(originalImage, artPrevW, artPrevH);
         const localBgMask  = bgRemovalEnabled ? computeBackgroundMask(artScaled, bgTolerance) : null;
-        const resolved     = resolvePatterns(layers, globalPattern);
-        const processed    = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
 
-        if (textureEnabled) {
+        let processed: ReturnType<typeof processImage>;
+        if (separationMode === 'cmyk') {
+          processed = cmykSeparate(artScaled, cmykScale, localBgMask);
+          // Apply visibility from store
+          for (const layer of processed) layer.visible = cmykVisibility[layer.id] ?? true;
+        } else {
+          const resolved = resolvePatterns(layers, globalPattern);
+          processed = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
+        }
+
+        if (textureEnabled && separationMode === 'threshold') {
           const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
           for (const layer of processed) {
             for (let i = 0; i < layer.mask.length; i++) {
@@ -185,7 +195,9 @@ export function CanvasView() {
 
         setProcessedLayers(processed);
 
-        const artComposite = renderComposite(processed, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
+        const artComposite = separationMode === 'cmyk'
+          ? renderCmykComposite(processed, artPrevW, artPrevH)
+          : renderComposite(processed, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
 
         // Build document canvas: fabric bg + artwork at 1:1 (zero scaling = zero blur).
         const docCanvas = document.createElement('canvas');
@@ -218,6 +230,7 @@ export function CanvasView() {
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     textureVersion,
     documentWidthIn, documentHeightIn, documentDpi,
+    separationMode, cmykScale, cmykVisibility,
     // renderDim intentionally excluded — zoom must never trigger a reprocess
   ]);
 

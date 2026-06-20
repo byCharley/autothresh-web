@@ -15,9 +15,10 @@ import { ExportModal } from './components/ExportModal';
 import type { ExportConfig } from './components/ExportModal';
 import { useStore } from './store/useStore';
 import {
-  processImage, renderComposite, drawRegistrationMarks, computeBackgroundMask,
+  processImage, renderComposite, renderCmykComposite, drawRegistrationMarks, computeBackgroundMask,
+  cmykSeparate,
 } from './engine/imageProcessor';
-import type { LayerConfig, PatternConfig } from './engine/imageProcessor';
+import type { LayerConfig, PatternConfig, ProcessedLayer } from './engine/imageProcessor';
 import { generateTextureMask } from './engine/textureGenerator';
 import { encodeTiff } from './engine/exportFormats';
 
@@ -61,6 +62,7 @@ function App() {
     bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor,
     documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
+    separationMode, cmykScale,
   } = useStore();
 
   useEffect(() => {
@@ -117,14 +119,19 @@ function App() {
     const artImageData = artExpCanvas.getContext('2d')!.getImageData(0, 0, artScaleW, artScaleH);
 
     const artBgMask = bgRemovalEnabled ? computeBackgroundMask(artImageData, bgTolerance) : null;
-    const resolved  = resolvePatterns(layers, globalPattern);
-    const artLayers = processImage(artImageData, resolved, knockoutEnabled, artBgMask, imageAdjustments, exportScaleFactor);
 
-    if (textureEnabled) {
-      const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
-      for (const layer of artLayers) {
-        for (let i = 0; i < layer.mask.length; i++) {
-          if (texMask[i] === 0) layer.mask[i] = 0;
+    let artLayers: ProcessedLayer[];
+    if (separationMode === 'cmyk') {
+      artLayers = cmykSeparate(artImageData, cmykScale, artBgMask, exportScaleFactor);
+    } else {
+      const resolved = resolvePatterns(layers, globalPattern);
+      artLayers = processImage(artImageData, resolved, knockoutEnabled, artBgMask, imageAdjustments, exportScaleFactor);
+      if (textureEnabled) {
+        const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
+        for (const layer of artLayers) {
+          for (let i = 0; i < layer.mask.length; i++) {
+            if (texMask[i] === 0) layer.mask[i] = 0;
+          }
         }
       }
     }
@@ -154,7 +161,9 @@ function App() {
 
     const buildCompositeCanvas = (withMarks: boolean): HTMLCanvasElement => {
       // Composite artwork layers, then place in document canvas
-      const artComposite = renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
+      const artComposite = separationMode === 'cmyk'
+        ? renderCmykComposite(artLayers, artScaleW, artScaleH)
+        : renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
       const docCanvas = document.createElement('canvas');
       docCanvas.width = docPxW; docCanvas.height = docPxH;
       const dCtx = docCanvas.getContext('2d')!;
@@ -183,6 +192,9 @@ function App() {
     };
 
     const visibleLayers = artLayers.filter((pl) => pl.visible);
+    // Helper: get display name for a processed layer (works for both threshold and CMYK)
+    const layerName = (pl: ProcessedLayer) =>
+      pl.name ?? layers.find((l) => l.id === pl.id)?.name ?? pl.id;
 
     // ── PNG ──────────────────────────────────────────────────────────────────
     if (format === 'png') {
@@ -193,8 +205,7 @@ function App() {
         const zip    = new JSZip();
         const folder = zip.folder('screen-print')!;
         for (const pl of visibleLayers) {
-          const cfg = layers.find((l) => l.id === pl.id)!;
-          folder.file(`${cfg.name.toLowerCase()}.png`, await canvasToBlob(buildLayerCanvas(pl, true)));
+          folder.file(`${layerName(pl).toLowerCase()}.png`, await canvasToBlob(buildLayerCanvas(pl, true)));
         }
         folder.file('composite.png', await canvasToBlob(buildCompositeCanvas(true)));
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen.zip`);
@@ -214,17 +225,14 @@ function App() {
         });
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-dtg.psd`);
       } else {
-        const psdLayers = visibleLayers.map((pl) => {
-          const cfg = layers.find((l) => l.id === pl.id)!;
-          return {
-            name:      cfg.name,
-            canvas:    buildLayerCanvas(pl, true),
-            top:       0,
-            left:      0,
-            blendMode: 'normal' as const,
-            opacity:   1,
-          };
-        });
+        const psdLayers = visibleLayers.map((pl) => ({
+          name:      layerName(pl),
+          canvas:    buildLayerCanvas(pl, true),
+          top:       0,
+          left:      0,
+          blendMode: 'normal' as const,
+          opacity:   1,
+        }));
         const buffer = writePsd({ width: docPxW, height: docPxH, children: [bgLayer, ...psdLayers] });
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-screen.psd`);
       }
@@ -270,9 +278,8 @@ function App() {
         const zip    = new JSZip();
         const folder = zip.folder('screen-print-tiff')!;
         for (const pl of visibleLayers) {
-          const cfg = layers.find((l) => l.id === pl.id)!;
           const buf = encodeTiff(getPixels(buildLayerCanvas(pl, true)), documentDpi);
-          folder.file(`${cfg.name.toLowerCase()}.tiff`, buf);
+          folder.file(`${layerName(pl).toLowerCase()}.tiff`, buf);
         }
         folder.file('composite.tiff', encodeTiff(getPixels(buildCompositeCanvas(true)), documentDpi));
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-tiff.zip`);

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { LayerConfig, PatternConfig, ProcessedLayer, ImageAdjustments } from '../engine/imageProcessor';
+import type { LayerConfig, PatternConfig, ProcessedLayer, ImageAdjustments, SeparationMode } from '../engine/imageProcessor';
 import type { TextureType } from '../engine/textureGenerator';
 
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
@@ -84,6 +84,10 @@ interface AppState {
   palettePool: string[][];
   activePaletteIdx: number;
 
+  separationMode: SeparationMode;
+  cmykScale: number;
+  cmykVisibility: Record<string, boolean>;
+
   processedLayers: ProcessedLayer[];
   isProcessing: boolean;
 
@@ -115,6 +119,10 @@ interface AppState {
   resetImageAdjustments: () => void;
   setPalettePool: (palettes: string[][]) => void;
   applyPalette: (idx: number) => void;
+  setSeparationMode: (v: SeparationMode) => void;
+  setCmykScale: (v: number) => void;
+  setCmykLayerVisible: (id: string, v: boolean) => void;
+
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
   setIsProcessing: (v: boolean) => void;
 }
@@ -148,6 +156,10 @@ export const useStore = create<AppState>((set) => ({
   imageAdjustments: { ...DEFAULT_IMAGE_ADJ },
   palettePool: [],
   activePaletteIdx: 0,
+  separationMode: 'threshold',
+  cmykScale: 8,
+  cmykVisibility: { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true },
+
   processedLayers: [],
   isProcessing: false,
 
@@ -192,6 +204,10 @@ export const useStore = create<AppState>((set) => ({
     });
     return { layers: updatedLayers, activePaletteIdx: idx };
   }),
+  setSeparationMode: (separationMode) => set({ separationMode }),
+  setCmykScale: (cmykScale) => set({ cmykScale }),
+  setCmykLayerVisible: (id, v) => set((s) => ({ cmykVisibility: { ...s.cmykVisibility, [id]: v } })),
+
   setProcessedLayers: (processedLayers) => set({ processedLayers }),
   setIsProcessing: (isProcessing) => set({ isProcessing }),
 }));

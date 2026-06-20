@@ -235,12 +235,23 @@ function ArtworkSection() {
   );
 }
 
+// ─── CMYK Channel Definitions ─────────────────────────────────────────────────
+
+const CMYK_CARD_DEFS = [
+  { id: 'cmyk-k', name: 'K · Black',   color: '#0a0a0a', angle: 45 },
+  { id: 'cmyk-c', name: 'C · Cyan',    color: '#00aeef', angle: 15 },
+  { id: 'cmyk-m', name: 'M · Magenta', color: '#ec008c', angle: 75 },
+  { id: 'cmyk-y', name: 'Y · Yellow',  color: '#fff200', angle: 90 },
+];
+
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export function LayerPanel() {
   const {
     layers, selectedLayerId, selectLayer, updateLayer,
     previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
+    separationMode, setSeparationMode,
+    cmykVisibility, setCmykLayerVisible,
   } = useStore();
 
   const handleAutoPalette = () => {
@@ -263,107 +274,167 @@ export function LayerPanel() {
     <aside className="panel-left">
       <div className="panel-header">
         <span className="panel-title">Layers</span>
-        <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-          {layers.filter(l => l.visible).length}/{layers.length}
-        </span>
+        {separationMode === 'threshold' && (
+          <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+            {layers.filter(l => l.visible).length}/{layers.length}
+          </span>
+        )}
       </div>
 
-      {/* Single scrollable column: knockout → layers → palette → fabric → bg removal */}
+      {/* Single scrollable column */}
       <div className="left-scroll">
-        {/* Knockout */}
-        <div style={{ padding: '8px 12px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              Knockout
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e' }} />
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#22c55e', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Auto</span>
-            </div>
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-            Ink overlap removed
-          </div>
-        </div>
-
-        {/* Layer cards */}
-        <div style={{ padding: '8px 8px 4px' }}>
-          {[...layers].reverse().map((layer) => (
-            <div
-              key={layer.id}
-              className={`layer-card ${selectedLayerId === layer.id ? 'selected' : ''}`}
-              style={{ marginBottom: 4 }}
-              onClick={() => selectLayer(layer.id)}
+        {/* Mode Switcher */}
+        <div style={{ display: 'flex', padding: '6px 8px', gap: 4, borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          {(['threshold', 'cmyk'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setSeparationMode(mode)}
+              style={{
+                flex: 1, height: 28, fontSize: 10, fontFamily: 'var(--font-mono)',
+                fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+                cursor: 'pointer', border: '1px solid var(--border)',
+                background: separationMode === mode ? 'var(--accent)' : 'var(--surface-2)',
+                color: separationMode === mode ? '#000' : 'var(--text-muted)',
+                transition: 'background 0.15s, color 0.15s',
+              }}
             >
-              <div className="layer-swatch" title="Click to change color">
-                <div className="layer-swatch-inner" style={{ background: layer.color }} />
-                <input
-                  type="color"
-                  value={layer.color}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => { e.stopPropagation(); updateLayer(layer.id, { color: e.target.value }); }}
-                />
-              </div>
-              <div className="layer-card-info">
-                <div className="layer-card-name">{layer.name}</div>
-                <div className="layer-card-sub">
-                  {layer.thresholdMin}–{layer.thresholdMax}
-                  {layer.pattern !== 'none' && ` · ${layer.pattern}`}
-                </div>
-              </div>
-              <div className="layer-card-actions">
-                <button
-                  className={`vis-btn ${!layer.visible ? 'hidden-layer' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
-                  title={layer.visible ? 'Hide layer' : 'Show layer'}
-                >
-                  <EyeIcon visible={layer.visible} />
-                </button>
-              </div>
-            </div>
+              {mode === 'threshold' ? 'Threshold' : 'CMYK'}
+            </button>
           ))}
         </div>
 
-        {/* Auto Palette */}
-        {previewImage && (
-          <div style={{ padding: '4px 8px 8px', borderTop: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <button
-                className="btn btn-ghost"
-                style={{ flex: 1, fontSize: 10, height: 26 }}
-                onClick={handleAutoPalette}
-              >
-                Auto Palette
-              </button>
-              {palettePool.length > 1 && (
-                <button
-                  className="btn btn-ghost btn-icon"
-                  onClick={handleShuffle}
-                  title={`Shuffle (${activePaletteIdx + 1}/${palettePool.length})`}
-                  style={{ width: 26, height: 26 }}
-                >
-                  <ShuffleIcon />
-                </button>
-              )}
+        {separationMode === 'cmyk' ? (
+          <>
+            {/* CMYK layer cards */}
+            <div style={{ padding: '8px 8px 4px' }}>
+              {[...CMYK_CARD_DEFS].reverse().map(({ id, name, color, angle }) => {
+                const visible = cmykVisibility[id] ?? true;
+                return (
+                  <div key={id} className="layer-card" style={{ marginBottom: 4 }}>
+                    <div className="layer-swatch">
+                      <div className="layer-swatch-inner" style={{ background: color }} />
+                    </div>
+                    <div className="layer-card-info">
+                      <div className="layer-card-name">{name}</div>
+                      <div className="layer-card-sub">{angle}° screen</div>
+                    </div>
+                    <div className="layer-card-actions">
+                      <button
+                        className={`vis-btn ${!visible ? 'hidden-layer' : ''}`}
+                        onClick={() => setCmykLayerVisible(id, !visible)}
+                      >
+                        <EyeIcon visible={visible} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            {palettePool.length > 0 && (
-              <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
-                {palettePool[activePaletteIdx]?.map((c, i) => (
-                  <div key={i} style={{ flex: 1, height: 8, background: c, border: '1px solid var(--border-2)', borderRadius: 1 }} />
-                ))}
+
+            {/* Fabric color + bg toggle — still useful in CMYK mode */}
+            <FabricSection />
+
+            {/* Background removal — still useful in CMYK mode */}
+            <ArtworkSection />
+          </>
+        ) : (
+          <>
+            {/* Knockout */}
+            <div style={{ padding: '8px 12px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Knockout
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e' }} />
+                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#22c55e', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Auto</span>
+                </div>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                Ink overlap removed
+              </div>
+            </div>
+
+            {/* Layer cards */}
+            <div style={{ padding: '8px 8px 4px' }}>
+              {[...layers].reverse().map((layer) => (
+                <div
+                  key={layer.id}
+                  className={`layer-card ${selectedLayerId === layer.id ? 'selected' : ''}`}
+                  style={{ marginBottom: 4 }}
+                  onClick={() => selectLayer(layer.id)}
+                >
+                  <div className="layer-swatch" title="Click to change color">
+                    <div className="layer-swatch-inner" style={{ background: layer.color }} />
+                    <input
+                      type="color"
+                      value={layer.color}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => { e.stopPropagation(); updateLayer(layer.id, { color: e.target.value }); }}
+                    />
+                  </div>
+                  <div className="layer-card-info">
+                    <div className="layer-card-name">{layer.name}</div>
+                    <div className="layer-card-sub">
+                      {layer.thresholdMin}–{layer.thresholdMax}
+                      {layer.pattern !== 'none' && ` · ${layer.pattern}`}
+                    </div>
+                  </div>
+                  <div className="layer-card-actions">
+                    <button
+                      className={`vis-btn ${!layer.visible ? 'hidden-layer' : ''}`}
+                      onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
+                      title={layer.visible ? 'Hide layer' : 'Show layer'}
+                    >
+                      <EyeIcon visible={layer.visible} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Auto Palette */}
+            {previewImage && (
+              <div style={{ padding: '4px 8px 8px', borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ flex: 1, fontSize: 10, height: 26 }}
+                    onClick={handleAutoPalette}
+                  >
+                    Auto Palette
+                  </button>
+                  {palettePool.length > 1 && (
+                    <button
+                      className="btn btn-ghost btn-icon"
+                      onClick={handleShuffle}
+                      title={`Shuffle (${activePaletteIdx + 1}/${palettePool.length})`}
+                      style={{ width: 26, height: 26 }}
+                    >
+                      <ShuffleIcon />
+                    </button>
+                  )}
+                </div>
+                {palettePool.length > 0 && (
+                  <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
+                    {palettePool[activePaletteIdx]?.map((c, i) => (
+                      <div key={i} style={{ flex: 1, height: 8, background: c, border: '1px solid var(--border-2)', borderRadius: 1 }} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-          </div>
+
+            {/* Texture overlay */}
+            <TextureSection />
+
+            {/* Fabric color + bg toggle */}
+            <FabricSection />
+
+            {/* Background removal (image only) */}
+            <ArtworkSection />
+          </>
         )}
-
-        {/* Texture overlay */}
-        <TextureSection />
-
-        {/* Fabric color + bg toggle */}
-        <FabricSection />
-
-        {/* Background removal (image only) */}
-        <ArtworkSection />
       </div>
 
     </aside>

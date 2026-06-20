@@ -1,5 +1,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type SeparationMode = 'threshold' | 'cmyk';
+
 export type PatternType =
   | 'none'
   | 'noise'
@@ -52,6 +54,7 @@ export interface LayerConfig extends PatternConfig {
 
 export interface ProcessedLayer {
   id: string;
+  name?: string;
   mask: Uint8Array;
   color: [number, number, number];
   visible: boolean;
@@ -716,4 +719,107 @@ export function scaleImageDataExact(imageData: ImageData, targetW: number, targe
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(src, 0, 0, targetW, targetH);
   return ctx.getImageData(0, 0, targetW, targetH);
+}
+
+// ─── CMYK Separation ──────────────────────────────────────────────────────────
+
+// Standard CMYK process colors and screen angles
+const CMYK_CHANNELS = [
+  { id: 'cmyk-k', name: 'K · Black',   color: [10, 10, 10]   as [number,number,number], angleDeg: 45 },
+  { id: 'cmyk-c', name: 'C · Cyan',    color: [0, 174, 239]  as [number,number,number], angleDeg: 15 },
+  { id: 'cmyk-m', name: 'M · Magenta', color: [236, 0, 140]  as [number,number,number], angleDeg: 75 },
+  { id: 'cmyk-y', name: 'Y · Yellow',  color: [255, 242, 0]  as [number,number,number], angleDeg: 90 },
+] as const;
+
+export function cmykSeparate(
+  imageData: ImageData,
+  cellSize: number,
+  bgMask: Uint8Array | null,
+  scaleFactor = 1,
+): ProcessedLayer[] {
+  const { width: w, height: h, data } = imageData;
+  const cs = Math.max(2, cellSize * scaleFactor);
+
+  // Pre-compute CMYK channels (0–1 float)
+  const chanK = new Float32Array(w * h);
+  const chanC = new Float32Array(w * h);
+  const chanM = new Float32Array(w * h);
+  const chanY = new Float32Array(w * h);
+
+  for (let i = 0; i < w * h; i++) {
+    const r = data[i * 4]     / 255;
+    const g = data[i * 4 + 1] / 255;
+    const b = data[i * 4 + 2] / 255;
+    const k = 1 - Math.max(r, g, b);
+    chanK[i] = k;
+    if (k < 1) {
+      const d = 1 - k;
+      chanC[i] = (1 - r - k) / d;
+      chanM[i] = (1 - g - k) / d;
+      chanY[i] = (1 - b - k) / d;
+    }
+  }
+
+  const channelData = [chanK, chanC, chanM, chanY];
+
+  return CMYK_CHANNELS.map(({ id, name, color, angleDeg }, ci) => {
+    const angle = angleDeg * Math.PI / 180;
+    const cosA = Math.cos(angle), sinA = Math.sin(angle);
+    const chan = channelData[ci];
+    const mask = new Uint8Array(w * h);
+
+    for (let py = 0; py < h; py++) {
+      const pyS = py * sinA, pyC = py * cosA;
+      for (let px = 0; px < w; px++) {
+        if (bgMask && bgMask[py * w + px] === 255) continue;
+
+        const su = px * cosA + pyS;
+        const sv = -px * sinA + pyC;
+
+        const cellX = Math.floor(su / cs);
+        const cellY = Math.floor(sv / cs);
+        const cu = (cellX + 0.5) * cs;
+        const cv = (cellY + 0.5) * cs;
+
+        // Sample ink value at cell center (back-rotate to image space)
+        const ix = Math.max(0, Math.min(w - 1, Math.round(cu * cosA - cv * sinA)));
+        const iy = Math.max(0, Math.min(h - 1, Math.round(cu * sinA + cv * cosA)));
+        const ink = chan[iy * w + ix];
+
+        const dotR = (cs * 0.5) * Math.sqrt(ink);
+        const du = su - cu, dv = sv - cv;
+        if (du * du + dv * dv <= dotR * dotR) mask[py * w + px] = 255;
+      }
+    }
+
+    return { id, name, color, visible: true, mask } as ProcessedLayer;
+  });
+}
+
+export function renderCmykComposite(layers: ProcessedLayer[], w: number, h: number): ImageData {
+  const out = new ImageData(w, h);
+  // Fill white paper
+  for (let i = 0; i < w * h; i++) {
+    out.data[i * 4] = 255; out.data[i * 4 + 1] = 255;
+    out.data[i * 4 + 2] = 255; out.data[i * 4 + 3] = 255;
+  }
+  // Subtractive ink absorption — each channel removes its complementary light
+  const absorb: Record<string, [number, number, number]> = {
+    'cmyk-k': [0, 0, 0],   // absorbs R+G+B
+    'cmyk-c': [0, 1, 1],   // absorbs R
+    'cmyk-m': [1, 0, 1],   // absorbs G
+    'cmyk-y': [1, 1, 0],   // absorbs B
+  };
+  for (const id of ['cmyk-k', 'cmyk-c', 'cmyk-m', 'cmyk-y']) {
+    const layer = layers.find(l => l.id === id);
+    if (!layer || !layer.visible) continue;
+    const [ar, ag, ab] = absorb[id];
+    for (let i = 0; i < w * h; i++) {
+      if (layer.mask[i] !== 255) continue;
+      out.data[i * 4]     = Math.round(out.data[i * 4]     * ar);
+      out.data[i * 4 + 1] = Math.round(out.data[i * 4 + 1] * ag);
+      out.data[i * 4 + 2] = Math.round(out.data[i * 4 + 2] * ab);
+    }
+  }
+  return out;
 }
