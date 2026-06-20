@@ -5,6 +5,7 @@ const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN!;
 const ADM_URL      = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json`;
 
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
+const VALID_SUB_STATUSES = new Set(['ACTIVE', 'PAUSED']);
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -28,7 +29,7 @@ type OrdEdge = { node: { lineItems: { edges: { node: { title: string } }[] } } }
 
 function hasAutoThreshAccess(subEdges: SubEdge[], ordEdges: OrdEdge[]): boolean {
   const activeSub = subEdges.some(({ node }) =>
-    node.status === 'ACTIVE' &&
+    VALID_SUB_STATUSES.has(node.status) &&
     node.lines.edges.some(({ node: line }) =>
       line.title.toLowerCase().includes(PRODUCT_KEYWORD)
     )
@@ -42,6 +43,38 @@ function hasAutoThreshAccess(subEdges: SubEdge[], ordEdges: OrdEdge[]): boolean 
   );
 }
 
+const CUSTOMER_QUERY = `
+  query GetCustomerByEmail($query: String!) {
+    customers(first: 1, query: $query) {
+      edges {
+        node {
+          firstName
+          email
+          subscriptionContracts(first: 20) {
+            edges {
+              node {
+                status
+                lines(first: 10) {
+                  edges { node { title } }
+                }
+              }
+            }
+          }
+          orders(first: 20, query: "financial_status:paid status:any") {
+            edges {
+              node {
+                lineItems(first: 10) {
+                  edges { node { title } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -52,55 +85,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { token } = req.body as { token?: string };
   if (!token) return res.status(400).json({ valid: false, error: 'Token required' });
 
-  // ── 1. Decode JWT — check expiry ──────────────────────────────────────────
+  // ── 1. Decode JWT — check expiry + get email ──────────────────────────────
   const claims = decodeJwtPayload(token);
   if (!claims) return res.status(200).json({ valid: false });
 
   const exp = claims.exp as number | undefined;
   if (exp && exp * 1000 < Date.now()) return res.status(200).json({ valid: false });
 
-  const customerGid = claims.sub as string;
-  if (!customerGid) return res.status(200).json({ valid: false });
+  const email = claims.email as string;
+  if (!email) return res.status(200).json({ valid: false });
 
-  // ── 2. Admin API — recheck subscription + orders ──────────────────────────
-  const admData = await adminQuery(`
-    query GetCustomer($id: ID!) {
-      customer(id: $id) {
-        firstName
-        email
-        subscriptionContracts(first: 20) {
-          edges {
-            node {
-              status
-              lines(first: 10) {
-                edges { node { title } }
-              }
-            }
-          }
-        }
-        orders(first: 20, query: "financial_status:paid status:any") {
-          edges {
-            node {
-              lineItems(first: 10) {
-                edges { node { title } }
-              }
-            }
-          }
-        }
-      }
-    }
-  `, { id: customerGid });
+  // ── 2. Admin API — look up by email ───────────────────────────────────────
+  const admData = await adminQuery(CUSTOMER_QUERY, { query: `email:${email}` });
 
-  type CustData = {
-    customer?: {
-      firstName: string;
-      email: string;
-      subscriptionContracts: { edges: SubEdge[] };
-      orders: { edges: OrdEdge[] };
-    };
+  type CustNode = {
+    firstName: string;
+    email: string;
+    subscriptionContracts: { edges: SubEdge[] };
+    orders: { edges: OrdEdge[] };
   };
+  type CustData = { customers?: { edges: { node: CustNode }[] } };
 
-  const cust = (admData.data as CustData)?.customer;
+  const cust = (admData.data as CustData)?.customers?.edges[0]?.node;
   if (!cust) return res.status(200).json({ valid: false });
 
   return res.status(200).json({
