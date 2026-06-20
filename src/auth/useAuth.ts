@@ -35,6 +35,24 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
+    // Returning from Shopify logout (switch account flow) — auto-start fresh login
+    if (sessionStorage.getItem('at_post_logout')) {
+      sessionStorage.removeItem('at_post_logout');
+      (async () => {
+        const verifier  = await generateCodeVerifier();
+        const challenge = await generateCodeChallenge(verifier);
+        const state     = generateState();
+        const nonce     = generateState();
+        sessionStorage.setItem(VERIFIER_KEY, verifier);
+        sessionStorage.setItem(STATE_KEY, state);
+        sessionStorage.setItem(NONCE_KEY, nonce);
+        const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
+        const { redirectUrl } = await r.json() as { redirectUrl: string };
+        window.location.href = redirectUrl;
+      })();
+      return;
+    }
+
     const params   = new URLSearchParams(window.location.search);
     const code     = params.get('code');
     const retState = params.get('state');
@@ -119,19 +137,11 @@ export function useAuth() {
 
   const switchAccount = useCallback(async () => {
     clearSession();
-    const verifier   = await generateCodeVerifier();
-    const challenge  = await generateCodeChallenge(verifier);
-    const state      = generateState();
-    const nonce      = generateState();
-
-    sessionStorage.setItem(VERIFIER_KEY, verifier);
-    sessionStorage.setItem(STATE_KEY, state);
-    sessionStorage.setItem(NONCE_KEY, nonce);
-
-    const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
-    const { logoutUrl } = await r.json() as { redirectUrl: string; logoutUrl: string };
-    // Redirect through Shopify logout first — clears their cached session and
-    // forces the Shopify login screen before returning to the OAuth authorize URL.
+    sessionStorage.setItem('at_post_logout', '1');
+    // return_to is the app homepage — Shopify rejects full OAuth URLs as return_to.
+    // The at_post_logout flag triggers auto-login once the app reloads after logout.
+    const r = await fetch('/api/shopify-logout-url');
+    const { logoutUrl } = await r.json() as { logoutUrl: string };
     window.location.href = logoutUrl;
   }, []);
 

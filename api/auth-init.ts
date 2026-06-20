@@ -27,6 +27,5 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   if (nonce) params.set('nonce', nonce);
 
   const redirectUrl = `https://shopify.com/authentication/${STORE_ID}/oauth/authorize?${params}`;
-  const logoutUrl   = `https://shopify.com/authentication/${STORE_ID}/logout?return_to=${encodeURIComponent(redirectUrl)}`;
-  return res.status(200).json({ redirectUrl, logoutUrl });
+  return res.status(200).json({ redirectUrl });
 }
