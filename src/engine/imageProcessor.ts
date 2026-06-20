@@ -422,6 +422,22 @@ export function computeBackgroundMask(imageData: ImageData, tolerance: number): 
   const { data, width, height } = imageData;
   const n = width * height;
   const mask = new Uint8Array(n);
+
+  // If the image already has meaningful alpha transparency, use it directly.
+  // This avoids the flood-fill eating into dark shadows that happen to match
+  // the background color — common with detailed artwork PNGs.
+  let transparentPixels = 0;
+  for (let i = 0; i < n; i++) {
+    if (data[i * 4 + 3] < 200) transparentPixels++;
+  }
+  if (transparentPixels > n * 0.005) {
+    for (let i = 0; i < n; i++) {
+      mask[i] = data[i * 4 + 3] < 200 ? 255 : 0;
+    }
+    return mask;
+  }
+
+  // Fallback: flood-fill from image edges for fully opaque images (JPGs, etc.)
   const visited = new Uint8Array(n);
   const thresh = tolerance * 1.5;
 
