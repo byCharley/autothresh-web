@@ -106,6 +106,8 @@ export function CanvasView() {
       artPrevH: Math.round(artInDocH * pds),
       artPrevOffX: Math.round(artOffX * pds),
       artPrevOffY: Math.round(artOffY * pds),
+      artScaleW: artInDocW,  // full output-resolution artwork width (DPI-dependent)
+      artScaleH: artInDocH,
     };
   }
 
@@ -144,16 +146,20 @@ export function CanvasView() {
         // Always use the fixed base resolution — never zoom-scaled.
         const layout = computeDocLayout(MAX_PREVIEW_DIM);
         if (!layout) { setIsProcessing(false); return; }
-        const { docPrevW, docPrevH, artPrevW, artPrevH, artPrevOffX, artPrevOffY } = layout;
+        const { docPrevW, docPrevH, artPrevW, artPrevH, artPrevOffX, artPrevOffY, artScaleW } = layout;
+
+        // dpiScaleFactor < 1 at high DPI: makes pattern scale proportional to output resolution.
+        // scale=4 at 300 DPI → 4/artScaleW density (fine). scale=4 at 72 DPI → 4/artScaleW density (coarser).
+        const dpiScaleFactor = artPrevW / artScaleW;
 
         // Single high-quality scale from original → exact slot size.
         const artScaled    = scaleImageDataExact(originalImage, artPrevW, artPrevH);
         const localBgMask  = bgRemovalEnabled ? computeBackgroundMask(artScaled, bgTolerance) : null;
         const resolved     = resolvePatterns(layers, globalPattern);
-        const processed    = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
+        const processed    = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments, dpiScaleFactor);
 
         if (textureEnabled) {
-          const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+          const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale * dpiScaleFactor, textureWidth, textureSeed);
           for (const layer of processed) {
             for (let i = 0; i < layer.mask.length; i++) {
               if (texMask[i] === 0) layer.mask[i] = 0;

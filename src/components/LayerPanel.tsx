@@ -239,7 +239,7 @@ function ArtworkSection() {
 
 export function LayerPanel() {
   const {
-    layers, selectedLayerId, knockoutEnabled, selectLayer, updateLayer, setKnockoutEnabled,
+    layers, selectedLayerId, selectLayer, updateLayer,
     previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
   } = useStore();
 
@@ -276,13 +276,13 @@ export function LayerPanel() {
             <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
               Knockout
             </span>
-            <label className="switch" style={{ flexShrink: 0 }}>
-              <input type="checkbox" checked={knockoutEnabled} onChange={(e) => setKnockoutEnabled(e.target.checked)} />
-              <div className="switch-track" /><div className="switch-thumb" />
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e' }} />
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#22c55e', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Auto</span>
+            </div>
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-            {knockoutEnabled ? 'Ink overlap removed' : 'Layers stacking (no KO)'}
+            Ink overlap removed
           </div>
         </div>
 
