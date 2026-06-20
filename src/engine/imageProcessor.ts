@@ -537,7 +537,8 @@ export function processImage(
   layers: LayerConfig[],
   knockoutEnabled: boolean,
   bgMask?: Uint8Array | null,
-  imageAdj?: ImageAdjustments | null
+  imageAdj?: ImageAdjustments | null,
+  patternScaleFactor = 1,
 ): ProcessedLayer[] {
   const { data, width, height } = imageData;
   const n = width * height;
@@ -556,12 +557,18 @@ export function processImage(
 
   const PATTERN_STRENGTH_MAX = 55;
 
+  // Scale pattern parameters to keep visual dot/grain size consistent across
+  // different canvas resolutions (e.g. zoom changes artPrevW but dots should
+  // stay the same physical size).
+  const scaleLayer = (l: LayerConfig): LayerConfig =>
+    patternScaleFactor === 1 ? l : { ...l, patternScale: l.patternScale * patternScaleFactor };
+
   // ── 2. One shared pattern for all global-pattern layers (continuous film overlay)
   const firstGlobal = layers.find(
     l => l.useGlobalPattern && l.visible && l.pattern !== 'none'
   );
   const sharedGlobalPat: F32 | null = firstGlobal
-    ? buildPatternValues(width, height, firstGlobal, 0)
+    ? buildPatternValues(width, height, scaleLayer(firstGlobal), 0)
     : null;
 
   // ── 3. Per-layer processing ───────────────────────────────────────────────────
@@ -576,7 +583,7 @@ export function processImage(
 
     const patVals = layer.useGlobalPattern
       ? sharedGlobalPat
-      : buildPatternValues(width, height, layer, idx + 1);
+      : buildPatternValues(width, height, scaleLayer(layer), idx + 1);
     const strength = (layer.patternDensity / 100) * PATTERN_STRENGTH_MAX;
 
     const finalMask = new Uint8Array(n);

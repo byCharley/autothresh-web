@@ -148,10 +148,16 @@ export function CanvasView() {
         const artScaled    = scaleImageDataExact(originalImage, artPrevW, artPrevH);
         const localBgMask  = bgRemovalEnabled ? computeBackgroundMask(artScaled, bgTolerance) : null;
         const resolved     = resolvePatterns(layers, globalPattern);
-        const processed    = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
+
+        // Scale patterns proportionally to canvas size so visual dot/grain size
+        // is stable at any zoom level (same as Photoshop magnifier behaviour).
+        const baseLayout   = computeDocLayout(MAX_PREVIEW_DIM);
+        const patternScaleFactor = baseLayout ? artPrevW / baseLayout.artPrevW : 1;
+
+        const processed    = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments, patternScaleFactor);
 
         if (textureEnabled) {
-          const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+          const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale * patternScaleFactor, textureWidth, textureSeed);
           for (const layer of processed) {
             for (let i = 0; i < layer.mask.length; i++) {
               if (texMask[i] === 0) layer.mask[i] = 0;
