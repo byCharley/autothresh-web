@@ -102,22 +102,28 @@ function App() {
     const artOffX   = Math.round((docPxW - artScaleW) / 2);
     const artOffY   = Math.round((docPxH - artScaleH) / 2);
 
-    const artSrcCanvas  = canvasFromImageData(originalImage);
-    const docSrcCanvas  = document.createElement('canvas');
-    docSrcCanvas.width  = docPxW; docSrcCanvas.height = docPxH;
-    const docSrcCtx     = docSrcCanvas.getContext('2d')!;
-    docSrcCtx.fillStyle = canvasColor;
-    docSrcCtx.fillRect(0, 0, docPxW, docPxH);
-    docSrcCtx.drawImage(artSrcCanvas, artOffX, artOffY, artScaleW, artScaleH);
-    const docImageData  = docSrcCtx.getImageData(0, 0, docPxW, docPxH);
+    // ── Scale the artwork to export resolution (same pipeline as preview) ────
+    // The preview processes the artwork at MAX_PREVIEW_DIM. To produce identical
+    // patterns at full DPI, we process the artwork at export resolution and scale
+    // every pattern parameter by the same ratio (exportScaleFactor).
+    const MAX_PREVIEW_DIM = 1200; // must match CanvasView.tsx
+    const pds = Math.min(MAX_PREVIEW_DIM / Math.max(docPxW, docPxH), 1.0);
+    const artPrevW = Math.round(artScaleW * pds);
+    const exportScaleFactor = artScaleW / Math.max(1, artPrevW);
 
-    const fullBgMask  = bgRemovalEnabled ? computeBackgroundMask(docImageData, bgTolerance) : null;
-    const resolved    = resolvePatterns(layers, globalPattern);
-    const fullLayers  = processImage(docImageData, resolved, knockoutEnabled, fullBgMask, imageAdjustments);
+    const artSrcCanvas = canvasFromImageData(originalImage);
+    const artExpCanvas = document.createElement('canvas');
+    artExpCanvas.width = artScaleW; artExpCanvas.height = artScaleH;
+    artExpCanvas.getContext('2d')!.drawImage(artSrcCanvas, 0, 0, artScaleW, artScaleH);
+    const artImageData = artExpCanvas.getContext('2d')!.getImageData(0, 0, artScaleW, artScaleH);
+
+    const artBgMask = bgRemovalEnabled ? computeBackgroundMask(artImageData, bgTolerance) : null;
+    const resolved  = resolvePatterns(layers, globalPattern);
+    const artLayers = processImage(artImageData, resolved, knockoutEnabled, artBgMask, imageAdjustments, exportScaleFactor);
 
     if (textureEnabled) {
-      const texMask = generateTextureMask(docPxW, docPxH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
-      for (const layer of fullLayers) {
+      const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
+      for (const layer of artLayers) {
         for (let i = 0; i < layer.mask.length; i++) {
           if (texMask[i] === 0) layer.mask[i] = 0;
         }
@@ -127,13 +133,16 @@ function App() {
     const regPaddingPx = Math.round(regMarkPadding * documentDpi);
     const baseName    = fileName || imageFileName.replace(/\.[^.]+$/, '') || 'autothresh';
 
-    // ── Build per-layer canvas helper ────────────────────────────────────────
-    const buildLayerCanvas = (pl: typeof fullLayers[number], withMarks: boolean): HTMLCanvasElement => {
+    // ── Build per-layer canvas: place artwork mask at its offset in the doc ──
+    const buildLayerCanvas = (pl: typeof artLayers[number], withMarks: boolean): HTMLCanvasElement => {
       const [r, g, b] = pl.color;
       const data = new ImageData(docPxW, docPxH);
-      for (let i = 0; i < pl.mask.length; i++) {
-        if (pl.mask[i] === 255) {
-          const pi = i * 4;
+      for (let ay = 0; ay < artScaleH; ay++) {
+        for (let ax = 0; ax < artScaleW; ax++) {
+          if (pl.mask[ay * artScaleW + ax] !== 255) continue;
+          const dx = artOffX + ax, dy = artOffY + ay;
+          if (dx < 0 || dx >= docPxW || dy < 0 || dy >= docPxH) continue;
+          const pi = (dy * docPxW + dx) * 4;
           data.data[pi] = r; data.data[pi + 1] = g; data.data[pi + 2] = b; data.data[pi + 3] = 255;
         }
       }
@@ -145,12 +154,16 @@ function App() {
     };
 
     const buildCompositeCanvas = (withMarks: boolean): HTMLCanvasElement => {
-      const composite = renderComposite(fullLayers, docPxW, docPxH, true, '#ffffff', !knockoutEnabled);
-      const canvas = canvasFromImageData(composite);
+      // Composite artwork layers, then place in document canvas
+      const artComposite = renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
+      const docCanvas = document.createElement('canvas');
+      docCanvas.width = docPxW; docCanvas.height = docPxH;
+      const dCtx = docCanvas.getContext('2d')!;
+      dCtx.drawImage(canvasFromImageData(artComposite), artOffX, artOffY);
       if (withMarks && showRegistrationMarks) {
-        drawRegistrationMarks(canvas.getContext('2d')!, docPxW, docPxH, regPaddingPx, '#000000');
+        drawRegistrationMarks(dCtx, docPxW, docPxH, regPaddingPx, '#000000');
       }
-      return canvas;
+      return docCanvas;
     };
 
     const buildBgCanvas = (): HTMLCanvasElement => {
@@ -170,7 +183,7 @@ function App() {
       opacity: 1,
     };
 
-    const visibleLayers = fullLayers.filter((pl) => pl.visible);
+    const visibleLayers = artLayers.filter((pl) => pl.visible);
 
     // ── PNG ──────────────────────────────────────────────────────────────────
     if (format === 'png') {
