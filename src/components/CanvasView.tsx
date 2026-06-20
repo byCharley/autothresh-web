@@ -132,15 +132,17 @@ export function CanvasView() {
   }, [zoom]);
 
   // Main processing effect.
-  // Runs when the image, settings, or renderDim changes.
-  // Scales originalImage to EXACTLY the document-preview slot size (single pass,
-  // no second interpolation) then draws 1:1 onto the document canvas.
+  // Runs only when settings change — never on zoom. Zoom is a pure CSS transform.
+  // Always processes at MAX_PREVIEW_DIM so the rendered canvas is stable across
+  // all zoom levels (same as Photoshop's magnifier: zooming in shows bigger pixels,
+  // not a re-render at higher resolution).
   useEffect(() => {
     if (!originalImage) return;
     const tid = setTimeout(() => {
       setIsProcessing(true);
       requestAnimationFrame(() => {
-        const layout = computeDocLayout(); // uses current renderDim
+        // Always use the fixed base resolution — never zoom-scaled.
+        const layout = computeDocLayout(MAX_PREVIEW_DIM);
         if (!layout) { setIsProcessing(false); return; }
         const { docPrevW, docPrevH, artPrevW, artPrevH, artPrevOffX, artPrevOffY } = layout;
 
@@ -148,16 +150,10 @@ export function CanvasView() {
         const artScaled    = scaleImageDataExact(originalImage, artPrevW, artPrevH);
         const localBgMask  = bgRemovalEnabled ? computeBackgroundMask(artScaled, bgTolerance) : null;
         const resolved     = resolvePatterns(layers, globalPattern);
-
-        // Scale patterns proportionally to canvas size so visual dot/grain size
-        // is stable at any zoom level (same as Photoshop magnifier behaviour).
-        const baseLayout   = computeDocLayout(MAX_PREVIEW_DIM);
-        const patternScaleFactor = baseLayout ? artPrevW / baseLayout.artPrevW : 1;
-
-        const processed    = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments, patternScaleFactor);
+        const processed    = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
 
         if (textureEnabled) {
-          const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale * patternScaleFactor, textureWidth, textureSeed);
+          const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
           for (const layer of processed) {
             for (let i = 0; i < layer.mask.length; i++) {
               if (texMask[i] === 0) layer.mask[i] = 0;
@@ -185,10 +181,9 @@ export function CanvasView() {
           canvas.width  = docPrevW;
           canvas.height = docPrevH;
           canvas.getContext('2d')!.drawImage(docCanvas, 0, 0);
-          // Commit scale factor in the same state batch as the canvas draw so
-          // cssScale and canvas pixels are always consistent — no intermediate jump.
           setCanvasDims({ w: docPrevW, h: docPrevH });
-          setRenderedAtDim(renderDim);
+          // Always fixed — cssScale = zoom * MAX_PREVIEW_DIM / MAX_PREVIEW_DIM = zoom
+          setRenderedAtDim(MAX_PREVIEW_DIM);
           setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
         }
         setIsProcessing(false);
@@ -201,7 +196,7 @@ export function CanvasView() {
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     textureVersion,
     documentWidthIn, documentHeightIn, documentDpi,
-    renderDim, // re-render when zoom-triggered resolution changes
+    // renderDim intentionally excluded — zoom must never trigger a reprocess
   ]);
 
   // Fit-to-view on image load. Uses zoom-independent base dims.
