@@ -4,13 +4,64 @@ const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh.com/auth/callback';
 
-const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
+const PRODUCT_KEYWORD  = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
+const STORE_DOMAIN     = process.env.SHOPIFY_STORE_DOMAIN!;
+const ADM_TOKEN        = process.env.shopify_private_access_token!;
+const ADM_URL          = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json`;
 
-// Correct endpoint confirmed from working Lovable project:
-// - no /authentication/ in path
-// - version 2024-07
-// - Authorization is raw token, no "Bearer" prefix
+// Customer Account API — confirmed URL/auth from working Lovable project
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
+
+// Admin API fallback: the AutoThresh Web subscription was created in a way
+// that the Customer Account API can't see it, but the Admin API can.
+async function adminHasSubscription(email: string): Promise<boolean> {
+  try {
+    const r = await fetch(ADM_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': ADM_TOKEN,
+      },
+      body: JSON.stringify({
+        query: `query($q: String!) {
+          customers(first: 1, query: $q) {
+            edges { node {
+              subscriptionContracts(first: 20) {
+                edges { node {
+                  status
+                  lines(first: 10) { edges { node { title } } }
+                } }
+              }
+              orders(first: 20, query: "status:any") {
+                edges { node {
+                  lineItems(first: 10) { edges { node { title } } }
+                } }
+              }
+            } }
+          }
+        }`,
+        variables: { q: `email:${email}` },
+      }),
+    });
+    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; lines: { edges: { node: { title: string } }[] } } }[] }; orders: { edges: { node: { lineItems: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
+    console.log('Admin API result:', JSON.stringify(body).slice(0, 600));
+    const cust = body?.data?.customers?.edges?.[0]?.node;
+    if (!cust) return false;
+
+    const hasSub = cust.subscriptionContracts.edges.some(({ node: n }) =>
+      ['ACTIVE', 'PAUSED'].includes(n.status) &&
+      n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+    );
+    const hasOrder = cust.orders.edges.some(({ node: o }) =>
+      o.lineItems.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+    );
+    console.log('Admin API hasSub:', hasSub, 'hasOrder:', hasOrder);
+    return hasSub || hasOrder;
+  } catch (e) {
+    console.error('Admin API check error:', e);
+    return false;
+  }
+}
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const [, payload] = token.split('.');
@@ -172,11 +223,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     orders: ordEdges.map(({ node: o }) => o.lineItems.edges.map(e => e.node.title)),
   }));
 
+  // If Customer Account API found no active subscription, try Admin API
+  const finalHasSub = hasSub || hasOrder || (
+    (!hasSub && !hasOrder) ? await adminHasSubscription(cust.emailAddress?.emailAddress ?? email) : false
+  );
+
   return res.status(200).json({
     token:           tokens.access_token,
     expiresAt,
     email:           cust.emailAddress?.emailAddress ?? email,
     firstName:       cust.firstName ?? '',
-    hasSubscription: hasSub || hasOrder,
+    hasSubscription: finalHasSub,
   });
 }

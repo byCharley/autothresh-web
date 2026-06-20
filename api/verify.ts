@@ -1,9 +1,52 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const STORE_ID        = process.env.SHOPIFY_STORE_ID!;
+const STORE_DOMAIN    = process.env.SHOPIFY_STORE_DOMAIN!;
+const ADM_TOKEN       = process.env.shopify_private_access_token!;
+const ADM_URL         = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json`;
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
 
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
+
+async function adminHasSubscription(email: string): Promise<boolean> {
+  try {
+    const r = await fetch(ADM_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': ADM_TOKEN },
+      body: JSON.stringify({
+        query: `query($q: String!) {
+          customers(first: 1, query: $q) {
+            edges { node {
+              subscriptionContracts(first: 20) {
+                edges { node {
+                  status
+                  lines(first: 10) { edges { node { title } } }
+                } }
+              }
+              orders(first: 20, query: "status:any") {
+                edges { node {
+                  lineItems(first: 10) { edges { node { title } } }
+                } }
+              }
+            } }
+          }
+        }`,
+        variables: { q: `email:${email}` },
+      }),
+    });
+    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; lines: { edges: { node: { title: string } }[] } } }[] }; orders: { edges: { node: { lineItems: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
+    const cust = body?.data?.customers?.edges?.[0]?.node;
+    if (!cust) return false;
+    const hasSub = cust.subscriptionContracts.edges.some(({ node: n }) =>
+      ['ACTIVE', 'PAUSED'].includes(n.status) &&
+      n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+    );
+    const hasOrder = cust.orders.edges.some(({ node: o }) =>
+      o.lineItems.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+    );
+    return hasSub || hasOrder;
+  } catch { return false; }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -84,10 +127,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     o.lineItems.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
+  const email = cust.emailAddress?.emailAddress ?? '';
+  const finalHasSub = hasSub || hasOrder ||
+    ((!hasSub && !hasOrder) ? await adminHasSubscription(email) : false);
+
   return res.status(200).json({
     valid:           true,
-    hasSubscription: hasSub || hasOrder,
-    email:           cust.emailAddress?.emailAddress ?? '',
+    hasSubscription: finalHasSub,
+    email,
     firstName:       cust.firstName ?? '',
   });
 }
