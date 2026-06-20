@@ -113,8 +113,26 @@ export function useAuth() {
     sessionStorage.setItem(NONCE_KEY, nonce);
 
     const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
-    const { redirectUrl } = await r.json() as { redirectUrl: string };
+    const { redirectUrl } = await r.json() as { redirectUrl: string; logoutUrl: string };
     window.location.href = redirectUrl;
+  }, []);
+
+  const switchAccount = useCallback(async () => {
+    clearSession();
+    const verifier   = await generateCodeVerifier();
+    const challenge  = await generateCodeChallenge(verifier);
+    const state      = generateState();
+    const nonce      = generateState();
+
+    sessionStorage.setItem(VERIFIER_KEY, verifier);
+    sessionStorage.setItem(STATE_KEY, state);
+    sessionStorage.setItem(NONCE_KEY, nonce);
+
+    const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
+    const { logoutUrl } = await r.json() as { redirectUrl: string; logoutUrl: string };
+    // Redirect through Shopify logout first — clears their cached session and
+    // forces the Shopify login screen before returning to the OAuth authorize URL.
+    window.location.href = logoutUrl;
   }, []);
 
   const logout = useCallback(() => {
@@ -123,5 +141,5 @@ export function useAuth() {
     setStatus('unauthenticated');
   }, []);
 
-  return { status, session, initiateLogin, logout };
+  return { status, session, initiateLogin, switchAccount, logout };
 }

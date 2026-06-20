@@ -52,7 +52,7 @@ function isMobileDevice(): boolean {
 }
 
 function App() {
-  const { status, session, initiateLogin, logout } = useAuth();
+  const { status, session, initiateLogin, switchAccount, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const {
@@ -80,11 +80,11 @@ function App() {
   }
 
   if (status === 'unauthenticated') {
-    return <LoginPage onLogin={initiateLogin} />;
+    return <LoginPage onLogin={initiateLogin} onSwitchAccount={switchAccount} />;
   }
 
   if (status === 'no-subscription') {
-    return <SubscribePage firstName={session?.firstName} onLogout={logout} />;
+    return <SubscribePage firstName={session?.firstName} onLogout={logout} onSwitchAccount={switchAccount} />;
   }
 
   const handleExport = async ({ mode, format, fileName }: ExportConfig) => {

@@ -3,14 +3,20 @@ import { AppIcon } from './AppIcon';
 
 interface Props {
   onLogin: () => Promise<void>;
+  onSwitchAccount: () => Promise<void>;
 }
 
-export function LoginPage({ onLogin }: Props) {
+export function LoginPage({ onLogin, onSwitchAccount }: Props) {
   const [loading, setLoading] = useState(false);
 
   const handleSignIn = async () => {
     setLoading(true);
-    await onLogin(); // redirects away, so loading stays true until redirect
+    await onLogin();
+  };
+
+  const handleSwitch = async () => {
+    setLoading(true);
+    await onSwitchAccount();
   };
 
   return (
@@ -77,7 +83,21 @@ export function LoginPage({ onLogin }: Props) {
           )}
         </button>
 
-        <div style={{ marginTop: 20, fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
+        <button
+          onClick={handleSwitch}
+          disabled={loading}
+          style={{
+            marginTop: 14, background: 'none', border: 'none', cursor: loading ? 'default' : 'pointer',
+            fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
+            textDecoration: 'underline', opacity: loading ? 0.4 : 0.7, padding: 0,
+          }}
+          onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+          onMouseLeave={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.opacity = '0.7'; }}
+        >
+          Switch Account
+        </button>
+
+        <div style={{ marginTop: 16, fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
           Access requires an active AutoThresh subscription.
         </div>
       </div>
