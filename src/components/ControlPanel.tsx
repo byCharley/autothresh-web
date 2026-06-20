@@ -89,6 +89,8 @@ const PATTERN_LABELS: Record<PatternType, string> = {
   'noise':               'Noise · Standard',
   'noise-coarse':        'Noise · Coarse',
   'film-grain':          'Film Grain',
+  'noise-texture':       'Noise · Texture',
+  'vintage-halftone':    'Vintage Halftone',
   'grain':               'Noise · Standard',
   'grain-soft':          'Noise · Standard',
   'grain-coarse':        'Noise · Coarse',
@@ -116,6 +118,8 @@ function PatternSelect({ value, onChange }: { value: PatternType; onChange: (v: 
         <option value="noise">Noise · Standard</option>
         <option value="noise-coarse">Noise · Coarse</option>
         <option value="film-grain">Film Grain</option>
+        <option value="noise-texture">Noise · Texture</option>
+        <option value="vintage-halftone">Vintage Halftone</option>
       </optgroup>
       <optgroup label="─ Halftone Dots ─">
         <option value="halftone-round">Halftone · Round</option>
@@ -155,7 +159,7 @@ function PatternControls({
   onAngle: (v: number) => void;
 }) {
   const isHalftone = pattern.startsWith('halftone-');
-  const isGrain = pattern.startsWith('grain') || pattern.startsWith('noise') || pattern === 'film-grain';
+  const isGrain = pattern.startsWith('grain') || pattern.startsWith('noise') || pattern === 'film-grain' || pattern === 'vintage-halftone';
   const hasPattern = pattern !== 'none';
   const scaleMin  = isGrain ? 0.5 : 1;
   const scaleMax  = isGrain ? 6  : 40;

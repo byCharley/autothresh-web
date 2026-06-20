@@ -121,21 +121,26 @@ export function CanvasView() {
     });
   }, []);
 
-  // Load film grain PNG and register it as a pattern texture.
+  // Load pattern texture PNGs and register them for image-based pattern types.
   useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = img.naturalWidth; c.height = img.naturalHeight;
-      const ctx = c.getContext('2d')!;
-      ctx.drawImage(img, 0, 0);
-      const data = ctx.getImageData(0, 0, c.width, c.height).data;
-      const pixels = new Float32Array(c.width * c.height);
-      for (let i = 0; i < pixels.length; i++) pixels[i] = data[i * 4] / 255;
-      registerPatternTexture('film-grain', c.width, c.height, pixels);
-      setTextureVersion((v) => v + 1);
+    const load = (src: string, key: string) => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        const ctx = c.getContext('2d')!;
+        ctx.drawImage(img, 0, 0);
+        const data = ctx.getImageData(0, 0, c.width, c.height).data;
+        const pixels = new Float32Array(c.width * c.height);
+        for (let i = 0; i < pixels.length; i++) pixels[i] = data[i * 4] / 255;
+        registerPatternTexture(key, c.width, c.height, pixels);
+        setTextureVersion((v) => v + 1);
+      };
+      img.src = src;
     };
-    img.src = '/textures/film-grain.png';
+    load('/textures/Grain_Texture.png',    'film-grain');
+    load('/textures/Noise_Texture.png',    'noise-texture');
+    load('/textures/Vintage Halftones.jpg','vintage-halftone');
   }, []);
 
   // Debounce zoom → renderDim.
