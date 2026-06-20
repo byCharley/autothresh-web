@@ -62,7 +62,7 @@ function App() {
     bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor,
     documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
-    separationMode, cmykScale,
+    separationMode, cmykLpi,
   } = useStore();
 
   useEffect(() => {
@@ -122,7 +122,8 @@ function App() {
 
     let artLayers: ProcessedLayer[];
     if (separationMode === 'cmyk') {
-      artLayers = cmykSeparate(artImageData, cmykScale, artBgMask, exportScaleFactor);
+      // Cell size derived from LPI: output DPI / LPI = pixels per halftone dot
+      artLayers = cmykSeparate(artImageData, documentDpi / cmykLpi, artBgMask);
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
       artLayers = processImage(artImageData, resolved, knockoutEnabled, artBgMask, imageAdjustments, exportScaleFactor);

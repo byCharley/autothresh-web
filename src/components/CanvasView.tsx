@@ -50,7 +50,7 @@ export function CanvasView() {
     canvasColor, showFabricBg,
     imageAdjustments,
     documentDpi, documentWidthIn, documentHeightIn,
-    separationMode, cmykScale, cmykVisibility,
+    separationMode, cmykLpi, cmykVisibility,
     isProcessing, setOriginalImage, setProcessedLayers, setIsProcessing, setCanvasColor,
   } = useStore();
 
@@ -176,7 +176,9 @@ export function CanvasView() {
 
         let processed: ReturnType<typeof processImage>;
         if (separationMode === 'cmyk') {
-          processed = cmykSeparate(artScaled, cmykScale, localBgMask);
+          // Cell size in preview pixels, minimum 4px so dots are always visible
+          const cmykPreviewCellSize = Math.max(4, artPrevW / documentWidthIn / cmykLpi);
+          processed = cmykSeparate(artScaled, cmykPreviewCellSize, localBgMask);
           // Apply visibility from store
           for (const layer of processed) layer.visible = cmykVisibility[layer.id] ?? true;
         } else {
@@ -230,7 +232,7 @@ export function CanvasView() {
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     textureVersion,
     documentWidthIn, documentHeightIn, documentDpi,
-    separationMode, cmykScale, cmykVisibility,
+    separationMode, cmykLpi, cmykVisibility,
     // renderDim intentionally excluded — zoom must never trigger a reprocess
   ]);
 

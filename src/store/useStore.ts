@@ -85,7 +85,7 @@ interface AppState {
   activePaletteIdx: number;
 
   separationMode: SeparationMode;
-  cmykScale: number;
+  cmykLpi: number;
   cmykVisibility: Record<string, boolean>;
 
   processedLayers: ProcessedLayer[];
@@ -120,7 +120,7 @@ interface AppState {
   setPalettePool: (palettes: string[][]) => void;
   applyPalette: (idx: number) => void;
   setSeparationMode: (v: SeparationMode) => void;
-  setCmykScale: (v: number) => void;
+  setCmykLpi: (v: number) => void;
   setCmykLayerVisible: (id: string, v: boolean) => void;
 
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
@@ -157,7 +157,7 @@ export const useStore = create<AppState>((set) => ({
   palettePool: [],
   activePaletteIdx: 0,
   separationMode: 'threshold',
-  cmykScale: 8,
+  cmykLpi: 45,
   cmykVisibility: { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true },
 
   processedLayers: [],
@@ -205,7 +205,7 @@ export const useStore = create<AppState>((set) => ({
     return { layers: updatedLayers, activePaletteIdx: idx };
   }),
   setSeparationMode: (separationMode) => set({ separationMode }),
-  setCmykScale: (cmykScale) => set({ cmykScale }),
+  setCmykLpi: (cmykLpi) => set({ cmykLpi }),
   setCmykLayerVisible: (id, v) => set((s) => ({ cmykVisibility: { ...s.cmykVisibility, [id]: v } })),
 
   setProcessedLayers: (processedLayers) => set({ processedLayers }),

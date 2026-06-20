@@ -375,16 +375,16 @@ function DocumentSection() {
 // ─── CMYK Screen Section ──────────────────────────────────────────────────────
 
 function CmykScreenSection() {
-  const { separationMode, cmykScale, setCmykScale, documentDpi } = useStore();
+  const { separationMode, cmykLpi, setCmykLpi, documentDpi } = useStore();
   if (separationMode !== 'cmyk') return null;
-  const lpi = Math.round(documentDpi / Math.max(1, cmykScale));
+  const dotPx = (documentDpi / cmykLpi).toFixed(1);
   return (
     <Section title="CMYK Screen">
-      <Slider label="Cell Size" value={cmykScale} min={4} max={24} step={1}
-        onChange={setCmykScale} />
+      <Slider label="Screen Ruling" value={cmykLpi} min={25} max={85} step={5}
+        onChange={setCmykLpi} unit=" LPI" />
       <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8, marginTop: 4 }}>
-        <div>~{lpi} LPI at {documentDpi} DPI</div>
-        <div>Angles: K 45° · C 15° · M 75° · Y 90°</div>
+        <div>~{dotPx}px per dot @ {documentDpi} DPI</div>
+        <div>K 45° · C 15° · M 75° · Y 90°</div>
       </div>
     </Section>
   );
