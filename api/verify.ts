@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const STORE_ID        = process.env.SHOPIFY_STORE_ID!;
+const STORE_DOMAIN    = process.env.SHOPIFY_STORE_DOMAIN!; // e.g. charleypangus.myshopify.com
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
 
-const CUST_API_URL = `https://shopify.com/authentication/${STORE_ID}/account/customer/api/2024-10/graphql`;
+const CUST_API_URL = `https://${STORE_DOMAIN}/account/customer/api/2024-10/graphql`;
 
 async function customerApiQuery(accessToken: string, query: string): Promise<{ data?: Record<string, unknown>; errors?: unknown[] }> {
   try {

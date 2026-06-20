@@ -6,7 +6,8 @@ const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh
 
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
 
-const CUST_API_URL = `https://shopify.com/authentication/${STORE_ID}/account/customer/api/2024-10/graphql`;
+const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN!; // e.g. charleypangus.myshopify.com
+const CUST_API_URL = `https://${STORE_DOMAIN}/account/customer/api/2024-10/graphql`;
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const [, payload] = token.split('.');
