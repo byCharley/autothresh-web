@@ -2,10 +2,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
-const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN!;
 const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh.com/auth/callback';
 
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
+
+// Correct Customer Account API endpoint (uses shopify.com auth domain, not myshopify domain)
+const CUST_API_URL = `https://shopify.com/authentication/${STORE_ID}/account/customer/api/2024-10/graphql`;
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const [, payload] = token.split('.');
@@ -14,9 +16,8 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 async function customerApiQuery(accessToken: string, query: string): Promise<{ data?: Record<string, unknown>; errors?: unknown[] }> {
-  const url = `https://${STORE_DOMAIN}/account/customer/api/2024-10/graphql`;
   try {
-    const r = await fetch(url, {
+    const r = await fetch(CUST_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -25,7 +26,8 @@ async function customerApiQuery(accessToken: string, query: string): Promise<{ d
       body: JSON.stringify({ query }),
     });
     const text = await r.text();
-    console.log('Customer API status:', r.status, 'body:', text.slice(0, 500));
+    console.log('Customer API status:', r.status);
+    console.log('Customer API body:', text.slice(0, 800));
     return JSON.parse(text);
   } catch (e) {
     console.error('customerApiQuery error:', e);
@@ -77,66 +79,79 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
   // ── 3. Query Customer Account API with the customer's own token ───────────
-  const custData = await customerApiQuery(tokens.access_token, `
-    query {
-      customer {
-        firstName
-        emailAddress { emailAddress }
-        orders(first: 20) {
-          nodes {
-            lineItems(first: 10) {
-              nodes { title }
-            }
-          }
-        }
-        subscriptionContracts(first: 20) {
-          nodes {
-            status
-            lines(first: 10) {
-              nodes { title }
+  // Query subscriptions and orders separately so a schema error on one
+  // doesn't null out the entire response.
+  const [subData, ordData] = await Promise.all([
+    customerApiQuery(tokens.access_token, `
+      query {
+        customer {
+          firstName
+          emailAddress { emailAddress }
+          subscriptionContracts(first: 20) {
+            nodes {
+              id
+              status
+              lines(first: 10) {
+                nodes { title }
+              }
             }
           }
         }
       }
-    }
-  `);
+    `),
+    customerApiQuery(tokens.access_token, `
+      query {
+        customer {
+          orders(first: 20) {
+            nodes {
+              lineItems(first: 10) {
+                nodes { title }
+              }
+            }
+          }
+        }
+      }
+    `),
+  ]);
 
-  console.log('Customer API response:', JSON.stringify(custData));
-
-  type CustNode = {
+  type SubCustomer = {
     firstName?: string;
     emailAddress?: { emailAddress: string };
+    subscriptionContracts?: { nodes: { id: string; status: string; lines?: { nodes: { title: string }[] } }[] };
+  };
+  type OrdCustomer = {
     orders?: { nodes: { lineItems?: { nodes: { title: string }[] } }[] };
-    subscriptionContracts?: { nodes: { status: string; lines?: { nodes: { title: string }[] } }[] };
   };
 
-  const cust = (custData.data as { customer?: CustNode })?.customer;
+  const subCust  = (subData.data as { customer?: SubCustomer })?.customer;
+  const ordCust  = (ordData.data as { customer?: OrdCustomer })?.customer;
 
-  if (!cust) {
-    console.error('No customer data from Customer Account API. Errors:', JSON.stringify(custData.errors));
+  console.log('Sub customer:', JSON.stringify(subCust));
+  console.log('Ord customer:', JSON.stringify(ordCust));
+
+  if (!subCust && !ordCust) {
+    console.error('No customer data from either query. Sub errors:', JSON.stringify(subData.errors), 'Ord errors:', JSON.stringify(ordData.errors));
     return res.status(200).json({
       token: tokens.access_token, expiresAt,
       email, firstName: '', hasSubscription: false,
     });
   }
 
-  const subNodes = cust.subscriptionContracts?.nodes ?? [];
-  const ordNodes = cust.orders?.nodes ?? [];
+  const subNodes = subCust?.subscriptionContracts?.nodes ?? [];
+  const ordNodes = ordCust?.orders?.nodes ?? [];
 
   console.log('Subs:', JSON.stringify(subNodes.map(n => ({
-    status: n.status, lines: n.lines?.nodes?.map(l => l.title) ?? []
+    id: n.id, status: n.status, lines: n.lines?.nodes?.map(l => l.title) ?? []
   }))));
   console.log('Orders:', JSON.stringify(ordNodes.map(o =>
     o.lineItems?.nodes?.map(l => l.title) ?? []
   )));
 
-  // Active or paused subscription with AutoThresh in the title
   const hasSub = subNodes.some(n =>
     ['ACTIVE', 'PAUSED'].includes(n.status) &&
     (n.lines?.nodes ?? []).some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
-  // Fallback: any order containing the product
   const hasOrder = ordNodes.some(o =>
     (o.lineItems?.nodes ?? []).some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
@@ -144,8 +159,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({
     token:           tokens.access_token,
     expiresAt,
-    email:           cust.emailAddress?.emailAddress ?? email,
-    firstName:       cust.firstName,
+    email:           subCust?.emailAddress?.emailAddress ?? email,
+    firstName:       subCust?.firstName ?? '',
     hasSubscription: hasSub || hasOrder,
   });
 }
