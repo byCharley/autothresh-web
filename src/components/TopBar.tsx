@@ -78,7 +78,7 @@ export function TopBar({ onExport, onLogout, userEmail, firstName, subscriptionE
       {displayName && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 7,
-          padding: '4px 10px', marginRight: 6,
+          height: 26, padding: '0 10px', marginRight: 6,
           border: '1px solid var(--border)',
           background: 'var(--surface-2)',
         }}>
@@ -128,7 +128,7 @@ export function TopBar({ onExport, onLogout, userEmail, firstName, subscriptionE
         className="btn btn-primary"
         onClick={onExport}
         disabled={!originalImage}
-        style={{ opacity: originalImage ? 1 : 0.4 }}
+        style={{ opacity: originalImage ? 1 : 0.4, height: 26, color: '#1a1a1a' }}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>

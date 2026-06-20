@@ -31,6 +31,10 @@
   --check-b:    #202020;
 }
 
+[data-theme='light'] .canvas-view {
+  background-image: radial-gradient(circle, rgba(0,0,0,0.08) 1px, transparent 1px);
+}
+
 [data-theme='light'] {
   --bg:         #F2F0ED;
   --surface:    #FFFFFF;
@@ -409,6 +413,8 @@ html, body, #root {
   position: relative;
   overflow: hidden;
   background: var(--bg);
+  background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
   display: flex;
   align-items: center;
   justify-content: center;
