@@ -40,22 +40,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   );
 
+  const tokenBody = await tokenRes.text();
+
   if (!tokenRes.ok) {
-    const err = await tokenRes.text();
-    console.error('Token exchange failed:', err);
+    console.error('Token exchange HTTP error:', tokenRes.status, tokenBody.slice(0, 300));
     return res.status(401).json({ error: 'Token exchange failed' });
   }
 
-  const tokens = await tokenRes.json() as {
-    access_token: string;
-    id_token:     string;
-    expires_in:   number;
-  };
+  let tokens: { access_token?: string; id_token?: string; expires_in?: number; error?: string; error_description?: string };
+  try {
+    tokens = JSON.parse(tokenBody);
+  } catch {
+    console.error('Token exchange: non-JSON response:', tokenBody.slice(0, 300));
+    return res.status(401).json({ error: 'Token exchange bad response' });
+  }
+
+  console.log('Token exchange result:', JSON.stringify({
+    hasAccessToken: !!tokens.access_token,
+    hasIdToken:     !!tokens.id_token,
+    expiresIn:      tokens.expires_in,
+    error:          tokens.error,
+    errorDesc:      tokens.error_description,
+    accessTokenLen: tokens.access_token?.length,
+  }));
+
+  if (tokens.error || !tokens.access_token || !tokens.id_token) {
+    console.error('Token exchange returned error or missing fields:', tokens.error, tokens.error_description);
+    return res.status(401).json({ error: tokens.error ?? 'Token exchange missing fields' });
+  }
 
   // ── 2. Get email from id_token ────────────────────────────────────────────
   const claims    = decodeJwtPayload(tokens.id_token);
   const email     = claims.email as string;
-  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
 
   // ── 3. Single query — same structure that returned customer at 17:43 ───────
   let rawBody = '';
