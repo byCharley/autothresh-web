@@ -1,27 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const STORE_DOMAIN    = process.env.SHOPIFY_STORE_DOMAIN!; // e.g. charleypangus.myshopify.com
+const STORE_ID        = process.env.SHOPIFY_STORE_ID!;
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
 
-const CUST_API_URL = `https://${STORE_DOMAIN}/account/customer/api/2024-10/graphql`;
-
-async function customerApiQuery(accessToken: string, query: string): Promise<{ data?: Record<string, unknown>; errors?: unknown[] }> {
-  try {
-    const r = await fetch(CUST_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ query }),
-    });
-    const text = await r.text();
-    return JSON.parse(text);
-  } catch (e) {
-    console.error('customerApiQuery error:', e);
-    return {};
-  }
-}
+const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -33,59 +15,79 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { token } = req.body as { token?: string };
   if (!token) return res.status(400).json({ valid: false, error: 'Token required' });
 
-  // Query Customer Account API using the stored OAuth access token
-  const custData = await customerApiQuery(token, `
-    query {
-      customer {
-        firstName
-        emailAddress { emailAddress }
-        orders(first: 20) {
-          nodes {
-            lineItems(first: 10) {
-              nodes { title }
+  let custData: { data?: Record<string, unknown>; errors?: unknown[] } = {};
+  try {
+    const r = await fetch(CUST_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token,
+      },
+      body: JSON.stringify({
+        query: `
+          query {
+            customer {
+              firstName
+              emailAddress { emailAddress }
+              subscriptionContracts(first: 20) {
+                edges {
+                  node {
+                    status
+                    lines(first: 10) {
+                      edges { node { title } }
+                    }
+                  }
+                }
+              }
+              orders(first: 20) {
+                edges {
+                  node {
+                    lineItems(first: 10) {
+                      edges { node { title } }
+                    }
+                  }
+                }
+              }
             }
           }
-        }
-        subscriptionContracts(first: 20) {
-          nodes {
-            status
-            lines(first: 10) {
-              nodes { title }
-            }
-          }
-        }
-      }
-    }
-  `);
-
-  type CustNode = {
-    firstName: string;
-    emailAddress?: { emailAddress: string };
-    orders: { nodes: { lineItems: { nodes: { title: string }[] } }[] };
-    subscriptionContracts: { nodes: { status: string; lines: { nodes: { title: string }[] } }[] };
-  };
-
-  const cust = (custData.data as { customer?: CustNode })?.customer;
-
-  if (!cust) {
-    // Token may be expired or invalid
-    console.error('Verify: no customer data. Errors:', JSON.stringify(custData.errors));
+        `,
+      }),
+    });
+    custData = JSON.parse(await r.text());
+  } catch (e) {
+    console.error('verify customerApiQuery error:', e);
     return res.status(200).json({ valid: false });
   }
 
-  const hasSub = cust.subscriptionContracts.nodes.some(n =>
+  type LineEdge = { node: { title: string } };
+  type SubNode  = { status: string; lines: { edges: LineEdge[] } };
+  type OrdNode  = { lineItems: { edges: LineEdge[] } };
+  type CustNode = {
+    firstName?: string;
+    emailAddress?: { emailAddress: string };
+    subscriptionContracts?: { edges: { node: SubNode }[] };
+    orders?: { edges: { node: OrdNode }[] };
+  };
+
+  const cust = (custData.data as { customer?: CustNode })?.customer;
+  if (!cust) return res.status(200).json({ valid: false });
+
+  const subEdges = cust.subscriptionContracts?.edges ?? [];
+  const ordEdges = cust.orders?.edges ?? [];
+
+  const hasSub = subEdges.some(({ node: n }) =>
     ['ACTIVE', 'PAUSED'].includes(n.status) &&
-    n.lines.nodes.some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+    n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
-  const hasOrder = cust.orders.nodes.some(o =>
-    o.lineItems.nodes.some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+  const hasOrder = ordEdges.some(({ node: o }) =>
+    o.lineItems.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
   return res.status(200).json({
     valid:           true,
     hasSubscription: hasSub || hasOrder,
     email:           cust.emailAddress?.emailAddress ?? '',
-    firstName:       cust.firstName,
+    firstName:       cust.firstName ?? '',
   });
 }

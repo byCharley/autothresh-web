@@ -6,8 +6,11 @@ const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh
 
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
 
-const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN!; // e.g. charleypangus.myshopify.com
-const CUST_API_URL = `https://${STORE_DOMAIN}/account/customer/api/2024-10/graphql`;
+// Correct endpoint confirmed from working Lovable project:
+// - no /authentication/ in path
+// - version 2024-07
+// - Authorization is raw token, no "Bearer" prefix
+const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const [, payload] = token.split('.');
@@ -26,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!code || !codeVerifier) return res.status(400).json({ error: 'code and codeVerifier required' });
 
   // ── 1. Exchange code for tokens ────────────────────────────────────────────
-  const tokenRes = await fetch(
+  const tokenRes  = await fetch(
     `https://shopify.com/authentication/${STORE_ID}/oauth/token`,
     {
       method: 'POST',
@@ -61,12 +64,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     hasIdToken:     !!tokens.id_token,
     expiresIn:      tokens.expires_in,
     error:          tokens.error,
-    errorDesc:      tokens.error_description,
     accessTokenLen: tokens.access_token?.length,
   }));
 
   if (tokens.error || !tokens.access_token || !tokens.id_token) {
-    console.error('Token exchange returned error or missing fields:', tokens.error, tokens.error_description);
+    console.error('Token exchange error:', tokens.error, tokens.error_description);
     return res.status(401).json({ error: tokens.error ?? 'Token exchange missing fields' });
   }
 
@@ -75,7 +77,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const email     = claims.email as string;
   const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
 
-  // ── 3. Single query — same structure that returned customer at 17:43 ───────
+  // ── 3. Query Customer Account API ─────────────────────────────────────────
+  // URL: shopify.com/{store_id}/account/customer/api/2024-07/graphql
+  // Auth: raw access token, no "Bearer" prefix
   let rawBody = '';
   let custData: { data?: Record<string, unknown>; errors?: unknown[] } = {};
   try {
@@ -83,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${tokens.access_token}`,
+        'Authorization': tokens.access_token,
       },
       body: JSON.stringify({
         query: `
@@ -91,18 +95,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             customer {
               firstName
               emailAddress { emailAddress }
-              orders(first: 20) {
-                nodes {
-                  lineItems(first: 10) {
-                    nodes { title }
+              subscriptionContracts(first: 20) {
+                edges {
+                  node {
+                    status
+                    lines(first: 10) {
+                      edges {
+                        node { title }
+                      }
+                    }
                   }
                 }
               }
-              subscriptionContracts(first: 20) {
-                nodes {
-                  status
-                  lines(first: 10) {
-                    nodes { title }
+              orders(first: 20) {
+                edges {
+                  node {
+                    lineItems(first: 10) {
+                      edges {
+                        node { title }
+                      }
+                    }
                   }
                 }
               }
@@ -114,20 +126,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     rawBody = await r.text();
     custData = JSON.parse(rawBody);
   } catch (e) {
-    console.error('Customer API error:', e, 'raw:', rawBody.slice(0, 300));
+    console.error('Customer API error:', String(e), 'raw:', rawBody.slice(0, 200));
   }
 
-  type CustNode = {
+  type LineEdge  = { node: { title: string } };
+  type SubNode   = { status: string; lines: { edges: LineEdge[] } };
+  type OrdNode   = { lineItems: { edges: LineEdge[] } };
+  type CustNode  = {
     firstName?: string;
     emailAddress?: { emailAddress: string };
-    orders?: { nodes: { lineItems?: { nodes: { title: string }[] } }[] };
-    subscriptionContracts?: { nodes: { status: string; lines?: { nodes: { title: string }[] } }[] };
+    subscriptionContracts?: { edges: { node: SubNode }[] };
+    orders?: { edges: { node: OrdNode }[] };
   };
 
   const cust = (custData.data as { customer?: CustNode })?.customer;
 
-  // Log the full raw response as the final log line so it's always visible
-  console.log('CUST_API_RESULT status:', JSON.stringify({ hasCustomer: !!cust, errors: custData.errors, rawSlice: rawBody.slice(0, 400) }));
+  console.log('CUST_API_RESULT:', JSON.stringify({
+    hasCustomer: !!cust,
+    errors:      custData.errors,
+    rawSlice:    rawBody.slice(0, 400),
+  }));
 
   if (!cust) {
     return res.status(200).json({
@@ -136,22 +154,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  const subNodes = cust.subscriptionContracts?.nodes ?? [];
-  const ordNodes = cust.orders?.nodes ?? [];
+  const subEdges = cust.subscriptionContracts?.edges ?? [];
+  const ordEdges = cust.orders?.edges ?? [];
 
-  const hasSub = subNodes.some(n =>
+  const hasSub = subEdges.some(({ node: n }) =>
     ['ACTIVE', 'PAUSED'].includes(n.status) &&
-    (n.lines?.nodes ?? []).some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+    n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
-  const hasOrder = ordNodes.some(o =>
-    (o.lineItems?.nodes ?? []).some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
+  const hasOrder = ordEdges.some(({ node: o }) =>
+    o.lineItems.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
   console.log('Access result:', JSON.stringify({
     hasSub, hasOrder,
-    subs: subNodes.map(n => ({ status: n.status, lines: n.lines?.nodes?.map(l => l.title) })),
-    orders: ordNodes.map(o => o.lineItems?.nodes?.map(l => l.title)),
+    subs:   subEdges.map(({ node: n }) => ({ status: n.status, lines: n.lines.edges.map(e => e.node.title) })),
+    orders: ordEdges.map(({ node: o }) => o.lineItems.edges.map(e => e.node.title)),
   }));
 
   return res.status(200).json({
