@@ -88,9 +88,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── 2. Decode id_token for customer GID + email ───────────────────────────
   const claims     = decodeJwtPayload(tokens.id_token);
-  const customerGid = claims.sub as string;
-  const email       = claims.email as string;
-  const expiresAt   = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+  console.log('JWT claims:', JSON.stringify({ sub: claims.sub, email: claims.email, dest: claims.dest }));
+
+  let customerGid = claims.sub as string;
+  // If sub is a plain numeric ID, wrap it in the full GID format
+  if (customerGid && /^\d+$/.test(customerGid)) {
+    customerGid = `gid://shopify/Customer/${customerGid}`;
+  }
+  // If sub is a URL like https://shopify.com/.../customers/123, extract the ID
+  if (customerGid && customerGid.startsWith('http')) {
+    const match = customerGid.match(/\/customers?\/(\d+)/);
+    if (match) customerGid = `gid://shopify/Customer/${match[1]}`;
+  }
+  console.log('Resolved customerGid:', customerGid);
+
+  const email     = claims.email as string;
+  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
   // ── 3. Admin API — name + subscription lines + paid orders ────────────────
   const admData = await adminQuery(`
@@ -128,6 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
   };
 
+  console.log('Admin API raw:', JSON.stringify(admData));
   const cust = (admData.data as CustData)?.customer;
   console.log('SHOPIFY CUSTOMER DATA:', JSON.stringify({
     subs: cust?.subscriptionContracts.edges.map(e => ({ status: e.node.status, lines: e.node.lines.edges.map(l => l.node.title) })),
