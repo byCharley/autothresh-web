@@ -55,6 +55,11 @@ function App() {
   const { status, session, initiateLogin, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
+  const {
+    originalImage, layers, globalPattern, knockoutEnabled,
+    bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor,
+    documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
+  } = useStore();
 
   useEffect(() => {
     const check = () => setIsMobile(isMobileDevice());
@@ -81,11 +86,6 @@ function App() {
   if (status === 'no-subscription') {
     return <SubscribePage firstName={session?.firstName} onLogout={logout} />;
   }
-  const {
-    originalImage, layers, globalPattern, knockoutEnabled,
-    bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor,
-    documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
-  } = useStore();
 
   const handleExport = async ({ mode, format, fileName }: ExportConfig) => {
     if (!originalImage) return;
