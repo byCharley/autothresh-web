@@ -423,21 +423,38 @@ export function computeBackgroundMask(imageData: ImageData, tolerance: number): 
   const n = width * height;
   const mask = new Uint8Array(n);
 
-  // If the image already has meaningful alpha transparency, use it directly.
-  // This avoids the flood-fill eating into dark shadows that happen to match
-  // the background color — common with detailed artwork PNGs.
+  // If the image already has meaningful alpha transparency, flood-fill from
+  // the edges through transparent pixels only. This removes the main background
+  // (which is connected to the image border) while preserving isolated interior
+  // transparent specks from anti-aliasing or texture — those are never reached
+  // by the fill and stay as foreground.
   let transparentPixels = 0;
   for (let i = 0; i < n; i++) {
-    if (data[i * 4 + 3] < 200) transparentPixels++;
+    if (data[i * 4 + 3] < 128) transparentPixels++;
   }
   if (transparentPixels > n * 0.005) {
-    for (let i = 0; i < n; i++) {
-      mask[i] = data[i * 4 + 3] < 200 ? 255 : 0;
+    const alphaVisited = new Uint8Array(n);
+    const alphaQueue: number[] = [];
+    const addAlpha = (idx: number) => {
+      if (alphaVisited[idx]) return;
+      alphaVisited[idx] = 1;
+      if (data[idx * 4 + 3] < 128) { mask[idx] = 255; alphaQueue.push(idx); }
+    };
+    for (let x = 0; x < width; x++) { addAlpha(x); addAlpha((height - 1) * width + x); }
+    for (let y = 1; y < height - 1; y++) { addAlpha(y * width); addAlpha(y * width + width - 1); }
+    let alphaHead = 0;
+    while (alphaHead < alphaQueue.length) {
+      const idx = alphaQueue[alphaHead++];
+      const x = idx % width, y = Math.floor(idx / width);
+      if (x > 0)          addAlpha(idx - 1);
+      if (x < width - 1)  addAlpha(idx + 1);
+      if (y > 0)          addAlpha(idx - width);
+      if (y < height - 1) addAlpha(idx + width);
     }
     return mask;
   }
 
-  // Fallback: flood-fill from image edges for fully opaque images (JPGs, etc.)
+  // Fallback: color-similarity flood-fill for fully opaque images (JPGs, etc.)
   const visited = new Uint8Array(n);
   const thresh = tolerance * 1.5;
 
