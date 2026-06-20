@@ -6,6 +6,9 @@ const ADM_TOKEN    = process.env.shopify_private_access_token!;
 const STORE_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN!;
 const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh.com/auth/callback';
 
+// Match against this keyword in the product/line item title (case-insensitive)
+const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
+
 const ADM_URL = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json`;
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -21,6 +24,27 @@ async function adminQuery(query: string, variables: Record<string, unknown>) {
     body: JSON.stringify({ query, variables }),
   });
   return r.json() as Promise<{ data?: Record<string, unknown> }>;
+}
+
+type SubEdge  = { node: { status: string; lines: { edges: { node: { title: string } }[] } } };
+type OrdEdge  = { node: { lineItems: { edges: { node: { title: string } }[] } } };
+
+function hasAutoThreshAccess(subEdges: SubEdge[], ordEdges: OrdEdge[]): boolean {
+  // Active subscription with a line item title containing the product keyword
+  const activeSub = subEdges.some(({ node }) =>
+    node.status === 'ACTIVE' &&
+    node.lines.edges.some(({ node: line }) =>
+      line.title.toLowerCase().includes(PRODUCT_KEYWORD)
+    )
+  );
+  if (activeSub) return true;
+
+  // Fallback: paid order containing the product (lifetime / one-time purchase)
+  return ordEdges.some(({ node: order }) =>
+    order.lineItems.edges.some(({ node: item }) =>
+      item.title.toLowerCase().includes(PRODUCT_KEYWORD)
+    )
+  );
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -57,32 +81,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const tokens = await tokenRes.json() as {
     access_token: string;
-    id_token: string;
-    expires_in: number;
+    id_token:     string;
+    expires_in:   number;
     refresh_token?: string;
   };
 
-  // ── 2. Decode id_token to get customer GID + email ────────────────────────
-  const claims = decodeJwtPayload(tokens.id_token);
-  const customerGid = claims.sub as string;   // e.g. gid://shopify/Customer/123456
+  // ── 2. Decode id_token for customer GID + email ───────────────────────────
+  const claims     = decodeJwtPayload(tokens.id_token);
+  const customerGid = claims.sub as string;
   const email       = claims.email as string;
   const expiresAt   = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
-  // ── 3. Admin API — get name + check subscription ──────────────────────────
+  // ── 3. Admin API — name + subscription lines + paid orders ────────────────
   const admData = await adminQuery(`
     query GetCustomer($id: ID!) {
       customer(id: $id) {
         firstName
-        subscriptionContracts(first: 10) {
-          edges { node { status } }
+        subscriptionContracts(first: 20) {
+          edges {
+            node {
+              status
+              lines(first: 10) {
+                edges { node { title } }
+              }
+            }
+          }
+        }
+        orders(first: 20, query: "financial_status:paid") {
+          edges {
+            node {
+              lineItems(first: 10) {
+                edges { node { title } }
+              }
+            }
+          }
         }
       }
     }
   `, { id: customerGid });
 
-  const cust   = (admData.data as { customer?: { firstName: string; subscriptionContracts: { edges: { node: { status: string } }[] } } })?.customer;
+  type CustData = {
+    customer?: {
+      firstName: string;
+      subscriptionContracts: { edges: SubEdge[] };
+      orders: { edges: OrdEdge[] };
+    };
+  };
+
+  const cust = (admData.data as CustData)?.customer;
   const firstName       = cust?.firstName ?? '';
-  const hasSubscription = cust?.subscriptionContracts.edges.some((e) => e.node.status === 'ACTIVE') ?? false;
+  const hasSubscription = cust
+    ? hasAutoThreshAccess(
+        cust.subscriptionContracts.edges,
+        cust.orders.edges,
+      )
+    : false;
 
   return res.status(200).json({
     token: tokens.access_token,
