@@ -161,7 +161,7 @@ export function CanvasView() {
 
         setProcessedLayers(processed);
 
-        const artComposite = renderComposite(processed, artPrevW, artPrevH, true);
+        const artComposite = renderComposite(processed, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
 
         // Build document canvas: fabric bg + artwork at 1:1 (zero scaling = zero blur).
         const docCanvas = document.createElement('canvas');

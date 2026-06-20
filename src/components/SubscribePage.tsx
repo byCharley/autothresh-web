@@ -9,10 +9,9 @@ const PRODUCT_URL = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefin
 interface Props {
   firstName?: string;
   onLogout: () => void;
-  onSwitchAccount: () => Promise<void>;
 }
 
-export function SubscribePage({ firstName, onLogout, onSwitchAccount }: Props) {
+export function SubscribePage({ firstName, onLogout }: Props) {
   const [showEula, setShowEula] = useState(false);
 
   return (
@@ -62,13 +61,6 @@ export function SubscribePage({ firstName, onLogout, onSwitchAccount }: Props) {
         </a>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-          <button
-            className="btn btn-ghost"
-            onClick={onSwitchAccount}
-            style={{ fontSize: 11, color: 'var(--text-dim)' }}
-          >
-            Switch Account
-          </button>
           <button
             className="btn btn-ghost"
             onClick={onLogout}

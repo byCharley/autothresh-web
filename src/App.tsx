@@ -18,6 +18,7 @@ import {
   processImage, renderComposite, drawRegistrationMarks, computeBackgroundMask,
 } from './engine/imageProcessor';
 import type { LayerConfig, PatternConfig } from './engine/imageProcessor';
+import { generateTextureMask } from './engine/textureGenerator';
 import { encodeTiff } from './engine/exportFormats';
 
 function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerConfig[] {
@@ -52,13 +53,14 @@ function isMobileDevice(): boolean {
 }
 
 function App() {
-  const { status, session, initiateLogin, switchAccount, logout } = useAuth();
+  const { status, session, initiateLogin, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const {
     originalImage, layers, globalPattern, knockoutEnabled,
     bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor,
     documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
+    textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
   } = useStore();
 
   useEffect(() => {
@@ -80,11 +82,11 @@ function App() {
   }
 
   if (status === 'unauthenticated') {
-    return <LoginPage onLogin={initiateLogin} onSwitchAccount={switchAccount} />;
+    return <LoginPage onLogin={initiateLogin} />;
   }
 
   if (status === 'no-subscription') {
-    return <SubscribePage firstName={session?.firstName} onLogout={logout} onSwitchAccount={switchAccount} />;
+    return <SubscribePage firstName={session?.firstName} onLogout={logout} />;
   }
 
   const handleExport = async ({ mode, format, fileName }: ExportConfig) => {
@@ -112,6 +114,16 @@ function App() {
     const fullBgMask  = bgRemovalEnabled ? computeBackgroundMask(docImageData, bgTolerance) : null;
     const resolved    = resolvePatterns(layers, globalPattern);
     const fullLayers  = processImage(docImageData, resolved, knockoutEnabled, fullBgMask, imageAdjustments);
+
+    if (textureEnabled) {
+      const texMask = generateTextureMask(docPxW, docPxH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+      for (const layer of fullLayers) {
+        for (let i = 0; i < layer.mask.length; i++) {
+          if (texMask[i] === 0) layer.mask[i] = 0;
+        }
+      }
+    }
+
     const regPaddingPx = Math.round(regMarkPadding * documentDpi);
     const baseName    = fileName || imageFileName.replace(/\.[^.]+$/, '') || 'autothresh';
 
@@ -133,7 +145,7 @@ function App() {
     };
 
     const buildCompositeCanvas = (withMarks: boolean): HTMLCanvasElement => {
-      const composite = renderComposite(fullLayers, docPxW, docPxH, true);
+      const composite = renderComposite(fullLayers, docPxW, docPxH, true, '#ffffff', !knockoutEnabled);
       const canvas = canvasFromImageData(composite);
       if (withMarks && showRegistrationMarks) {
         drawRegistrationMarks(canvas.getContext('2d')!, docPxW, docPxH, regPaddingPx, '#000000');
@@ -163,7 +175,7 @@ function App() {
     // ── PNG ──────────────────────────────────────────────────────────────────
     if (format === 'png') {
       if (mode === 'dtg') {
-        const blob = await canvasToBlob(buildCompositeCanvas(false));
+        const blob = await canvasToBlob(buildCompositeCanvas(true));
         saveAs(blob, `${baseName}-dtg.png`);
       } else {
         const zip    = new JSZip();
@@ -185,7 +197,7 @@ function App() {
           width: docPxW, height: docPxH,
           children: [
             bgLayer,
-            { name: 'Composite', canvas: buildCompositeCanvas(false), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+            { name: 'Composite', canvas: buildCompositeCanvas(true), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
           ],
         });
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-dtg.psd`);
@@ -223,7 +235,7 @@ function App() {
       };
 
       if (mode === 'dtg') {
-        await addPage(buildCompositeCanvas(false));
+        await addPage(buildCompositeCanvas(true));
       } else {
         for (const pl of visibleLayers) await addPage(buildLayerCanvas(pl, true));
         await addPage(buildCompositeCanvas(true));
@@ -240,7 +252,7 @@ function App() {
         canvas.getContext('2d')!.getImageData(0, 0, docPxW, docPxH);
 
       if (mode === 'dtg') {
-        const buf = encodeTiff(getPixels(buildCompositeCanvas(false)), documentDpi);
+        const buf = encodeTiff(getPixels(buildCompositeCanvas(true)), documentDpi);
         saveAs(new Blob([buf], { type: 'image/tiff' }), `${baseName}-dtg.tiff`);
       } else {
         const zip    = new JSZip();

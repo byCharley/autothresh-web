@@ -607,7 +607,8 @@ export function renderComposite(
   width: number,
   height: number,
   transparent = false,
-  bgColor = '#ffffff'
+  bgColor = '#ffffff',
+  reverseOrder = false
 ): ImageData {
   const out = new ImageData(width, height);
   const n = width * height;
@@ -620,7 +621,8 @@ export function renderComposite(
     }
   }
 
-  for (const layer of processedLayers) {
+  const paintOrder = reverseOrder ? [...processedLayers].reverse() : processedLayers;
+  for (const layer of paintOrder) {
     if (!layer.visible) continue;
     const [lr, lg, lb] = layer.color;
     for (let i = 0; i < n; i++) {
