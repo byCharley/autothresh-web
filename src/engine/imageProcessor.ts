@@ -113,16 +113,7 @@ function pseudoRandom(x: number, y: number, seed: number): number {
   return ((n ^ (n >>> 16)) >>> 0) / 0xffffffff;
 }
 
-function normalizeF32(arr: F32): F32 {
-  let lo = arr[0], hi = arr[0];
-  for (let i = 1; i < arr.length; i++) {
-    if (arr[i] < lo) lo = arr[i]; else if (arr[i] > hi) hi = arr[i];
-  }
-  const span = hi - lo || 1;
-  const out = new Float32Array(arr.length) as F32;
-  for (let i = 0; i < arr.length; i++) out[i] = (arr[i] - lo) / span;
-  return out;
-}
+
 
 // ─── Pattern Value Generators
 //     Each returns Float32Array with values in [0,1].
