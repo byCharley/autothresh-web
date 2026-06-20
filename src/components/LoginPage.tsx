@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { AppIcon } from './AppIcon';
+import { EulaModal } from './EulaModal';
+import { PageFooter } from './PageFooter';
 
 interface Props {
   onLogin: () => Promise<void>;
@@ -7,7 +9,8 @@ interface Props {
 }
 
 export function LoginPage({ onLogin, onSwitchAccount }: Props) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]     = useState(false);
+  const [showEula, setShowEula]   = useState(false);
 
   const handleSignIn = async () => {
     setLoading(true);
@@ -21,8 +24,12 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
 
   return (
     <div style={{
-      minHeight: '100vh', background: 'var(--bg)', display: 'flex',
-      flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh',
+      background: 'var(--bg)',
+      backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
+      backgroundSize: '28px 28px',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
       fontFamily: 'var(--font-sans)',
     }}>
       {/* Logo */}
@@ -69,12 +76,9 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
           }}
         >
           {loading ? (
-            <>
-              <span style={{ opacity: 0.5 }}>Redirecting…</span>
-            </>
+            <span style={{ opacity: 0.5 }}>Redirecting…</span>
           ) : (
             <>
-              {/* Shopify bag icon */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M17.1 8.5h-1.4c-.3-2.2-2.1-3.9-4.4-3.9S7 6.3 6.7 8.5H5.3c-.7 0-1.3.6-1.3 1.3v8.5c0 .7.6 1.2 1.3 1.2h11.5c.7 0 1.2-.5 1.2-1.2V9.8c0-.7-.5-1.3-1.2-1.3zm-4.8-2.4c1.4 0 2.6 1 2.9 2.4H9.5c.2-1.4 1.4-2.4 2.8-2.4zm0 8.4c-1.3 0-2.3-1-2.3-2.3s1-2.3 2.3-2.3 2.3 1 2.3 2.3-1 2.3-2.3 2.3z"/>
               </svg>
@@ -87,12 +91,14 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
           onClick={handleSwitch}
           disabled={loading}
           style={{
-            marginTop: 14, background: 'none', border: 'none', cursor: loading ? 'default' : 'pointer',
+            marginTop: 14, background: 'none', border: 'none',
+            cursor: loading ? 'default' : 'pointer',
             fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
-            textDecoration: 'underline', opacity: loading ? 0.4 : 0.7, padding: 0,
+            textDecoration: 'underline', opacity: loading ? 0.4 : 0.6, padding: 0,
+            transition: 'opacity 0.15s',
           }}
           onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-          onMouseLeave={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.opacity = '0.7'; }}
+          onMouseLeave={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.opacity = '0.6'; }}
         >
           Switch Account
         </button>
@@ -101,6 +107,9 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
           Access requires an active AutoThresh subscription.
         </div>
       </div>
+
+      <PageFooter onEula={() => setShowEula(true)} />
+      {showEula && <EulaModal onClose={() => setShowEula(false)} />}
     </div>
   );
 }

@@ -1,4 +1,7 @@
+import { useState } from 'react';
 import { AppIcon } from './AppIcon';
+import { EulaModal } from './EulaModal';
+import { PageFooter } from './PageFooter';
 
 const PRODUCT_URL = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefined
   ?? 'https://charleypangus.com/collections/webapps';
@@ -10,10 +13,16 @@ interface Props {
 }
 
 export function SubscribePage({ firstName, onLogout, onSwitchAccount }: Props) {
+  const [showEula, setShowEula] = useState(false);
+
   return (
     <div style={{
-      minHeight: '100vh', background: 'var(--bg)', display: 'flex',
-      flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh',
+      background: 'var(--bg)',
+      backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
+      backgroundSize: '28px 28px',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
       fontFamily: 'var(--font-sans)',
     }}>
       {/* Logo */}
@@ -69,6 +78,9 @@ export function SubscribePage({ firstName, onLogout, onSwitchAccount }: Props) {
           </button>
         </div>
       </div>
+
+      <PageFooter onEula={() => setShowEula(true)} />
+      {showEula && <EulaModal onClose={() => setShowEula(false)} />}
     </div>
   );
 }
