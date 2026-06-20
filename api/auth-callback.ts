@@ -6,33 +6,12 @@ const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh
 
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
 
-// Correct Customer Account API endpoint (uses shopify.com auth domain, not myshopify domain)
 const CUST_API_URL = `https://shopify.com/authentication/${STORE_ID}/account/customer/api/2024-10/graphql`;
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const [, payload] = token.split('.');
   const padded = payload + '='.repeat((4 - payload.length % 4) % 4);
   return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-}
-
-async function customerApiQuery(accessToken: string, query: string): Promise<{ data?: Record<string, unknown>; errors?: unknown[] }> {
-  try {
-    const r = await fetch(CUST_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ query }),
-    });
-    const text = await r.text();
-    console.log('Customer API status:', r.status);
-    console.log('Customer API body:', text.slice(0, 800));
-    return JSON.parse(text);
-  } catch (e) {
-    console.error('customerApiQuery error:', e);
-    return {};
-  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -78,74 +57,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const email     = claims.email as string;
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
-  // ── 3. Query Customer Account API with the customer's own token ───────────
-  // Query subscriptions and orders separately so a schema error on one
-  // doesn't null out the entire response.
-  const [subData, ordData] = await Promise.all([
-    customerApiQuery(tokens.access_token, `
-      query {
-        customer {
-          firstName
-          emailAddress { emailAddress }
-          subscriptionContracts(first: 20) {
-            nodes {
-              id
-              status
-              lines(first: 10) {
-                nodes { title }
+  // ── 3. Single query — same structure that returned customer at 17:43 ───────
+  let rawBody = '';
+  let custData: { data?: Record<string, unknown>; errors?: unknown[] } = {};
+  try {
+    const r = await fetch(CUST_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${tokens.access_token}`,
+      },
+      body: JSON.stringify({
+        query: `
+          query {
+            customer {
+              firstName
+              emailAddress { emailAddress }
+              orders(first: 20) {
+                nodes {
+                  lineItems(first: 10) {
+                    nodes { title }
+                  }
+                }
+              }
+              subscriptionContracts(first: 20) {
+                nodes {
+                  status
+                  lines(first: 10) {
+                    nodes { title }
+                  }
+                }
               }
             }
           }
-        }
-      }
-    `),
-    customerApiQuery(tokens.access_token, `
-      query {
-        customer {
-          orders(first: 20) {
-            nodes {
-              lineItems(first: 10) {
-                nodes { title }
-              }
-            }
-          }
-        }
-      }
-    `),
-  ]);
+        `,
+      }),
+    });
+    rawBody = await r.text();
+    custData = JSON.parse(rawBody);
+  } catch (e) {
+    console.error('Customer API error:', e, 'raw:', rawBody.slice(0, 300));
+  }
 
-  type SubCustomer = {
+  type CustNode = {
     firstName?: string;
     emailAddress?: { emailAddress: string };
-    subscriptionContracts?: { nodes: { id: string; status: string; lines?: { nodes: { title: string }[] } }[] };
-  };
-  type OrdCustomer = {
     orders?: { nodes: { lineItems?: { nodes: { title: string }[] } }[] };
+    subscriptionContracts?: { nodes: { status: string; lines?: { nodes: { title: string }[] } }[] };
   };
 
-  const subCust  = (subData.data as { customer?: SubCustomer })?.customer;
-  const ordCust  = (ordData.data as { customer?: OrdCustomer })?.customer;
+  const cust = (custData.data as { customer?: CustNode })?.customer;
 
-  console.log('Sub customer:', JSON.stringify(subCust));
-  console.log('Ord customer:', JSON.stringify(ordCust));
+  // Log the full raw response as the final log line so it's always visible
+  console.log('CUST_API_RESULT status:', JSON.stringify({ hasCustomer: !!cust, errors: custData.errors, rawSlice: rawBody.slice(0, 400) }));
 
-  if (!subCust && !ordCust) {
-    console.error('No customer data from either query. Sub errors:', JSON.stringify(subData.errors), 'Ord errors:', JSON.stringify(ordData.errors));
+  if (!cust) {
     return res.status(200).json({
       token: tokens.access_token, expiresAt,
       email, firstName: '', hasSubscription: false,
     });
   }
 
-  const subNodes = subCust?.subscriptionContracts?.nodes ?? [];
-  const ordNodes = ordCust?.orders?.nodes ?? [];
-
-  console.log('Subs:', JSON.stringify(subNodes.map(n => ({
-    id: n.id, status: n.status, lines: n.lines?.nodes?.map(l => l.title) ?? []
-  }))));
-  console.log('Orders:', JSON.stringify(ordNodes.map(o =>
-    o.lineItems?.nodes?.map(l => l.title) ?? []
-  )));
+  const subNodes = cust.subscriptionContracts?.nodes ?? [];
+  const ordNodes = cust.orders?.nodes ?? [];
 
   const hasSub = subNodes.some(n =>
     ['ACTIVE', 'PAUSED'].includes(n.status) &&
@@ -156,11 +130,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     (o.lineItems?.nodes ?? []).some(l => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
   );
 
+  console.log('Access result:', JSON.stringify({
+    hasSub, hasOrder,
+    subs: subNodes.map(n => ({ status: n.status, lines: n.lines?.nodes?.map(l => l.title) })),
+    orders: ordNodes.map(o => o.lineItems?.nodes?.map(l => l.title)),
+  }));
+
   return res.status(200).json({
     token:           tokens.access_token,
     expiresAt,
-    email:           subCust?.emailAddress?.emailAddress ?? email,
-    firstName:       subCust?.firstName ?? '',
+    email:           cust.emailAddress?.emailAddress ?? email,
+    firstName:       cust.firstName ?? '',
     hasSubscription: hasSub || hasOrder,
   });
 }
