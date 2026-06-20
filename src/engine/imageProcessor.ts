@@ -4,9 +4,7 @@ export type PatternType =
   | 'none'
   | 'noise'
   | 'noise-coarse'
-  | 'film-grain'
   | 'noise-texture'
-  | 'vintage-halftone'
   | 'grain'        // legacy alias → noise
   | 'grain-soft'   // legacy alias → noise
   | 'grain-coarse' // legacy alias → noise-coarse
@@ -325,9 +323,7 @@ function buildPatternValues(w: number, h: number, layer: LayerConfig, idx: numbe
     case 'grain-soft':       return noiseValues(w, h, patternScale, seed);
     case 'noise-coarse':
     case 'grain-coarse':     return noiseCoarseValues(w, h, patternScale, seed);
-    case 'film-grain':        return samplePatternTexture('film-grain', w, h, patternScale, seed) ?? noiseValues(w, h, patternScale, seed);
     case 'noise-texture':     return samplePatternTexture('noise-texture', w, h, patternScale, seed) ?? noiseValues(w, h, patternScale, seed);
-    case 'vintage-halftone':  return samplePatternTexture('vintage-halftone', w, h, patternScale, seed) ?? noiseValues(w, h, patternScale, seed);
     case 'halftone-round':   return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'round');
     case 'halftone-diamond': return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'diamond');
     case 'halftone-ellipse': return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'ellipse');

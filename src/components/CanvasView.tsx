@@ -138,9 +138,7 @@ export function CanvasView() {
       };
       img.src = src;
     };
-    load('/textures/Grain_Texture.png',    'film-grain');
-    load('/textures/Noise_Texture.png',    'noise-texture');
-    load('/textures/Vintage Halftones.jpg','vintage-halftone');
+    load('/textures/Noise_Texture.png', 'noise-texture');
   }, []);
 
   // Debounce zoom → renderDim.
