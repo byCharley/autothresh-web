@@ -375,16 +375,28 @@ function DocumentSection() {
 // ─── CMYK Screen Section ──────────────────────────────────────────────────────
 
 function CmykScreenSection() {
-  const { separationMode, cmykLpi, setCmykLpi, documentDpi } = useStore();
+  const { separationMode, cmykLpi, setCmykLpi, documentDpi, cmykAngles, setCmykAngle } = useStore();
   if (separationMode !== 'cmyk') return null;
   const dotPx = (documentDpi / cmykLpi).toFixed(1);
+  const channels = [
+    { id: 'cmyk-k', label: 'K  Black' },
+    { id: 'cmyk-c', label: 'C  Cyan' },
+    { id: 'cmyk-m', label: 'M  Magenta' },
+    { id: 'cmyk-y', label: 'Y  Yellow' },
+  ];
   return (
     <Section title="CMYK Screen">
-      <Slider label="Screen Ruling" value={cmykLpi} min={25} max={100} step={5}
+      <Slider label="Screen Ruling" value={cmykLpi} min={25} max={150} step={1}
         onChange={setCmykLpi} unit=" LPI" />
-      <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8, marginTop: 4 }}>
-        <div>~{dotPx}px per dot @ {documentDpi} DPI</div>
-        <div>K 45° · C 15° · M 75° · Y 90°</div>
+      <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 4 }}>
+        <div>~{dotPx}px per dot @ {documentDpi} DPI · Round dot</div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        {channels.map(({ id, label }) => (
+          <Slider key={id} label={label} value={cmykAngles[id] ?? 0}
+            min={0} max={180} step={1}
+            onChange={(v) => setCmykAngle(id, v)} unit="°" />
+        ))}
       </div>
     </Section>
   );

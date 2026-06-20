@@ -62,7 +62,7 @@ function App() {
     bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor,
     documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
-    separationMode, cmykLpi,
+    separationMode, cmykLpi, cmykAngles,
   } = useStore();
 
   useEffect(() => {
@@ -123,7 +123,7 @@ function App() {
     let artLayers: ProcessedLayer[];
     if (separationMode === 'cmyk') {
       // Cell size derived from LPI: output DPI / LPI = pixels per halftone dot
-      artLayers = cmykSeparate(artImageData, documentDpi / cmykLpi, artBgMask);
+      artLayers = cmykSeparate(artImageData, documentDpi / cmykLpi, artBgMask, cmykAngles);
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
       artLayers = processImage(artImageData, resolved, knockoutEnabled, artBgMask, imageAdjustments, exportScaleFactor);
@@ -163,7 +163,7 @@ function App() {
     const buildCompositeCanvas = (withMarks: boolean): HTMLCanvasElement => {
       // Composite artwork layers, then place in document canvas
       const artComposite = separationMode === 'cmyk'
-        ? renderCmykComposite(artLayers, artScaleW, artScaleH)
+        ? renderCmykComposite(artLayers, artScaleW, artScaleH, artBgMask)
         : renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
       const docCanvas = document.createElement('canvas');
       docCanvas.width = docPxW; docCanvas.height = docPxH;

@@ -50,7 +50,7 @@ export function CanvasView() {
     canvasColor, showFabricBg,
     imageAdjustments,
     documentDpi, documentWidthIn, documentHeightIn,
-    separationMode, cmykLpi, cmykVisibility,
+    separationMode, cmykLpi, cmykVisibility, cmykAngles,
     isProcessing, setOriginalImage, setProcessedLayers, setIsProcessing, setCanvasColor,
   } = useStore();
 
@@ -174,33 +174,36 @@ export function CanvasView() {
         const artScaled    = scaleImageDataExact(originalImage, artPrevW, artPrevH);
         const localBgMask  = bgRemovalEnabled ? computeBackgroundMask(artScaled, bgTolerance) : null;
 
-        let processed: ReturnType<typeof processImage>;
+        let artComposite: ImageData;
         if (separationMode === 'cmyk') {
-          // Cell size in preview pixels — no artificial minimum so 65 LPI gives ~1.3px
-          // cells that blend into continuous tone at normal zoom (photographic appearance)
-          const cmykPreviewCellSize = Math.max(1, artPrevW / documentWidthIn / cmykLpi);
-          processed = cmykSeparate(artScaled, cmykPreviewCellSize, localBgMask);
-          // Apply visibility from store
-          for (const layer of processed) layer.visible = cmykVisibility[layer.id] ?? true;
+          const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
+          const isSoloPlate = visibleIds.length === 1;
+
+          // Preview cell size uses export dot scale (documentDpi / cmykLpi) so the LPI
+          // slider visually changes dot sizes. 25 LPI → 12px, 65 LPI → 4.6px, etc.
+          const minCell = isSoloPlate ? 3 : 4;
+          const cellSize = Math.max(minCell, documentDpi / cmykLpi);
+          const allLayers = cmykSeparate(artScaled, cellSize, localBgMask, cmykAngles);
+          const visibleLayers = allLayers.filter(l => visibleIds.includes(l.id));
+          setProcessedLayers(visibleLayers);
+
+          artComposite = renderCmykComposite(visibleLayers, artPrevW, artPrevH, localBgMask);
         } else {
           const resolved = resolvePatterns(layers, globalPattern);
-          processed = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
-        }
+          const processed = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
 
-        if (textureEnabled && separationMode === 'threshold') {
-          const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
-          for (const layer of processed) {
-            for (let i = 0; i < layer.mask.length; i++) {
-              if (texMask[i] === 0) layer.mask[i] = 0;
+          if (textureEnabled) {
+            const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+            for (const layer of processed) {
+              for (let i = 0; i < layer.mask.length; i++) {
+                if (texMask[i] === 0) layer.mask[i] = 0;
+              }
             }
           }
+
+          setProcessedLayers(processed);
+          artComposite = renderComposite(processed, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
         }
-
-        setProcessedLayers(processed);
-
-        const artComposite = separationMode === 'cmyk'
-          ? renderCmykComposite(processed, artPrevW, artPrevH)
-          : renderComposite(processed, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
 
         // Build document canvas: fabric bg + artwork at 1:1 (zero scaling = zero blur).
         const docCanvas = document.createElement('canvas');
@@ -233,7 +236,7 @@ export function CanvasView() {
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     textureVersion,
     documentWidthIn, documentHeightIn, documentDpi,
-    separationMode, cmykLpi, cmykVisibility,
+    separationMode, cmykLpi, cmykVisibility, cmykAngles,
     // renderDim intentionally excluded — zoom must never trigger a reprocess
   ]);
 

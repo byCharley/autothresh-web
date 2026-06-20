@@ -238,10 +238,10 @@ function ArtworkSection() {
 // ─── CMYK Channel Definitions ─────────────────────────────────────────────────
 
 const CMYK_CARD_DEFS = [
-  { id: 'cmyk-k', name: 'K · Black',   color: '#0a0a0a', angle: 45 },
-  { id: 'cmyk-c', name: 'C · Cyan',    color: '#00aeef', angle: 15 },
-  { id: 'cmyk-m', name: 'M · Magenta', color: '#ec008c', angle: 75 },
-  { id: 'cmyk-y', name: 'Y · Yellow',  color: '#fff200', angle: 90 },
+  { id: 'cmyk-k', name: 'K · Black',   color: '#0a0a0a' },
+  { id: 'cmyk-c', name: 'C · Cyan',    color: '#00aeef' },
+  { id: 'cmyk-m', name: 'M · Magenta', color: '#ec008c' },
+  { id: 'cmyk-y', name: 'Y · Yellow',  color: '#fff200' },
 ];
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
@@ -251,7 +251,7 @@ export function LayerPanel() {
     layers, selectedLayerId, selectLayer, updateLayer,
     previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
     separationMode, setSeparationMode,
-    cmykVisibility, setCmykLayerVisible,
+    cmykVisibility, setCmykLayerVisible, cmykAngles,
   } = useStore();
 
   const handleAutoPalette = () => {
@@ -283,9 +283,9 @@ export function LayerPanel() {
 
       {/* Single scrollable column */}
       <div className="left-scroll">
-        {/* Mode Switcher */}
+        {/* Mode Switcher — CMYK only visible in local dev */}
         <div style={{ display: 'flex', padding: '6px 8px', gap: 4, borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          {(['threshold', 'cmyk'] as const).map((mode) => (
+          {(['threshold', ...(import.meta.env.DEV ? ['cmyk'] : [])] as ('threshold' | 'cmyk')[]).map((mode) => (
             <button
               key={mode}
               onClick={() => setSeparationMode(mode)}
@@ -306,22 +306,44 @@ export function LayerPanel() {
         {separationMode === 'cmyk' ? (
           <>
             {/* CMYK layer cards */}
-            <div style={{ padding: '8px 8px 4px' }}>
-              {[...CMYK_CARD_DEFS].reverse().map(({ id, name, color, angle }) => {
-                const visible = cmykVisibility[id] ?? true;
+            <div style={{ padding: '8px 8px 0px' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 6, lineHeight: 1.5 }}>
+                Click a plate to view its halftone screen. All plates on = color proof.
+              </div>
+              {[...CMYK_CARD_DEFS].reverse().map(({ id, name, color }) => {
+                const visible = cmykVisibility[id] ?? false;
+                const isSolo = visible && Object.entries(cmykVisibility).filter(([, v]) => v).length === 1;
+                const angle = cmykAngles[id] ?? 0;
                 return (
-                  <div key={id} className="layer-card" style={{ marginBottom: 4 }}>
+                  <div
+                    key={id}
+                    className="layer-card"
+                    style={{ marginBottom: 4, cursor: 'pointer', outline: isSolo ? '1px solid var(--accent)' : 'none' }}
+                    onClick={() => {
+                      // Solo this channel (turn off all others)
+                      const allOff = { 'cmyk-k': false, 'cmyk-c': false, 'cmyk-m': false, 'cmyk-y': false };
+                      if (isSolo) {
+                        // Already soloed — turn all on (composite proof)
+                        setCmykLayerVisible('cmyk-k', true);
+                        setCmykLayerVisible('cmyk-c', true);
+                        setCmykLayerVisible('cmyk-m', true);
+                        setCmykLayerVisible('cmyk-y', true);
+                      } else {
+                        Object.keys(allOff).forEach((k) => setCmykLayerVisible(k, k === id));
+                      }
+                    }}
+                  >
                     <div className="layer-swatch">
                       <div className="layer-swatch-inner" style={{ background: color }} />
                     </div>
                     <div className="layer-card-info">
                       <div className="layer-card-name">{name}</div>
-                      <div className="layer-card-sub">{angle}° screen</div>
+                      <div className="layer-card-sub">{angle}° · {isSolo ? 'halftone plate' : visible ? 'color proof' : 'off'}</div>
                     </div>
                     <div className="layer-card-actions">
                       <button
                         className={`vis-btn ${!visible ? 'hidden-layer' : ''}`}
-                        onClick={() => setCmykLayerVisible(id, !visible)}
+                        onClick={(e) => { e.stopPropagation(); setCmykLayerVisible(id, !visible); }}
                       >
                         <EyeIcon visible={visible} />
                       </button>

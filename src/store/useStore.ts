@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { LayerConfig, PatternConfig, ProcessedLayer, ImageAdjustments, SeparationMode } from '../engine/imageProcessor';
+import { DEFAULT_CMYK_ANGLES } from '../engine/imageProcessor';
 import type { TextureType } from '../engine/textureGenerator';
 
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
@@ -87,6 +88,7 @@ interface AppState {
   separationMode: SeparationMode;
   cmykLpi: number;
   cmykVisibility: Record<string, boolean>;
+  cmykAngles: Record<string, number>;
 
   processedLayers: ProcessedLayer[];
   isProcessing: boolean;
@@ -122,6 +124,7 @@ interface AppState {
   setSeparationMode: (v: SeparationMode) => void;
   setCmykLpi: (v: number) => void;
   setCmykLayerVisible: (id: string, v: boolean) => void;
+  setCmykAngle: (id: string, angle: number) => void;
 
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
   setIsProcessing: (v: boolean) => void;
@@ -158,7 +161,8 @@ export const useStore = create<AppState>((set) => ({
   activePaletteIdx: 0,
   separationMode: 'threshold',
   cmykLpi: 65,
-  cmykVisibility: { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true },
+  cmykVisibility: { 'cmyk-k': true, 'cmyk-c': false, 'cmyk-m': false, 'cmyk-y': false },
+  cmykAngles: { ...DEFAULT_CMYK_ANGLES },
 
   processedLayers: [],
   isProcessing: false,
@@ -204,9 +208,16 @@ export const useStore = create<AppState>((set) => ({
     });
     return { layers: updatedLayers, activePaletteIdx: idx };
   }),
-  setSeparationMode: (separationMode) => set({ separationMode }),
+  setSeparationMode: (separationMode) => set((s) => ({
+    separationMode,
+    // Reset to K-only plate view each time CMYK mode is entered
+    cmykVisibility: separationMode === 'cmyk'
+      ? { 'cmyk-k': true, 'cmyk-c': false, 'cmyk-m': false, 'cmyk-y': false }
+      : s.cmykVisibility,
+  })),
   setCmykLpi: (cmykLpi) => set({ cmykLpi }),
   setCmykLayerVisible: (id, v) => set((s) => ({ cmykVisibility: { ...s.cmykVisibility, [id]: v } })),
+  setCmykAngle: (id, angle) => set((s) => ({ cmykAngles: { ...s.cmykAngles, [id]: Math.max(0, Math.min(180, angle)) } })),
 
   setProcessedLayers: (processedLayers) => set({ processedLayers }),
   setIsProcessing: (isProcessing) => set({ isProcessing }),

@@ -724,17 +724,25 @@ export function scaleImageDataExact(imageData: ImageData, targetW: number, targe
 // ─── CMYK Separation ──────────────────────────────────────────────────────────
 
 // Standard CMYK process colors and screen angles
-const CMYK_CHANNELS = [
+export const CMYK_CHANNELS = [
   { id: 'cmyk-k', name: 'K · Black',   color: [10, 10, 10]   as [number,number,number], angleDeg: 45 },
   { id: 'cmyk-c', name: 'C · Cyan',    color: [0, 174, 239]  as [number,number,number], angleDeg: 15 },
   { id: 'cmyk-m', name: 'M · Magenta', color: [236, 0, 140]  as [number,number,number], angleDeg: 75 },
-  { id: 'cmyk-y', name: 'Y · Yellow',  color: [255, 242, 0]  as [number,number,number], angleDeg: 90 },
+  { id: 'cmyk-y', name: 'Y · Yellow',  color: [255, 242, 0]  as [number,number,number], angleDeg: 0  },
 ] as const;
+
+// Industry-standard defaults: K=45°, C=15°, M=75°, Y=0°
+// Y at 0° is critical — Y at 90° (only 15° from M) causes moiré that
+// makes the composite appear pink/magenta-dominant.
+export const DEFAULT_CMYK_ANGLES: Record<string, number> = {
+  'cmyk-k': 45, 'cmyk-c': 15, 'cmyk-m': 75, 'cmyk-y': 0,
+};
 
 export function cmykSeparate(
   imageData: ImageData,
   cellSize: number,
   bgMask: Uint8Array | null,
+  angleOverrides?: Record<string, number>,
   scaleFactor = 1,
 ): ProcessedLayer[] {
   const { width: w, height: h, data } = imageData;
@@ -763,7 +771,8 @@ export function cmykSeparate(
   const channelData = [chanK, chanC, chanM, chanY];
 
   return CMYK_CHANNELS.map(({ id, name, color, angleDeg }, ci) => {
-    const angle = angleDeg * Math.PI / 180;
+    const deg = angleOverrides?.[id] ?? angleDeg;
+    const angle = deg * Math.PI / 180;
     const cosA = Math.cos(angle), sinA = Math.sin(angle);
     const chan = channelData[ci];
     const mask = new Uint8Array(w * h);
@@ -786,9 +795,21 @@ export function cmykSeparate(
         const iy = Math.max(0, Math.min(h - 1, Math.round(cu * sinA + cv * cosA)));
         const ink = chan[iy * w + ix];
 
-        const dotR = (cs * 0.5) * Math.sqrt(ink);
+        // Correct AM halftone: area coverage = ink density.
+        // Below π/4 (~78.5%): growing round dot from 0→78.5% cell area.
+        // Above π/4: shrinking hole in solid ink from 78.5→100%.
+        // This ensures K=1.0 produces 100% coverage (solid black), no white gaps.
         const du = su - cu, dv = sv - cv;
-        if (du * du + dv * dv <= dotR * dotR) mask[py * w + px] = 255;
+        const distSq = du * du + dv * dv;
+        let inDot: boolean;
+        if (ink <= Math.PI / 4) {
+          const dotR = cs * Math.sqrt(ink / Math.PI);
+          inDot = distSq <= dotR * dotR;
+        } else {
+          const holeR = cs * Math.sqrt((1 - ink) / Math.PI);
+          inDot = distSq > holeR * holeR;
+        }
+        if (inDot) mask[py * w + px] = 255;
       }
     }
 
@@ -796,12 +817,18 @@ export function cmykSeparate(
   });
 }
 
-export function renderCmykComposite(layers: ProcessedLayer[], w: number, h: number): ImageData {
+export function renderCmykComposite(
+  layers: ProcessedLayer[],
+  w: number,
+  h: number,
+  bgMask?: Uint8Array | null,
+): ImageData {
   const out = new ImageData(w, h);
-  // Fill white paper
+  // Fill white paper (alpha=0 for bg-removed pixels so fabric shows through)
   for (let i = 0; i < w * h; i++) {
     out.data[i * 4] = 255; out.data[i * 4 + 1] = 255;
-    out.data[i * 4 + 2] = 255; out.data[i * 4 + 3] = 255;
+    out.data[i * 4 + 2] = 255;
+    out.data[i * 4 + 3] = (bgMask && bgMask[i] === 255) ? 0 : 255;
   }
   // Subtractive ink absorption — each channel removes its complementary light
   const absorb: Record<string, [number, number, number]> = {
@@ -821,5 +848,94 @@ export function renderCmykComposite(layers: ProcessedLayer[], w: number, h: numb
       out.data[i * 4 + 2] = Math.round(out.data[i * 4 + 2] * ab);
     }
   }
+  return out;
+}
+
+// CMYK halftone proof: dot STRUCTURE from the binary halftone masks, correct CMYK color
+// per pixel. For each pixel, any channel dot present → show the CMYK-converted color at
+// that pixel (= original color for in-gamut images = correct print appearance from distance).
+// No dot → white paper. Produces the right colors AND visible halftone dot pattern.
+export function renderCmykHalftoneProof(
+  imageData: ImageData,
+  layers: ProcessedLayer[],
+  bgMask?: Uint8Array | null,
+): ImageData {
+  const { width: w, height: h, data } = imageData;
+  const out = new ImageData(w, h);
+  const masks = layers.map(l => l.mask);
+
+  for (let i = 0; i < w * h; i++) {
+    if (bgMask && bgMask[i] === 255) {
+      out.data[i * 4 + 3] = 0;
+      continue;
+    }
+
+    let hasDot = false;
+    for (const mask of masks) { if (mask[i] === 255) { hasDot = true; break; } }
+
+    if (hasDot) {
+      const r = data[i * 4] / 255, g = data[i * 4 + 1] / 255, b = data[i * 4 + 2] / 255;
+      const k = 1 - Math.max(r, g, b);
+      if (k >= 1) {
+        out.data[i * 4] = out.data[i * 4 + 1] = out.data[i * 4 + 2] = 0;
+      } else {
+        const d = 1 - k;
+        const c = (1 - r - k) / d, m = (1 - g - k) / d, y = (1 - b - k) / d;
+        out.data[i * 4]     = Math.round((1 - c) * (1 - k) * 255);
+        out.data[i * 4 + 1] = Math.round((1 - m) * (1 - k) * 255);
+        out.data[i * 4 + 2] = Math.round((1 - y) * (1 - k) * 255);
+      }
+    } else {
+      out.data[i * 4] = 255; out.data[i * 4 + 1] = 255; out.data[i * 4 + 2] = 255;
+    }
+    out.data[i * 4 + 3] = 255;
+  }
+  return out;
+}
+
+// Smooth continuous-tone CMYK preview — no halftone screen, just pixel-accurate color.
+// Used for canvas preview so the result looks photographic (same as the printed output
+// at viewing distance). Export still uses cmykSeparate → renderCmykComposite for actual dots.
+export function renderCmykSmooth(
+  imageData: ImageData,
+  bgMask: Uint8Array | null,
+  visibility: Record<string, boolean>,
+): ImageData {
+  const { width: w, height: h, data } = imageData;
+  const out = new ImageData(w, h);
+
+  for (let i = 0; i < w * h; i++) {
+    if (bgMask && bgMask[i] === 255) {
+      // Transparent — fabric background color shows through
+      out.data[i * 4 + 3] = 0;
+      continue;
+    }
+
+    const r = data[i * 4]     / 255;
+    const g = data[i * 4 + 1] / 255;
+    const b = data[i * 4 + 2] / 255;
+
+    // RGB → CMYK (max-K UCR)
+    const kRaw = 1 - Math.max(r, g, b);
+    let cRaw = 0, mRaw = 0, yRaw = 0;
+    if (kRaw < 1) {
+      const d = 1 - kRaw;
+      cRaw = (1 - r - kRaw) / d;
+      mRaw = (1 - g - kRaw) / d;
+      yRaw = (1 - b - kRaw) / d;
+    }
+
+    const c = visibility['cmyk-c'] ? cRaw : 0;
+    const m = visibility['cmyk-m'] ? mRaw : 0;
+    const y = visibility['cmyk-y'] ? yRaw : 0;
+    const k = visibility['cmyk-k'] ? kRaw : 0;
+
+    // CMYK → RGB subtractive (white paper baseline)
+    out.data[i * 4]     = Math.round((1 - c) * (1 - k) * 255);
+    out.data[i * 4 + 1] = Math.round((1 - m) * (1 - k) * 255);
+    out.data[i * 4 + 2] = Math.round((1 - y) * (1 - k) * 255);
+    out.data[i * 4 + 3] = 255;
+  }
+
   return out;
 }
