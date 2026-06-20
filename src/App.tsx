@@ -258,7 +258,7 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} />
+      <TopBar onExport={() => setShowExport(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} />
       <div className="workspace">
         <LayerPanel />
         <CanvasView />

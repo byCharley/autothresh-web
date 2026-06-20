@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { generateCodeVerifier, generateCodeChallenge, generateState } from './pkce';
 
 export interface Session {
-  token:           string;
-  expiresAt:       string;
-  email:           string;
-  firstName:       string;
-  hasSubscription: boolean;
+  token:                   string;
+  expiresAt:               string;
+  email:                   string;
+  firstName:               string;
+  hasSubscription:         boolean;
+  subscriptionExpiresAt?:  string;
 }
 
 const SESSION_KEY  = 'at_session';
@@ -56,16 +57,17 @@ export function useAuth() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, codeVerifier }),
       })
-        .then((r) => r.json() as Promise<Partial<Session> & { error?: string }>)
+        .then((r) => r.json() as Promise<Partial<Session> & { error?: string; subscriptionExpiresAt?: string }>)
         .then((data) => {
           window.history.replaceState({}, '', '/');
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
           const s: Session = {
-            token:           data.token!,
-            expiresAt:       data.expiresAt!,
-            email:           data.email!,
-            firstName:       data.firstName!,
-            hasSubscription: data.hasSubscription!,
+            token:                   data.token!,
+            expiresAt:               data.expiresAt!,
+            email:                   data.email!,
+            firstName:               data.firstName!,
+            hasSubscription:         data.hasSubscription!,
+            subscriptionExpiresAt:   data.subscriptionExpiresAt,
           };
           saveSession(s);
           setSession(s);
@@ -85,10 +87,10 @@ export function useAuth() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: stored.token }),
     })
-      .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; email: string; firstName: string }>)
+      .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; email: string; firstName: string; subscriptionExpiresAt?: string }>)
       .then((data) => {
         if (!data.valid) { clearSession(); setStatus('unauthenticated'); return; }
-        const updated: Session = { ...stored, hasSubscription: data.hasSubscription, email: data.email, firstName: data.firstName };
+        const updated: Session = { ...stored, hasSubscription: data.hasSubscription, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt };
         saveSession(updated);
         setSession(updated);
         setStatus(data.hasSubscription ? 'authenticated' : 'no-subscription');

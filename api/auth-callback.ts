@@ -12,9 +12,7 @@ const ADM_URL          = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json
 // Customer Account API — confirmed URL/auth from working Lovable project
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
-// Admin API fallback: the AutoThresh Web subscription was created in a way
-// that the Customer Account API can't see it, but the Admin API can.
-async function adminHasSubscription(email: string): Promise<boolean> {
+async function adminCheckSubscription(email: string): Promise<{ hasSub: boolean; nextBillingDate?: string }> {
   try {
     const r = await fetch(ADM_URL, {
       method: 'POST',
@@ -29,6 +27,7 @@ async function adminHasSubscription(email: string): Promise<boolean> {
               subscriptionContracts(first: 20) {
                 edges { node {
                   status
+                  nextBillingDate
                   lines(first: 10) { edges { node { title } } }
                 } }
               }
@@ -43,23 +42,26 @@ async function adminHasSubscription(email: string): Promise<boolean> {
         variables: { q: `email:${email}` },
       }),
     });
-    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; lines: { edges: { node: { title: string } }[] } } }[] }; orders: { edges: { node: { lineItems: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
+    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; nextBillingDate?: string; lines: { edges: { node: { title: string } }[] } } }[] }; orders: { edges: { node: { lineItems: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
     console.log('Admin API result:', JSON.stringify(body).slice(0, 600));
     const cust = body?.data?.customers?.edges?.[0]?.node;
-    if (!cust) return false;
+    if (!cust) return { hasSub: false };
 
-    const hasSub = cust.subscriptionContracts.edges.some(({ node: n }) =>
-      ['ACTIVE', 'PAUSED'].includes(n.status) &&
-      n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
-    );
+    let nextBillingDate: string | undefined;
+    const hasSub = cust.subscriptionContracts.edges.some(({ node: n }) => {
+      const match = ['ACTIVE', 'PAUSED'].includes(n.status) &&
+        n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD));
+      if (match && n.nextBillingDate) nextBillingDate = n.nextBillingDate;
+      return match;
+    });
     const hasOrder = cust.orders.edges.some(({ node: o }) =>
       o.lineItems.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
     );
-    console.log('Admin API hasSub:', hasSub, 'hasOrder:', hasOrder);
-    return hasSub || hasOrder;
+    console.log('Admin API hasSub:', hasSub, 'hasOrder:', hasOrder, 'nextBillingDate:', nextBillingDate);
+    return { hasSub: hasSub || hasOrder, nextBillingDate };
   } catch (e) {
     console.error('Admin API check error:', e);
-    return false;
+    return { hasSub: false };
   }
 }
 
@@ -224,15 +226,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }));
 
   // If Customer Account API found no active subscription, try Admin API
-  const finalHasSub = hasSub || hasOrder || (
-    (!hasSub && !hasOrder) ? await adminHasSubscription(cust.emailAddress?.emailAddress ?? email) : false
-  );
+  const custEmail = cust.emailAddress?.emailAddress ?? email;
+  let finalHasSub = hasSub || hasOrder;
+  let subscriptionExpiresAt: string | undefined;
+  if (!finalHasSub) {
+    const adminResult = await adminCheckSubscription(custEmail);
+    finalHasSub = adminResult.hasSub;
+    subscriptionExpiresAt = adminResult.nextBillingDate;
+  }
 
   return res.status(200).json({
-    token:           tokens.access_token,
+    token:                tokens.access_token,
     expiresAt,
-    email:           cust.emailAddress?.emailAddress ?? email,
-    firstName:       cust.firstName ?? '',
-    hasSubscription: finalHasSub,
+    email:                custEmail,
+    firstName:            cust.firstName ?? '',
+    hasSubscription:      finalHasSub,
+    subscriptionExpiresAt,
   });
 }

@@ -6,10 +6,15 @@ interface TopBarProps {
   onLogout?: () => void;
   userEmail?: string;
   firstName?: string;
+  subscriptionExpiresAt?: string;
 }
 
-export function TopBar({ onExport, onLogout, userEmail, firstName }: TopBarProps) {
-  const { theme, setTheme, imageFileName, originalImage } = useStore();
+export function TopBar({ onExport, onLogout, userEmail, firstName, subscriptionExpiresAt }: TopBarProps) {
+  const { theme, setTheme, imageFileName, originalImage, clearImage } = useStore();
+
+  const daysRemaining = subscriptionExpiresAt
+    ? Math.ceil((new Date(subscriptionExpiresAt).getTime() - Date.now()) / 86_400_000)
+    : null;
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -30,6 +35,22 @@ export function TopBar({ onExport, onLogout, userEmail, firstName }: TopBarProps
 
       {imageFileName && (
         <span className="topbar-filename">{imageFileName}</span>
+      )}
+
+      {originalImage && (
+        <button
+          className="btn btn-ghost"
+          onClick={clearImage}
+          title="Clear image and start over"
+          style={{ fontSize: 11, fontFamily: 'var(--font-mono)', opacity: 0.6, marginLeft: 4 }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.6')}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 4 }}>
+            <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
+          </svg>
+          New
+        </button>
       )}
 
       <div className="topbar-spacer" />
@@ -73,6 +94,14 @@ export function TopBar({ onExport, onLogout, userEmail, firstName }: TopBarProps
           }}>
             {displayName}
           </span>
+          {daysRemaining !== null && daysRemaining > 0 && (
+            <span style={{
+              fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+              whiteSpace: 'nowrap', opacity: 0.7,
+            }}>
+              {daysRemaining}d
+            </span>
+          )}
           {onLogout && (
             <button
               onClick={onLogout}

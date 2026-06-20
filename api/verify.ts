@@ -8,7 +8,7 @@ const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLo
 
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
-async function adminHasSubscription(email: string): Promise<boolean> {
+async function adminCheckSubscription(email: string): Promise<{ hasSub: boolean; nextBillingDate?: string }> {
   try {
     const r = await fetch(ADM_URL, {
       method: 'POST',
@@ -20,6 +20,7 @@ async function adminHasSubscription(email: string): Promise<boolean> {
               subscriptionContracts(first: 20) {
                 edges { node {
                   status
+                  nextBillingDate
                   lines(first: 10) { edges { node { title } } }
                 } }
               }
@@ -34,18 +35,21 @@ async function adminHasSubscription(email: string): Promise<boolean> {
         variables: { q: `email:${email}` },
       }),
     });
-    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; lines: { edges: { node: { title: string } }[] } } }[] }; orders: { edges: { node: { lineItems: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
+    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; nextBillingDate?: string; lines: { edges: { node: { title: string } }[] } } }[] }; orders: { edges: { node: { lineItems: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
     const cust = body?.data?.customers?.edges?.[0]?.node;
-    if (!cust) return false;
-    const hasSub = cust.subscriptionContracts.edges.some(({ node: n }) =>
-      ['ACTIVE', 'PAUSED'].includes(n.status) &&
-      n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
-    );
+    if (!cust) return { hasSub: false };
+    let nextBillingDate: string | undefined;
+    const hasSub = cust.subscriptionContracts.edges.some(({ node: n }) => {
+      const match = ['ACTIVE', 'PAUSED'].includes(n.status) &&
+        n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD));
+      if (match && n.nextBillingDate) nextBillingDate = n.nextBillingDate;
+      return match;
+    });
     const hasOrder = cust.orders.edges.some(({ node: o }) =>
       o.lineItems.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
     );
-    return hasSub || hasOrder;
-  } catch { return false; }
+    return { hasSub: hasSub || hasOrder, nextBillingDate };
+  } catch { return { hasSub: false }; }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -128,13 +132,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   );
 
   const email = cust.emailAddress?.emailAddress ?? '';
-  const finalHasSub = hasSub || hasOrder ||
-    ((!hasSub && !hasOrder) ? await adminHasSubscription(email) : false);
+  let finalHasSub = hasSub || hasOrder;
+  let subscriptionExpiresAt: string | undefined;
+  if (!finalHasSub) {
+    const adminResult = await adminCheckSubscription(email);
+    finalHasSub = adminResult.hasSub;
+    subscriptionExpiresAt = adminResult.nextBillingDate;
+  }
 
   return res.status(200).json({
-    valid:           true,
-    hasSubscription: finalHasSub,
+    valid:                true,
+    hasSubscription:      finalHasSub,
+    subscriptionExpiresAt,
     email,
-    firstName:       cust.firstName ?? '',
+    firstName:            cust.firstName ?? '',
   });
 }
