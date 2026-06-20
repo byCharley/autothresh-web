@@ -5,6 +5,9 @@ const STORE_DOMAIN    = process.env.SHOPIFY_STORE_DOMAIN!;
 const ADM_TOKEN       = process.env.shopify_private_access_token!;
 const ADM_URL         = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json`;
 const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
+const TESTER_EMAILS   = new Set(
+  (process.env.TESTER_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+);
 
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
@@ -114,6 +117,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const adminResult = await adminCheckSubscription(email);
     finalHasSub = adminResult.hasSub;
     subscriptionExpiresAt = adminResult.nextBillingDate;
+  }
+
+  // Tester email override — grants access without a subscription
+  if (!finalHasSub && TESTER_EMAILS.has(email.toLowerCase())) {
+    finalHasSub = true;
+    subscriptionExpiresAt = undefined;
   }
 
   return res.status(200).json({
