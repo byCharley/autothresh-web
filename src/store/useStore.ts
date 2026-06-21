@@ -261,7 +261,17 @@ export const useStore = create<AppState>((set) => ({
     if (s.layers.length >= 6) return s;
     const src = s.layers.find((l) => l.id === id);
     if (!src) return s;
-    const copy: typeof src = { ...src, id: `layer-${Date.now()}`, name: `${src.name} copy` };
+    // Numbered naming: "Shadows" → "Shadows 01", "Shadows 01" → "Shadows 02"
+    const stemMatch = src.name.match(/^(.*?)\s+(\d+)$/);
+    const stem = stemMatch ? stemMatch[1] : src.name;
+    const stemEsc = stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`^${stemEsc}\\s+(\\d+)$`);
+    const usedNums = s.layers
+      .map(l => { const m = l.name.match(re); return m ? parseInt(m[1], 10) : null; })
+      .filter((n): n is number => n !== null);
+    const nextNum = usedNums.length === 0 ? 1 : Math.max(...usedNums) + 1;
+    const newName = `${stem} ${String(nextNum).padStart(2, '0')}`;
+    const copy: typeof src = { ...src, id: `layer-${Date.now()}`, name: newName };
     const idx = s.layers.indexOf(src);
     return {
       layers: [...s.layers.slice(0, idx + 1), copy, ...s.layers.slice(idx + 1)],

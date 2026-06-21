@@ -623,6 +623,22 @@ export function processImage(
   return results;
 }
 
+// Upper layers knock out pixels from lower layers to prevent ink stacking.
+// Call this AFTER applying paint masks so user overrides participate correctly.
+export function applyKnockout(layers: ProcessedLayer[]): void {
+  if (layers.length < 2) return;
+  const n = layers[0].mask.length;
+  for (let i = 0; i < layers.length - 1; i++) {
+    if (!layers[i].visible) continue;
+    for (let j = i + 1; j < layers.length; j++) {
+      if (!layers[j].visible) continue;
+      for (let k = 0; k < n; k++) {
+        if (layers[j].mask[k] === 255) layers[i].mask[k] = 0;
+      }
+    }
+  }
+}
+
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
 export function renderComposite(

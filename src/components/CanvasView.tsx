@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useStore } from '../store/useStore';
 import {
-  processImage, renderComposite, scaleImageData, scaleImageDataExact,
+  processImage, applyKnockout, renderComposite, scaleImageData, scaleImageDataExact,
   computeBackgroundMask, detectBackgroundColor, hexToRgb, registerPatternTexture,
   cmykSeparate, renderCmykComposite, contrastColor,
 } from '../engine/imageProcessor';
@@ -203,7 +203,8 @@ export function CanvasView() {
           artComposite = renderCmykComposite(visibleLayers, artPrevW, artPrevH, localBgMask);
         } else {
           const resolved = resolvePatterns(layers, globalPattern);
-          const processed = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
+          // Run without knockout so paint masks can be applied first, then knock out
+          const processed = processImage(artScaled, resolved, false, localBgMask, imageAdjustments);
 
           if (textureEnabled) {
             const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
@@ -214,7 +215,7 @@ export function CanvasView() {
             }
           }
 
-          // Apply paint masks
+          // Apply paint masks BEFORE knockout so user overrides participate in ink dropout
           for (const layer of processed) {
             const pm = paintMasks[layer.id];
             if (!pm) continue;
@@ -223,6 +224,9 @@ export function CanvasView() {
               else if (pm[i] === 2) layer.mask[i] = 0;
             }
           }
+
+          // Knockout: upper layers remove matching pixels from lower layers
+          if (knockoutEnabled) applyKnockout(processed);
 
           // Expand extra colors: each extra color becomes a copy of the processed layer
           const expanded = processed.flatMap((pl) => {
@@ -333,6 +337,7 @@ export function CanvasView() {
   useEffect(() => {
     if (paintMode === 'off') return;
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
       if (e.key === '[') setBrushSize(brushSizeRef.current - 5);
       else if (e.key === ']') setBrushSize(brushSizeRef.current + 5);
     };
@@ -343,6 +348,7 @@ export function CanvasView() {
   // Spacebar: hold to temporarily pan instead of paint.
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
         spaceHeldRef.current = true;
@@ -366,6 +372,7 @@ export function CanvasView() {
   // Ctrl/Cmd+Z: undo the last paint stroke on the selected layer.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'INPUT') return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         if (!selectedLayerId) return;

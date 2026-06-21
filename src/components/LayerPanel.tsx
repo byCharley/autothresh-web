@@ -593,6 +593,15 @@ const CMYK_CARD_DEFS = [
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export function LayerPanel() {
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const commitLayerName = (id: string) => {
+    if (editValue.trim()) updateLayer(id, { name: editValue.trim() });
+    setEditingLayerId(null);
+    setEditValue('');
+  };
+
   const {
     layers, selectedLayerId, selectLayer, updateLayer,
     previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
@@ -750,13 +759,47 @@ export function LayerPanel() {
                     </div>
                     <div className="layer-card-info" style={{ flex: 1, minWidth: 0 }}>
                       <div className="layer-card-name" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {layer.name}
-                        {paintMasks[layer.id] && (
-                          <div title="Has paint mask" style={{
-                            width: 6, height: 6, borderRadius: '50%',
-                            background: paintMode !== 'off' ? '#50c878' : 'var(--text-dim)',
-                            flexShrink: 0,
-                          }} />
+                        {editingLayerId === layer.id ? (
+                          <input
+                            autoFocus
+                            value={editValue}
+                            style={{
+                              background: 'none', border: 'none',
+                              outline: '1px solid var(--accent)',
+                              color: 'inherit', fontSize: 'inherit',
+                              fontFamily: 'inherit', fontWeight: 'inherit',
+                              padding: '0 2px', width: '100%', borderRadius: 2,
+                            }}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={() => commitLayerName(layer.id)}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === 'Enter') commitLayerName(layer.id);
+                              if (e.key === 'Escape') { setEditingLayerId(null); setEditValue(''); }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <>
+                            <span
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                setEditingLayerId(layer.id);
+                                setEditValue(layer.name);
+                              }}
+                              title="Double-click to rename"
+                              style={{ cursor: 'text' }}
+                            >
+                              {layer.name}
+                            </span>
+                            {paintMasks[layer.id] && (
+                              <div title="Has paint mask" style={{
+                                width: 6, height: 6, borderRadius: '50%',
+                                background: paintMode !== 'off' ? '#50c878' : 'var(--text-dim)',
+                                flexShrink: 0,
+                              }} />
+                            )}
+                          </>
                         )}
                       </div>
                       <div className="layer-card-sub">

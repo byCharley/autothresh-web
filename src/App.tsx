@@ -15,7 +15,7 @@ import { ExportModal } from './components/ExportModal';
 import type { ExportConfig } from './components/ExportModal';
 import { useStore } from './store/useStore';
 import {
-  processImage, renderComposite, renderCmykComposite, drawRegistrationMarks, computeBackgroundMask,
+  processImage, applyKnockout, renderComposite, renderCmykComposite, drawRegistrationMarks, computeBackgroundMask,
   cmykSeparate, contrastColor, hexToRgb,
 } from './engine/imageProcessor';
 import type { LayerConfig, PatternConfig, ProcessedLayer } from './engine/imageProcessor';
@@ -127,7 +127,7 @@ function App() {
       artLayers = cmykSeparate(artImageData, documentDpi / cmykLpi, artBgMask, cmykAngles);
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
-      artLayers = processImage(artImageData, resolved, knockoutEnabled, artBgMask, imageAdjustments, exportScaleFactor);
+      artLayers = processImage(artImageData, resolved, false, artBgMask, imageAdjustments, exportScaleFactor);
       if (textureEnabled) {
         const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
         for (const layer of artLayers) {
@@ -157,6 +157,9 @@ function App() {
         }
       }
     }
+
+    // Knockout after paint masks — upper layers remove pixels from lower layers
+    if (separationMode !== 'cmyk' && knockoutEnabled) applyKnockout(artLayers);
 
     // Expand extra colors at export resolution
     if (separationMode !== 'cmyk') {
