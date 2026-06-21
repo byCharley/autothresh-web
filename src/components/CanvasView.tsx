@@ -37,6 +37,7 @@ function RegMark({ x, y, size }: { x: number; y: number; size: number }) {
 export function CanvasView() {
   const canvasRef        = useRef<HTMLCanvasElement>(null);
   const paintOverlayRef  = useRef<HTMLCanvasElement>(null);
+  const brushSizeRef     = useRef(20);
   const containerRef     = useRef<HTMLDivElement>(null);
   const fileInputRef     = useRef<HTMLInputElement>(null);
   const artboardStageRef = useRef<HTMLDivElement>(null);
@@ -321,6 +322,20 @@ export function CanvasView() {
     }
     octx.putImageData(imgData, artworkBounds.x, artworkBounds.y);
   }, [paintMasks, selectedLayerId, artworkBounds, canvasDims]);
+
+  // Keep brushSizeRef in sync so the key handler always has the latest value.
+  brushSizeRef.current = brushSize;
+
+  // [ ] bracket keys to resize brush when paint mode is active.
+  useEffect(() => {
+    if (paintMode === 'off') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '[') setBrushSize(brushSizeRef.current - 5);
+      else if (e.key === ']') setBrushSize(brushSizeRef.current + 5);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [paintMode, setBrushSize]);
 
   // ── File loading ──────────────────────────────────────────────────────────────
 
@@ -700,35 +715,62 @@ export function CanvasView() {
             {originalImage && (
               <>
                 <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                {/* Paint button */}
                 <button
-                  className={`btn btn-ghost btn-icon${paintMode !== 'off' ? ' active' : ''}`}
-                  title={paintMode === 'off' ? 'Paint mask' : `${paintMode} — click to disable`}
-                  style={{ color: paintMode === 'paint' ? '#50c878' : paintMode === 'erase' ? '#e05050' : undefined }}
-                  onClick={() => setPaintMode(paintMode === 'off' ? 'paint' : 'off')}
+                  className="btn btn-ghost"
+                  style={{
+                    fontSize: 10, padding: '0 8px', height: 26, gap: 4,
+                    color: paintMode === 'paint' ? '#50c878' : 'var(--text-muted)',
+                    background: paintMode === 'paint' ? 'rgba(80,200,80,0.12)' : undefined,
+                    border: paintMode === 'paint' ? '1px solid rgba(80,200,80,0.3)' : '1px solid transparent',
+                  }}
+                  title="Paint — add pixels to the selected layer"
+                  onClick={() => setPaintMode(paintMode === 'paint' ? 'off' : 'paint')}
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
                     <path d="M2 22l7-7"/><path d="M12.5 2.5l9 9-7 7-9-9z"/>
                   </svg>
+                  Paint
+                </button>
+                {/* Erase button */}
+                <button
+                  className="btn btn-ghost"
+                  style={{
+                    fontSize: 10, padding: '0 8px', height: 26, gap: 4,
+                    color: paintMode === 'erase' ? '#e05050' : 'var(--text-muted)',
+                    background: paintMode === 'erase' ? 'rgba(200,60,60,0.12)' : undefined,
+                    border: paintMode === 'erase' ? '1px solid rgba(200,60,60,0.3)' : '1px solid transparent',
+                  }}
+                  title="Erase — remove pixels from the selected layer"
+                  onClick={() => setPaintMode(paintMode === 'erase' ? 'off' : 'erase')}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
+                    <path d="M20 20H7L3 16l11-11 7 7-1 8z"/><line x1="6" y1="14" x2="14" y2="6"/>
+                  </svg>
+                  Erase
                 </button>
                 {paintMode !== 'off' && (
                   <>
-                    <button
-                      className="btn btn-ghost"
-                      style={{ fontSize: 10, padding: '0 7px', height: 26, color: paintMode === 'erase' ? '#e05050' : '#50c878' }}
-                      onClick={() => setPaintMode(paintMode === 'paint' ? 'erase' : 'paint')}
-                    >
-                      {paintMode === 'paint' ? 'Paint' : 'Erase'}
-                    </button>
+                    <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
                     <input
                       type="range" min={2} max={120} value={brushSize}
-                      style={{ width: 64 }}
+                      style={{ width: 60 }}
                       onChange={(e) => setBrushSize(Number(e.target.value))}
-                      title={`Brush size: ${brushSize}px`}
+                      title={`Brush: ${brushSize}px  ·  [ to shrink  ] to grow`}
                     />
+                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 20 }}
+                      title="Use [ and ] keys to resize">
+                      {brushSize}
+                    </span>
+                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', opacity: 0.5 }}
+                      title="[ to shrink, ] to grow">
+                      [ ]
+                    </span>
                     {selectedLayerId && paintMasks[selectedLayerId] && (
                       <button
                         className="btn btn-ghost"
                         style={{ fontSize: 10, padding: '0 7px', height: 26, color: 'var(--text-dim)' }}
+                        title="Clear all paint on this layer"
                         onClick={() => clearPaintMask(selectedLayerId)}
                       >Clear</button>
                     )}

@@ -598,8 +598,7 @@ export function LayerPanel() {
     previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
     separationMode, setSeparationMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
-    addLayer, removeLayer, paintMasks, paintMode,
-    addLayerColor, removeLayerColor, updateLayerExtraColor,
+    addLayer, removeLayer, duplicateLayer, paintMasks, paintMode,
     globalPattern,
   } = useStore();
 
@@ -731,7 +730,6 @@ export function LayerPanel() {
               {[...layers].reverse().map((layer) => {
                 const appliedPattern = layer.useGlobalPattern ? globalPattern.pattern : layer.pattern;
                 const patternLabel = appliedPattern === 'none' ? '' : appliedPattern.startsWith('halftone') ? 'halftone' : appliedPattern;
-                const extras = layer.extraColors ?? [];
                 return (
                 <div
                   key={layer.id}
@@ -767,6 +765,20 @@ export function LayerPanel() {
                       </div>
                     </div>
                     <div className="layer-card-actions">
+                      {layers.length < 6 && (
+                        <button
+                          className="vis-btn"
+                          title="Duplicate layer — copy range, then erase what you don't want"
+                          onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }}
+                          style={{ color: 'var(--text-dim)', opacity: 0.5 }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.5')}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                          </svg>
+                        </button>
+                      )}
                       {layers.length > 1 && (
                         <button
                           className="vis-btn"
@@ -781,51 +793,15 @@ export function LayerPanel() {
                           </svg>
                         </button>
                       )}
-                    <button
-                      className={`vis-btn ${!layer.visible ? 'hidden-layer' : ''}`}
-                      onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
-                      title={layer.visible ? 'Hide layer' : 'Show layer'}
-                    >
-                      <EyeIcon visible={layer.visible} />
-                    </button>
-                  </div>
-                  </div>
-                  {/* Extra colors row */}
-                  {(extras.length > 0 || true) && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 36, paddingBottom: 6 }} onClick={(e) => e.stopPropagation()}>
-                      {extras.map((ec, idx) => (
-                        <div key={idx} style={{ position: 'relative', flexShrink: 0 }}>
-                          <div className="color-swatch-btn" style={{ background: ec, width: 18, height: 18 }}
-                            title={`Extra color ${idx + 1} — click to change`}>
-                            <input type="color" value={ec}
-                              onChange={(e) => updateLayerExtraColor(layer.id, idx, e.target.value)} />
-                          </div>
-                          <button
-                            title="Remove color"
-                            onClick={() => removeLayerColor(layer.id, idx)}
-                            style={{
-                              position: 'absolute', top: -5, right: -5,
-                              width: 12, height: 12, borderRadius: '50%',
-                              background: 'var(--surface-2)', border: '1px solid var(--border)',
-                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 8, lineHeight: 1, color: 'var(--text-muted)', padding: 0,
-                            }}
-                          >×</button>
-                        </div>
-                      ))}
-                      {extras.length < 3 && (
-                        <button
-                          title="Add ink color"
-                          onClick={() => addLayerColor(layer.id)}
-                          style={{
-                            width: 18, height: 18, border: '1px dashed var(--border-2)',
-                            background: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1,
-                            color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          }}
-                        >+</button>
-                      )}
+                      <button
+                        className={`vis-btn ${!layer.visible ? 'hidden-layer' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
+                        title={layer.visible ? 'Hide layer' : 'Show layer'}
+                      >
+                        <EyeIcon visible={layer.visible} />
+                      </button>
                     </div>
-                  )}
+                  </div>
                 </div>
                 );
               })}

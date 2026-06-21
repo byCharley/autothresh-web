@@ -134,9 +134,7 @@ interface AppState {
 
   addLayer: () => void;
   removeLayer: (id: string) => void;
-  addLayerColor: (id: string) => void;
-  removeLayerColor: (id: string, idx: number) => void;
-  updateLayerExtraColor: (id: string, idx: number, color: string) => void;
+  duplicateLayer: (id: string) => void;
   setPaintMask: (layerId: string, mask: Uint8Array | null) => void;
   clearPaintMask: (layerId: string) => void;
   setPaintMode: (mode: 'off' | 'paint' | 'erase') => void;
@@ -259,23 +257,16 @@ export const useStore = create<AppState>((set) => ({
         : s.selectedLayerId,
     };
   }),
-  addLayerColor: (id) => set((s) => ({
-    layers: s.layers.map((l) =>
-      l.id === id && (l.extraColors ?? []).length < 3
-        ? { ...l, extraColors: [...(l.extraColors ?? []), '#888888'] }
-        : l
-    ),
-  })),
-  removeLayerColor: (id, idx) => set((s) => ({
-    layers: s.layers.map((l) =>
-      l.id === id ? { ...l, extraColors: (l.extraColors ?? []).filter((_, i) => i !== idx) } : l
-    ),
-  })),
-  updateLayerExtraColor: (id, idx, color) => set((s) => ({
-    layers: s.layers.map((l) =>
-      l.id === id ? { ...l, extraColors: (l.extraColors ?? []).map((c, i) => (i === idx ? color : c)) } : l
-    ),
-  })),
+  duplicateLayer: (id) => set((s) => {
+    if (s.layers.length >= 6) return s;
+    const src = s.layers.find((l) => l.id === id);
+    if (!src) return s;
+    const copy: typeof src = { ...src, id: `layer-${Date.now()}`, name: `${src.name} copy` };
+    const idx = s.layers.indexOf(src);
+    return {
+      layers: [...s.layers.slice(0, idx + 1), copy, ...s.layers.slice(idx + 1)],
+    };
+  }),
   setPaintMask: (layerId, mask) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: mask } })),
   clearPaintMask: (layerId) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: null } })),
   setPaintMode: (paintMode) => set({ paintMode }),
