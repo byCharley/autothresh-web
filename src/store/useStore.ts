@@ -7,6 +7,15 @@ const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
   exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0,
 };
 
+function redistributeThresholds(layers: LayerConfig[]): LayerConfig[] {
+  const n = layers.length;
+  return layers.map((l, i) => ({
+    ...l,
+    thresholdMin: i === 0 ? 0 : Math.floor(i * 256 / n),
+    thresholdMax: i === n - 1 ? 255 : Math.floor((i + 1) * 256 / n) - 1,
+  }));
+}
+
 const DEFAULT_GLOBAL_PATTERN: PatternConfig = {
   pattern: 'noise',
   patternScale: 1,
@@ -45,9 +54,6 @@ const DEFAULT_LAYERS: LayerConfig[] = [
   },
 ];
 
-// Layer order for palette assignment (dark → light)
-const PALETTE_LAYER_ORDER = ['shadows', 'midtones', 'highlights', 'specular'];
-
 interface AppState {
   theme: 'dark' | 'light';
 
@@ -85,6 +91,10 @@ interface AppState {
   palettePool: string[][];
   activePaletteIdx: number;
 
+  paintMasks: Record<string, Uint8Array | null>;
+  paintMode: 'off' | 'paint' | 'erase';
+  brushSize: number;
+
   separationMode: SeparationMode;
   cmykLpi: number;
   cmykVisibility: Record<string, boolean>;
@@ -121,6 +131,14 @@ interface AppState {
   resetImageAdjustments: () => void;
   setPalettePool: (palettes: string[][]) => void;
   applyPalette: (idx: number) => void;
+
+  addLayer: () => void;
+  removeLayer: (id: string) => void;
+  setPaintMask: (layerId: string, mask: Uint8Array | null) => void;
+  clearPaintMask: (layerId: string) => void;
+  setPaintMode: (mode: 'off' | 'paint' | 'erase') => void;
+  setBrushSize: (size: number) => void;
+
   setSeparationMode: (v: SeparationMode) => void;
   setCmykLpi: (v: number) => void;
   setCmykLayerVisible: (id: string, v: boolean) => void;
@@ -159,6 +177,9 @@ export const useStore = create<AppState>((set) => ({
   imageAdjustments: { ...DEFAULT_IMAGE_ADJ },
   palettePool: [],
   activePaletteIdx: 0,
+  paintMasks: {},
+  paintMode: 'off',
+  brushSize: 20,
   separationMode: 'threshold',
   cmykLpi: 65,
   cmykVisibility: { 'cmyk-k': true, 'cmyk-c': false, 'cmyk-m': false, 'cmyk-y': false },
@@ -171,7 +192,7 @@ export const useStore = create<AppState>((set) => ({
   setOriginalImage: (originalImage, previewImage, imageFileName) =>
     set({ originalImage, previewImage, imageFileName, bgMask: null, palettePool: [], activePaletteIdx: 0 }),
   clearImage: () =>
-    set({ originalImage: null, previewImage: null, processedLayers: [], imageFileName: '', bgMask: null, palettePool: [], activePaletteIdx: 0 }),
+    set({ originalImage: null, previewImage: null, processedLayers: [], imageFileName: '', bgMask: null, palettePool: [], activePaletteIdx: 0, paintMasks: {} }),
   updateLayer: (id, updates) =>
     set((s) => ({ layers: s.layers.map((l) => (l.id === id ? { ...l, ...updates } : l)) })),
   selectLayer: (selectedLayerId) => set({ selectedLayerId }),
@@ -201,13 +222,44 @@ export const useStore = create<AppState>((set) => ({
   setPalettePool: (palettePool) => set({ palettePool }),
   applyPalette: (idx) => set((s) => {
     const palette = s.palettePool[idx];
-    if (!palette || palette.length < 4) return { activePaletteIdx: idx };
-    const updatedLayers = s.layers.map((l) => {
-      const pi = PALETTE_LAYER_ORDER.indexOf(l.id);
-      return pi >= 0 ? { ...l, color: palette[pi] } : l;
-    });
+    if (!palette || palette.length === 0) return { activePaletteIdx: idx };
+    const updatedLayers = s.layers.map((l, i) => ({
+      ...l,
+      color: i < palette.length ? palette[i] : l.color,
+    }));
     return { layers: updatedLayers, activePaletteIdx: idx };
   }),
+  addLayer: () => set((s) => {
+    if (s.layers.length >= 6) return s;
+    const DEFAULT_NEW_COLORS = ['#1A3A5C', '#6B4C9A', '#C84B1E', '#2A8C5A', '#E8C520', '#C84880'];
+    const newLayer: LayerConfig = {
+      id: `layer-${Date.now()}`,
+      name: `Layer ${s.layers.length + 1}`,
+      color: DEFAULT_NEW_COLORS[s.layers.length % DEFAULT_NEW_COLORS.length],
+      visible: true,
+      thresholdMin: 0, thresholdMax: 0,
+      exposure: 0, blur: 0,
+      useGlobalPattern: true,
+      pattern: 'halftone-round', patternScale: 4, patternAngle: 45, patternDensity: 70,
+    };
+    return { layers: redistributeThresholds([...s.layers, newLayer]) };
+  }),
+  removeLayer: (id) => set((s) => {
+    if (s.layers.length <= 1) return s;
+    const newLayers = s.layers.filter((l) => l.id !== id);
+    const { [id]: _removed, ...remainingMasks } = s.paintMasks;
+    return {
+      layers: redistributeThresholds(newLayers),
+      paintMasks: remainingMasks,
+      selectedLayerId: s.selectedLayerId === id
+        ? (newLayers[newLayers.length - 1]?.id ?? null)
+        : s.selectedLayerId,
+    };
+  }),
+  setPaintMask: (layerId, mask) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: mask } })),
+  clearPaintMask: (layerId) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: null } })),
+  setPaintMode: (paintMode) => set({ paintMode }),
+  setBrushSize: (brushSize) => set({ brushSize: Math.max(2, Math.min(120, brushSize)) }),
   setSeparationMode: (separationMode) => set((s) => ({
     separationMode,
     // Reset to K-only plate view each time CMYK mode is entered

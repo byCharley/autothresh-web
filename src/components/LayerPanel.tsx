@@ -598,6 +598,7 @@ export function LayerPanel() {
     previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
     separationMode, setSeparationMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
+    addLayer, removeLayer, paintMasks, paintMode,
   } = useStore();
 
   const handleAutoPalette = () => {
@@ -742,13 +743,36 @@ export function LayerPanel() {
                     />
                   </div>
                   <div className="layer-card-info">
-                    <div className="layer-card-name">{layer.name}</div>
+                    <div className="layer-card-name" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {layer.name}
+                      {paintMasks[layer.id] && (
+                        <div title="Has paint mask" style={{
+                          width: 6, height: 6, borderRadius: '50%',
+                          background: paintMode !== 'off' ? '#50c878' : 'var(--text-dim)',
+                          flexShrink: 0,
+                        }} />
+                      )}
+                    </div>
                     <div className="layer-card-sub">
                       {layer.thresholdMin}–{layer.thresholdMax}
                       {layer.pattern !== 'none' && ` · ${layer.pattern}`}
                     </div>
                   </div>
                   <div className="layer-card-actions">
+                    {layers.length > 1 && (
+                      <button
+                        className="vis-btn"
+                        title="Remove layer"
+                        onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }}
+                        style={{ color: 'var(--text-dim)', opacity: 0.5 }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.5')}
+                      >
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    )}
                     <button
                       className={`vis-btn ${!layer.visible ? 'hidden-layer' : ''}`}
                       onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
@@ -760,6 +784,17 @@ export function LayerPanel() {
                 </div>
               ))}
             </div>
+
+            {/* Add layer button */}
+            {layers.length < 6 && (
+              <button
+                className="btn btn-ghost"
+                style={{ width: '100%', height: 28, fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', marginTop: 2 }}
+                onClick={() => addLayer()}
+              >
+                + Add Layer
+              </button>
+            )}
 
             {/* Auto Palette */}
             {previewImage && (

@@ -63,6 +63,7 @@ function App() {
     documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     separationMode, cmykLpi, cmykAngles,
+    paintMasks,
   } = useStore();
 
   useEffect(() => {
@@ -133,6 +134,26 @@ function App() {
           for (let i = 0; i < layer.mask.length; i++) {
             if (texMask[i] === 0) layer.mask[i] = 0;
           }
+        }
+      }
+    }
+
+    // Apply paint masks (scale from preview to export resolution)
+    const pds2 = Math.min(MAX_PREVIEW_DIM / Math.max(artScaleW, artScaleH), 1.0);
+    const pmW = Math.round(artScaleW * pds2);
+    const pmH = Math.round(artScaleH * pds2);
+    const pmScaleX = artScaleW / Math.max(1, pmW);
+    const pmScaleY = artScaleH / Math.max(1, pmH);
+    for (const layer of artLayers) {
+      const pm = paintMasks[layer.id];
+      if (!pm) continue;
+      for (let y = 0; y < artScaleH; y++) {
+        for (let x = 0; x < artScaleW; x++) {
+          const sx = Math.min(pmW - 1, Math.floor(x / pmScaleX));
+          const sy = Math.min(pmH - 1, Math.floor(y / pmScaleY));
+          const pv = pm[sy * pmW + sx];
+          if (pv === 1) layer.mask[y * artScaleW + x] = 255;
+          else if (pv === 2) layer.mask[y * artScaleW + x] = 0;
         }
       }
     }

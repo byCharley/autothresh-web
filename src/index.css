@@ -173,6 +173,7 @@ html, body, #root {
   border-color: transparent;
 }
 .btn-ghost:hover { background: var(--surface-2); border-color: var(--border); }
+.btn-ghost.active { background: var(--surface-2); border-color: var(--border); }
 
 .btn-icon {
   padding: 0;

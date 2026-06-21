@@ -36,10 +36,14 @@ function RegMark({ x, y, size }: { x: number; y: number; size: number }) {
 
 export function CanvasView() {
   const canvasRef        = useRef<HTMLCanvasElement>(null);
+  const paintOverlayRef  = useRef<HTMLCanvasElement>(null);
   const containerRef     = useRef<HTMLDivElement>(null);
   const fileInputRef     = useRef<HTMLInputElement>(null);
   const artboardStageRef = useRef<HTMLDivElement>(null);
   const dimTimerRef      = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const paintDraftRef    = useRef<Uint8Array | null>(null);
+  const paintDraftDimsRef = useRef({ w: 0, h: 0 });
+  const isPaintingRef    = useRef(false);
 
   const {
     originalImage, previewImage, layers, knockoutEnabled,
@@ -51,7 +55,9 @@ export function CanvasView() {
     imageAdjustments,
     documentDpi, documentWidthIn, documentHeightIn,
     separationMode, cmykLpi, cmykVisibility, cmykAngles,
+    paintMasks, paintMode, brushSize, selectedLayerId,
     isProcessing, setOriginalImage, setProcessedLayers, setIsProcessing, setCanvasColor,
+    setPaintMask, setPaintMode, setBrushSize, clearPaintMask,
   } = useStore();
 
   // Increments when real texture PNGs finish loading so the processing effect reruns.
@@ -201,6 +207,16 @@ export function CanvasView() {
             }
           }
 
+          // Apply paint masks
+          for (const layer of processed) {
+            const pm = paintMasks[layer.id];
+            if (!pm) continue;
+            for (let i = 0; i < layer.mask.length; i++) {
+              if (pm[i] === 1) layer.mask[i] = 255;
+              else if (pm[i] === 2) layer.mask[i] = 0;
+            }
+          }
+
           setProcessedLayers(processed);
           artComposite = renderComposite(processed, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
         }
@@ -237,6 +253,7 @@ export function CanvasView() {
     textureVersion,
     documentWidthIn, documentHeightIn, documentDpi,
     separationMode, cmykLpi, cmykVisibility, cmykAngles,
+    paintMasks,
     // renderDim intentionally excluded — zoom must never trigger a reprocess
   ]);
 
@@ -272,6 +289,12 @@ export function CanvasView() {
     if (stage) obs.observe(stage);
     return () => obs.disconnect();
   }, [documentWidthIn, documentHeightIn]);
+
+  // Clear paint overlay when canvas dimensions change (new image loaded).
+  useEffect(() => {
+    const octx = paintOverlayRef.current?.getContext('2d');
+    if (octx && canvasDims.w > 0) octx.clearRect(0, 0, canvasDims.w, canvasDims.h);
+  }, [canvasDims]);
 
   // ── File loading ──────────────────────────────────────────────────────────────
 
@@ -314,11 +337,69 @@ export function CanvasView() {
     });
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!originalImage) return;
-    setIsDragging(true);
-    // Store anchor as (clientX - current offset) so move can recompute offset = clientX - anchor.
-    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+  // ── Paint helpers ─────────────────────────────────────────────────────────────
+
+  function paintCircleOnMask(mask: Uint8Array, w: number, h: number, cx: number, cy: number, r: number, val: 1 | 2) {
+    const r2 = r * r;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r2) continue;
+        const px = Math.round(cx + dx), py = Math.round(cy + dy);
+        if (px < 0 || px >= w || py < 0 || py >= h) continue;
+        mask[py * w + px] = val;
+      }
+    }
+  }
+
+  function getArtworkCoords(e: React.MouseEvent): { cx: number; cy: number } | null {
+    if (!canvasRef.current || !artworkBounds) return null;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const canvasX = (e.clientX - rect.left) / cssScale;
+    const canvasY = (e.clientY - rect.top) / cssScale;
+    return { cx: canvasX - artworkBounds.x, cy: canvasY - artworkBounds.y };
+  }
+
+  const applyPaintPoint = (e: React.MouseEvent) => {
+    const coords = getArtworkCoords(e);
+    if (!coords || !isPaintingRef.current || !paintDraftRef.current) return;
+    const { cx, cy } = coords;
+    const { w, h } = paintDraftDimsRef.current;
+    const val: 1 | 2 = paintMode === 'paint' ? 1 : 2;
+    paintCircleOnMask(paintDraftRef.current, w, h, cx, cy, brushSize, val);
+    const octx = paintOverlayRef.current?.getContext('2d');
+    if (octx) {
+      octx.beginPath();
+      octx.arc(cx + (artworkBounds?.x ?? 0), cy + (artworkBounds?.y ?? 0), brushSize, 0, Math.PI * 2);
+      octx.fillStyle = paintMode === 'paint' ? 'rgba(80, 200, 80, 0.45)' : 'rgba(200, 60, 60, 0.45)';
+      octx.fill();
+    }
+  };
+
+  const handlePaintMouseDown = (e: React.MouseEvent) => {
+    if (paintMode === 'off' || !selectedLayerId || !artworkBounds) return;
+    e.stopPropagation();
+    isPaintingRef.current = true;
+    const dims = { w: artworkBounds.w, h: artworkBounds.h };
+    paintDraftDimsRef.current = dims;
+    const existing = paintMasks[selectedLayerId];
+    paintDraftRef.current = existing ? new Uint8Array(existing) : new Uint8Array(dims.w * dims.h);
+    const octx = paintOverlayRef.current?.getContext('2d');
+    if (octx) octx.clearRect(0, 0, canvasDims.w, canvasDims.h);
+    applyPaintPoint(e);
+  };
+
+  const handlePaintMouseMove = (e: React.MouseEvent) => {
+    if (!isPaintingRef.current) return;
+    applyPaintPoint(e);
+  };
+
+  const handlePaintMouseUp = () => {
+    if (!isPaintingRef.current || !selectedLayerId || !paintDraftRef.current) return;
+    isPaintingRef.current = false;
+    setPaintMask(selectedLayerId, paintDraftRef.current);
+    paintDraftRef.current = null;
+    const octx = paintOverlayRef.current?.getContext('2d');
+    if (octx && canvasDims.w > 0) octx.clearRect(0, 0, canvasDims.w, canvasDims.h);
   };
 
   // ── Derived values ─────────────────────────────────────────────────────────────
@@ -384,11 +465,25 @@ export function CanvasView() {
       ref={containerRef}
       className="canvas-view"
       onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
-      onMouseMove={(e) => { if (isDragging) setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); }}
-      onMouseUp={() => setIsDragging(false)}
-      onMouseLeave={() => setIsDragging(false)}
-      style={{ cursor: isDragging ? 'grabbing' : originalImage ? 'grab' : 'default' }}
+      onMouseDown={(e) => {
+        if (paintMode !== 'off') { handlePaintMouseDown(e); return; }
+        if (!originalImage) return;
+        setIsDragging(true);
+        setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+      }}
+      onMouseMove={(e) => {
+        if (paintMode !== 'off') { handlePaintMouseMove(e); return; }
+        if (isDragging) setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+      }}
+      onMouseUp={() => {
+        if (paintMode !== 'off') { handlePaintMouseUp(); return; }
+        setIsDragging(false);
+      }}
+      onMouseLeave={() => {
+        handlePaintMouseUp();
+        setIsDragging(false);
+      }}
+      style={{ cursor: paintMode !== 'off' ? 'crosshair' : isDragging ? 'grabbing' : originalImage ? 'grab' : 'default' }}
     >
       {!originalImage ? (
         <div
@@ -456,6 +551,16 @@ export function CanvasView() {
             {/* image-rendering: auto when canvas size ≥ display (downscale or 1:1 = smooth/sharp).
                 image-rendering: pixelated when canvas is CSS-upscaled past MAX_RENDER_DIM (nearest-neighbor). */}
             <canvas ref={canvasRef} style={{ imageRendering: isPixelated ? 'pixelated' : 'auto' }} />
+            <canvas
+              ref={paintOverlayRef}
+              width={canvasDims.w || 1}
+              height={canvasDims.h || 1}
+              style={{
+                position: 'absolute', top: 0, left: 0,
+                pointerEvents: 'none',
+                opacity: 0.85,
+              }}
+            />
 
             {canvasDims.w > 0 && (artworkBounds || showRegistrationMarks) && (
               <svg style={{
@@ -526,6 +631,45 @@ export function CanvasView() {
                 setOffset({ x: (cw - layout.docPrevW * fitZoom) / 2, y: (ch - layout.docPrevH * fitZoom) / 2 });
               }}
             >Fit</button>
+            {originalImage && (
+              <>
+                <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                <button
+                  className={`btn btn-ghost btn-icon${paintMode !== 'off' ? ' active' : ''}`}
+                  title={paintMode === 'off' ? 'Paint mask' : `${paintMode} — click to disable`}
+                  style={{ color: paintMode === 'paint' ? '#50c878' : paintMode === 'erase' ? '#e05050' : undefined }}
+                  onClick={() => setPaintMode(paintMode === 'off' ? 'paint' : 'off')}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M2 22l7-7"/><path d="M12.5 2.5l9 9-7 7-9-9z"/>
+                  </svg>
+                </button>
+                {paintMode !== 'off' && (
+                  <>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: 10, padding: '0 7px', height: 26, color: paintMode === 'erase' ? '#e05050' : '#50c878' }}
+                      onClick={() => setPaintMode(paintMode === 'paint' ? 'erase' : 'paint')}
+                    >
+                      {paintMode === 'paint' ? 'Paint' : 'Erase'}
+                    </button>
+                    <input
+                      type="range" min={2} max={120} value={brushSize}
+                      style={{ width: 64 }}
+                      onChange={(e) => setBrushSize(Number(e.target.value))}
+                      title={`Brush size: ${brushSize}px`}
+                    />
+                    {selectedLayerId && paintMasks[selectedLayerId] && (
+                      <button
+                        className="btn btn-ghost"
+                        style={{ fontSize: 10, padding: '0 7px', height: 26, color: 'var(--text-dim)' }}
+                        onClick={() => clearPaintMask(selectedLayerId)}
+                      >Clear</button>
+                    )}
+                  </>
+                )}
+              </>
+            )}
           </div>
 
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
