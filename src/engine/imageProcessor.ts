@@ -588,16 +588,7 @@ export function processImage(
     : null;
 
   // ── 3. Per-layer processing ───────────────────────────────────────────────────
-  // For each layer compute both:
-  //   rawMask  — threshold-only (no pattern dither), used for ownership knockout
-  //   patMask  — threshold + pattern dither, the actual ink footprint
-  // Both are computed in a single pixel loop per layer.
-  const rawMasks: Uint8Array[] = [];
-
   const results: ProcessedLayer[] = layers.map((layer, idx) => {
-    const rawMask = new Uint8Array(n);
-    rawMasks.push(rawMask);
-
     if (!layer.visible)
       return { id: layer.id, mask: new Uint8Array(n), color: hexToRgb(layer.color), visible: false };
 
@@ -611,42 +602,22 @@ export function processImage(
       : buildPatternValues(width, height, scaleLayer(layer), idx + 1);
     const strength = (layer.patternDensity / 100) * PATTERN_STRENGTH_MAX;
 
-    const patMask = new Uint8Array(n);
+    const finalMask = new Uint8Array(n);
     for (let i = 0; i < n; i++) {
       if (bgMask && bgMask[i] === 255) continue;
-      // Raw threshold (no dither) — for knockout ownership
-      if (lums[i] >= layer.thresholdMin && lums[i] <= layer.thresholdMax) rawMask[i] = 255;
-      // Pattern-shifted threshold — actual ink placement
       const mod  = patVals ? (patVals[i] - 0.5) * 2 * strength : 0;
       const adjL = Math.max(0, Math.min(255, lums[i] + mod));
-      if (adjL >= layer.thresholdMin && adjL <= layer.thresholdMax) patMask[i] = 255;
+      finalMask[i] = adjL >= layer.thresholdMin && adjL <= layer.thresholdMax ? 255 : 0;
     }
 
-    return { id: layer.id, mask: patMask, color: hexToRgb(layer.color), visible: true };
+    return { id: layer.id, mask: finalMask, color: hexToRgb(layer.color), visible: true };
   });
 
   if (knockoutEnabled) {
-    // Range-based knockout: upper layers own their threshold range entirely.
-    // Knock out raw (un-dithered) masks first to establish pixel ownership…
-    for (let i = 0; i < rawMasks.length - 1; i++) {
-      if (!results[i].visible) continue;
-      for (let j = i + 1; j < rawMasks.length; j++) {
-        if (!results[j].visible) continue;
-        for (let k = 0; k < n; k++) {
-          if (rawMasks[j][k] === 255) rawMasks[i][k] = 0;
-        }
-      }
-    }
-    // …then strip the pattern mask down to owned pixels only.
-    // This prevents lower-layer ink from bleeding through dither gaps in upper layers.
-    for (let i = 0; i < results.length; i++) {
-      if (!results[i].visible) continue;
-      const mask = results[i].mask;
-      const raw  = rawMasks[i];
-      for (let k = 0; k < n; k++) {
-        if (raw[k] === 0) mask[k] = 0;
-      }
-    }
+    for (let i = 0; i < results.length - 1; i++)
+      for (let j = i + 1; j < results.length; j++)
+        for (let k = 0; k < n; k++)
+          if (results[j].mask[k] === 255) results[i].mask[k] = 0;
   }
 
   return results;
