@@ -45,6 +45,8 @@ export function CanvasView() {
   const paintDraftRef    = useRef<Uint8Array | null>(null);
   const paintDraftDimsRef = useRef({ w: 0, h: 0 });
   const isPaintingRef    = useRef(false);
+  const spaceHeldRef     = useRef(false);
+  const undoStackRef     = useRef<Record<string, Array<Uint8Array | null>>>({});
 
   const {
     originalImage, previewImage, layers, knockoutEnabled,
@@ -88,6 +90,7 @@ export function CanvasView() {
 
   // Brush cursor position in canvas-view container coords (display pixels).
   const [brushPos, setBrushPos] = useState<{ x: number; y: number } | null>(null);
+  const [isSpacePanning, setIsSpacePanning] = useState(false);
 
   // Artboard preview (no-image state) driven by ResizeObserver.
   const [artboardSize, setArtboardSize] = useState({ w: 0, h: 0 });
@@ -337,6 +340,46 @@ export function CanvasView() {
     return () => document.removeEventListener('keydown', onKey);
   }, [paintMode, setBrushSize]);
 
+  // Spacebar: hold to temporarily pan instead of paint.
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
+        spaceHeldRef.current = true;
+        setIsSpacePanning(true);
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        spaceHeldRef.current = false;
+        setIsSpacePanning(false);
+      }
+    };
+    document.addEventListener('keydown', onDown);
+    document.addEventListener('keyup', onUp);
+    return () => {
+      document.removeEventListener('keydown', onDown);
+      document.removeEventListener('keyup', onUp);
+    };
+  }, []);
+
+  // Ctrl/Cmd+Z: undo the last paint stroke on the selected layer.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (!selectedLayerId) return;
+        const stack = undoStackRef.current[selectedLayerId];
+        if (!stack || stack.length === 0) return;
+        const prev = stack[stack.length - 1];
+        undoStackRef.current[selectedLayerId] = stack.slice(0, -1);
+        setPaintMask(selectedLayerId, prev ? new Uint8Array(prev) : null);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selectedLayerId, setPaintMask]);
+
   // ── File loading ──────────────────────────────────────────────────────────────
 
   const loadFile = useCallback((file: File) => {
@@ -422,7 +465,10 @@ export function CanvasView() {
     isPaintingRef.current = true;
     const dims = { w: artworkBounds.w, h: artworkBounds.h };
     paintDraftDimsRef.current = dims;
-    const existing = paintMasks[selectedLayerId];
+    const existing = paintMasks[selectedLayerId] ?? null;
+    // Save current mask to undo stack before this stroke
+    const prevStack = undoStackRef.current[selectedLayerId] ?? [];
+    undoStackRef.current[selectedLayerId] = [...prevStack.slice(-19), existing ? new Uint8Array(existing) : null];
     paintDraftRef.current = existing ? new Uint8Array(existing) : new Uint8Array(dims.w * dims.h);
     applyPaintPoint(e);
   };
@@ -438,6 +484,23 @@ export function CanvasView() {
     // Commit to store — the overlay useEffect will redraw from the committed mask
     setPaintMask(selectedLayerId, new Uint8Array(paintDraftRef.current));
     paintDraftRef.current = null;
+  };
+
+  const handleInvertMask = () => {
+    if (!selectedLayerId || !artworkBounds) return;
+    const { w, h } = artworkBounds;
+    const existing = paintMasks[selectedLayerId] ?? null;
+    const newMask = new Uint8Array(w * h);
+    if (!existing) {
+      newMask.fill(2); // empty mask → invert = hide everything, paint back what you want
+    } else {
+      for (let i = 0; i < newMask.length; i++) {
+        newMask[i] = existing[i] === 2 ? 1 : 2; // erased→shown, shown/unset→erased
+      }
+    }
+    const prevStack = undoStackRef.current[selectedLayerId] ?? [];
+    undoStackRef.current[selectedLayerId] = [...prevStack.slice(-19), existing ? new Uint8Array(existing) : null];
+    setPaintMask(selectedLayerId, newMask);
   };
 
   // ── Derived values ─────────────────────────────────────────────────────────────
@@ -504,13 +567,13 @@ export function CanvasView() {
       className="canvas-view"
       onWheel={handleWheel}
       onMouseDown={(e) => {
-        if (paintMode !== 'off') { handlePaintMouseDown(e); return; }
+        if (paintMode !== 'off' && !spaceHeldRef.current) { handlePaintMouseDown(e); return; }
         if (!originalImage) return;
         setIsDragging(true);
         setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
       }}
       onMouseMove={(e) => {
-        if (paintMode !== 'off') {
+        if (paintMode !== 'off' && !spaceHeldRef.current) {
           handlePaintMouseMove(e);
           const rect = containerRef.current?.getBoundingClientRect();
           if (rect) setBrushPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
@@ -520,15 +583,21 @@ export function CanvasView() {
         if (isDragging) setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
       }}
       onMouseUp={() => {
-        if (paintMode !== 'off') { handlePaintMouseUp(); return; }
+        if (isPaintingRef.current) handlePaintMouseUp();
         setIsDragging(false);
       }}
       onMouseLeave={() => {
-        handlePaintMouseUp();
+        if (isPaintingRef.current) handlePaintMouseUp();
         setBrushPos(null);
         setIsDragging(false);
       }}
-      style={{ cursor: paintMode !== 'off' ? 'none' : isDragging ? 'grabbing' : originalImage ? 'grab' : 'default' }}
+      style={{
+        cursor: paintMode !== 'off' && !isSpacePanning
+          ? 'none'
+          : isDragging ? 'grabbing'
+          : (isSpacePanning || originalImage) ? 'grab'
+          : 'default',
+      }}
     >
       {!originalImage ? (
         <div
@@ -635,7 +704,7 @@ export function CanvasView() {
           )}
 
           {/* Brush cursor — follows mouse, sized to match brush radius in display pixels */}
-          {paintMode !== 'off' && brushPos && (
+          {paintMode !== 'off' && brushPos && !isSpacePanning && (
             <svg style={{
               position: 'absolute',
               left: brushPos.x - brushSize * cssScale,
@@ -724,7 +793,7 @@ export function CanvasView() {
                     background: paintMode === 'paint' ? 'rgba(80,200,80,0.12)' : undefined,
                     border: paintMode === 'paint' ? '1px solid rgba(80,200,80,0.3)' : '1px solid transparent',
                   }}
-                  title="Paint — add pixels to the selected layer"
+                  title="Paint — add pixels to the selected layer  ·  hold Space to pan"
                   onClick={() => setPaintMode(paintMode === 'paint' ? 'off' : 'paint')}
                 >
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
@@ -741,7 +810,7 @@ export function CanvasView() {
                     background: paintMode === 'erase' ? 'rgba(200,60,60,0.12)' : undefined,
                     border: paintMode === 'erase' ? '1px solid rgba(200,60,60,0.3)' : '1px solid transparent',
                   }}
-                  title="Erase — remove pixels from the selected layer"
+                  title="Erase — remove pixels from the selected layer  ·  hold Space to pan"
                   onClick={() => setPaintMode(paintMode === 'erase' ? 'off' : 'erase')}
                 >
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
@@ -766,12 +835,26 @@ export function CanvasView() {
                       title="[ to shrink, ] to grow">
                       [ ]
                     </span>
+                    <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                    {selectedLayerId && (
+                      <button
+                        className="btn btn-ghost"
+                        style={{ fontSize: 10, padding: '0 7px', height: 26, color: 'var(--text-dim)' }}
+                        title="Invert mask — hides entire layer so you can paint back the areas you want  ·  ⌘Z / Ctrl+Z to undo"
+                        onClick={handleInvertMask}
+                      >Invert</button>
+                    )}
                     {selectedLayerId && paintMasks[selectedLayerId] && (
                       <button
                         className="btn btn-ghost"
                         style={{ fontSize: 10, padding: '0 7px', height: 26, color: 'var(--text-dim)' }}
-                        title="Clear all paint on this layer"
-                        onClick={() => clearPaintMask(selectedLayerId)}
+                        title="Clear all paint on this layer  ·  ⌘Z / Ctrl+Z to undo"
+                        onClick={() => {
+                          const existing = paintMasks[selectedLayerId] ?? null;
+                          const prevStack = undoStackRef.current[selectedLayerId] ?? [];
+                          undoStackRef.current[selectedLayerId] = [...prevStack.slice(-19), existing ? new Uint8Array(existing) : null];
+                          clearPaintMask(selectedLayerId);
+                        }}
                       >Clear</button>
                     )}
                   </>
