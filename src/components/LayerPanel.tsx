@@ -599,6 +599,8 @@ export function LayerPanel() {
     separationMode, setSeparationMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
     addLayer, removeLayer, paintMasks, paintMode,
+    addLayerColor, removeLayerColor, updateLayerExtraColor,
+    globalPattern,
   } = useStore();
 
   const handleAutoPalette = () => {
@@ -726,53 +728,59 @@ export function LayerPanel() {
 
             {/* Layer cards */}
             <div style={{ padding: '8px 8px 4px' }}>
-              {[...layers].reverse().map((layer) => (
+              {[...layers].reverse().map((layer) => {
+                const appliedPattern = layer.useGlobalPattern ? globalPattern.pattern : layer.pattern;
+                const patternLabel = appliedPattern === 'none' ? '' : appliedPattern.startsWith('halftone') ? 'halftone' : appliedPattern;
+                const extras = layer.extraColors ?? [];
+                return (
                 <div
                   key={layer.id}
                   className={`layer-card ${selectedLayerId === layer.id ? 'selected' : ''}`}
-                  style={{ marginBottom: 4 }}
+                  style={{ marginBottom: 4, flexDirection: 'column', alignItems: 'stretch', gap: 0 }}
                   onClick={() => selectLayer(layer.id)}
                 >
-                  <div className="layer-swatch" title="Click to change color">
-                    <div className="layer-swatch-inner" style={{ background: layer.color }} />
-                    <input
-                      type="color"
-                      value={layer.color}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => { e.stopPropagation(); updateLayer(layer.id, { color: e.target.value }); }}
-                    />
-                  </div>
-                  <div className="layer-card-info">
-                    <div className="layer-card-name" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      {layer.name}
-                      {paintMasks[layer.id] && (
-                        <div title="Has paint mask" style={{
-                          width: 6, height: 6, borderRadius: '50%',
-                          background: paintMode !== 'off' ? '#50c878' : 'var(--text-dim)',
-                          flexShrink: 0,
-                        }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {/* Primary color swatch */}
+                    <div className="layer-swatch" title="Click to change color" style={{ flexShrink: 0 }}>
+                      <div className="layer-swatch-inner" style={{ background: layer.color }} />
+                      <input
+                        type="color"
+                        value={layer.color}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => { e.stopPropagation(); updateLayer(layer.id, { color: e.target.value }); }}
+                      />
+                    </div>
+                    <div className="layer-card-info" style={{ flex: 1, minWidth: 0 }}>
+                      <div className="layer-card-name" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {layer.name}
+                        {paintMasks[layer.id] && (
+                          <div title="Has paint mask" style={{
+                            width: 6, height: 6, borderRadius: '50%',
+                            background: paintMode !== 'off' ? '#50c878' : 'var(--text-dim)',
+                            flexShrink: 0,
+                          }} />
+                        )}
+                      </div>
+                      <div className="layer-card-sub">
+                        {layer.thresholdMin}–{layer.thresholdMax}
+                        {patternLabel && ` · ${patternLabel}`}
+                      </div>
+                    </div>
+                    <div className="layer-card-actions">
+                      {layers.length > 1 && (
+                        <button
+                          className="vis-btn"
+                          title="Remove layer"
+                          onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }}
+                          style={{ color: 'var(--text-dim)', opacity: 0.5 }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.5')}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
                       )}
-                    </div>
-                    <div className="layer-card-sub">
-                      {layer.thresholdMin}–{layer.thresholdMax}
-                      {layer.pattern !== 'none' && ` · ${layer.pattern}`}
-                    </div>
-                  </div>
-                  <div className="layer-card-actions">
-                    {layers.length > 1 && (
-                      <button
-                        className="vis-btn"
-                        title="Remove layer"
-                        onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }}
-                        style={{ color: 'var(--text-dim)', opacity: 0.5 }}
-                        onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-                        onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.5')}
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                      </button>
-                    )}
                     <button
                       className={`vis-btn ${!layer.visible ? 'hidden-layer' : ''}`}
                       onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
@@ -781,8 +789,46 @@ export function LayerPanel() {
                       <EyeIcon visible={layer.visible} />
                     </button>
                   </div>
+                  </div>
+                  {/* Extra colors row */}
+                  {(extras.length > 0 || true) && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 36, paddingBottom: 6 }} onClick={(e) => e.stopPropagation()}>
+                      {extras.map((ec, idx) => (
+                        <div key={idx} style={{ position: 'relative', flexShrink: 0 }}>
+                          <div className="color-swatch-btn" style={{ background: ec, width: 18, height: 18 }}
+                            title={`Extra color ${idx + 1} — click to change`}>
+                            <input type="color" value={ec}
+                              onChange={(e) => updateLayerExtraColor(layer.id, idx, e.target.value)} />
+                          </div>
+                          <button
+                            title="Remove color"
+                            onClick={() => removeLayerColor(layer.id, idx)}
+                            style={{
+                              position: 'absolute', top: -5, right: -5,
+                              width: 12, height: 12, borderRadius: '50%',
+                              background: 'var(--surface-2)', border: '1px solid var(--border)',
+                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 8, lineHeight: 1, color: 'var(--text-muted)', padding: 0,
+                            }}
+                          >×</button>
+                        </div>
+                      ))}
+                      {extras.length < 3 && (
+                        <button
+                          title="Add ink color"
+                          onClick={() => addLayerColor(layer.id)}
+                          style={{
+                            width: 18, height: 18, border: '1px dashed var(--border-2)',
+                            background: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1,
+                            color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >+</button>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Add layer button */}

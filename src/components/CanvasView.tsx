@@ -85,6 +85,9 @@ export function CanvasView() {
   // Artwork boundary inside the document canvas for the dashed overlay.
   const [artworkBounds, setArtworkBounds] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
+  // Brush cursor position in canvas-view container coords (display pixels).
+  const [brushPos, setBrushPos] = useState<{ x: number; y: number } | null>(null);
+
   // Artboard preview (no-image state) driven by ResizeObserver.
   const [artboardSize, setArtboardSize] = useState({ w: 0, h: 0 });
 
@@ -217,8 +220,17 @@ export function CanvasView() {
             }
           }
 
-          setProcessedLayers(processed);
-          artComposite = renderComposite(processed, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
+          // Expand extra colors: each extra color becomes a copy of the processed layer
+          const expanded = processed.flatMap((pl) => {
+            const cfg = layers.find((l) => l.id === pl.id);
+            const extras = (cfg?.extraColors ?? []).map((ec, i) => ({
+              ...pl, id: `${pl.id}:ec${i}`, color: hexToRgb(ec) as [number, number, number],
+            }));
+            return [pl, ...extras];
+          });
+
+          setProcessedLayers(expanded);
+          artComposite = renderComposite(expanded, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
         }
 
         // Build document canvas: fabric bg + artwork at 1:1 (zero scaling = zero blur).
@@ -290,11 +302,25 @@ export function CanvasView() {
     return () => obs.disconnect();
   }, [documentWidthIn, documentHeightIn]);
 
-  // Clear paint overlay when canvas dimensions change (new image loaded).
+  // Re-draw paint overlay from committed mask whenever the mask or selected layer changes.
+  // This keeps the overlay in sync with the store without clearing on mouseup.
   useEffect(() => {
     const octx = paintOverlayRef.current?.getContext('2d');
-    if (octx && canvasDims.w > 0) octx.clearRect(0, 0, canvasDims.w, canvasDims.h);
-  }, [canvasDims]);
+    if (!octx || canvasDims.w === 0 || !artworkBounds) return;
+    octx.clearRect(0, 0, canvasDims.w, canvasDims.h);
+    const mask = selectedLayerId ? paintMasks[selectedLayerId] : null;
+    if (!mask) return;
+    const { w, h } = artworkBounds;
+    const imgData = new ImageData(w, h);
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] === 1) {
+        imgData.data[i * 4] = 80; imgData.data[i * 4 + 1] = 200; imgData.data[i * 4 + 2] = 80; imgData.data[i * 4 + 3] = 110;
+      } else if (mask[i] === 2) {
+        imgData.data[i * 4] = 200; imgData.data[i * 4 + 1] = 60; imgData.data[i * 4 + 2] = 60; imgData.data[i * 4 + 3] = 110;
+      }
+    }
+    octx.putImageData(imgData, artworkBounds.x, artworkBounds.y);
+  }, [paintMasks, selectedLayerId, artworkBounds, canvasDims]);
 
   // ── File loading ──────────────────────────────────────────────────────────────
 
@@ -383,8 +409,6 @@ export function CanvasView() {
     paintDraftDimsRef.current = dims;
     const existing = paintMasks[selectedLayerId];
     paintDraftRef.current = existing ? new Uint8Array(existing) : new Uint8Array(dims.w * dims.h);
-    const octx = paintOverlayRef.current?.getContext('2d');
-    if (octx) octx.clearRect(0, 0, canvasDims.w, canvasDims.h);
     applyPaintPoint(e);
   };
 
@@ -396,10 +420,9 @@ export function CanvasView() {
   const handlePaintMouseUp = () => {
     if (!isPaintingRef.current || !selectedLayerId || !paintDraftRef.current) return;
     isPaintingRef.current = false;
-    setPaintMask(selectedLayerId, paintDraftRef.current);
+    // Commit to store — the overlay useEffect will redraw from the committed mask
+    setPaintMask(selectedLayerId, new Uint8Array(paintDraftRef.current));
     paintDraftRef.current = null;
-    const octx = paintOverlayRef.current?.getContext('2d');
-    if (octx && canvasDims.w > 0) octx.clearRect(0, 0, canvasDims.w, canvasDims.h);
   };
 
   // ── Derived values ─────────────────────────────────────────────────────────────
@@ -472,7 +495,13 @@ export function CanvasView() {
         setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
       }}
       onMouseMove={(e) => {
-        if (paintMode !== 'off') { handlePaintMouseMove(e); return; }
+        if (paintMode !== 'off') {
+          handlePaintMouseMove(e);
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (rect) setBrushPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+          return;
+        }
+        setBrushPos(null);
         if (isDragging) setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
       }}
       onMouseUp={() => {
@@ -481,9 +510,10 @@ export function CanvasView() {
       }}
       onMouseLeave={() => {
         handlePaintMouseUp();
+        setBrushPos(null);
         setIsDragging(false);
       }}
-      style={{ cursor: paintMode !== 'off' ? 'crosshair' : isDragging ? 'grabbing' : originalImage ? 'grab' : 'default' }}
+      style={{ cursor: paintMode !== 'off' ? 'none' : isDragging ? 'grabbing' : originalImage ? 'grab' : 'default' }}
     >
       {!originalImage ? (
         <div
@@ -587,6 +617,42 @@ export function CanvasView() {
             <div className="processing-overlay">
               <div className="processing-label">Processing…</div>
             </div>
+          )}
+
+          {/* Brush cursor — follows mouse, sized to match brush radius in display pixels */}
+          {paintMode !== 'off' && brushPos && (
+            <svg style={{
+              position: 'absolute',
+              left: brushPos.x - brushSize * cssScale,
+              top: brushPos.y - brushSize * cssScale,
+              width: brushSize * cssScale * 2,
+              height: brushSize * cssScale * 2,
+              pointerEvents: 'none',
+              overflow: 'visible',
+              zIndex: 20,
+            }}>
+              <circle
+                cx={brushSize * cssScale}
+                cy={brushSize * cssScale}
+                r={Math.max(1, brushSize * cssScale - 1)}
+                fill={paintMode === 'paint' ? 'rgba(80,200,80,0.08)' : 'rgba(200,60,60,0.08)'}
+                stroke={paintMode === 'paint' ? '#50c878' : '#e05050'}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+              <line
+                x1={brushSize * cssScale} y1={brushSize * cssScale - 5}
+                x2={brushSize * cssScale} y2={brushSize * cssScale + 5}
+                stroke={paintMode === 'paint' ? '#50c878' : '#e05050'}
+                strokeWidth={1}
+              />
+              <line
+                x1={brushSize * cssScale - 5} y1={brushSize * cssScale}
+                x2={brushSize * cssScale + 5} y2={brushSize * cssScale}
+                stroke={paintMode === 'paint' ? '#50c878' : '#e05050'}
+                strokeWidth={1}
+              />
+            </svg>
           )}
 
           <div style={{

@@ -134,6 +134,9 @@ interface AppState {
 
   addLayer: () => void;
   removeLayer: (id: string) => void;
+  addLayerColor: (id: string) => void;
+  removeLayerColor: (id: string, idx: number) => void;
+  updateLayerExtraColor: (id: string, idx: number, color: string) => void;
   setPaintMask: (layerId: string, mask: Uint8Array | null) => void;
   clearPaintMask: (layerId: string) => void;
   setPaintMode: (mode: 'off' | 'paint' | 'erase') => void;
@@ -256,6 +259,23 @@ export const useStore = create<AppState>((set) => ({
         : s.selectedLayerId,
     };
   }),
+  addLayerColor: (id) => set((s) => ({
+    layers: s.layers.map((l) =>
+      l.id === id && (l.extraColors ?? []).length < 3
+        ? { ...l, extraColors: [...(l.extraColors ?? []), '#888888'] }
+        : l
+    ),
+  })),
+  removeLayerColor: (id, idx) => set((s) => ({
+    layers: s.layers.map((l) =>
+      l.id === id ? { ...l, extraColors: (l.extraColors ?? []).filter((_, i) => i !== idx) } : l
+    ),
+  })),
+  updateLayerExtraColor: (id, idx, color) => set((s) => ({
+    layers: s.layers.map((l) =>
+      l.id === id ? { ...l, extraColors: (l.extraColors ?? []).map((c, i) => (i === idx ? color : c)) } : l
+    ),
+  })),
   setPaintMask: (layerId, mask) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: mask } })),
   clearPaintMask: (layerId) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: null } })),
   setPaintMode: (paintMode) => set({ paintMode }),

@@ -44,6 +44,7 @@ export interface LayerConfig extends PatternConfig {
   id: string;
   name: string;
   color: string;
+  extraColors?: string[];
   visible: boolean;
   thresholdMin: number;
   thresholdMax: number;

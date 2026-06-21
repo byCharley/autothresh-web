@@ -16,7 +16,7 @@ import type { ExportConfig } from './components/ExportModal';
 import { useStore } from './store/useStore';
 import {
   processImage, renderComposite, renderCmykComposite, drawRegistrationMarks, computeBackgroundMask,
-  cmykSeparate, contrastColor,
+  cmykSeparate, contrastColor, hexToRgb,
 } from './engine/imageProcessor';
 import type { LayerConfig, PatternConfig, ProcessedLayer } from './engine/imageProcessor';
 import { generateTextureMask } from './engine/textureGenerator';
@@ -156,6 +156,19 @@ function App() {
           else if (pv === 2) layer.mask[y * artScaleW + x] = 0;
         }
       }
+    }
+
+    // Expand extra colors at export resolution
+    if (separationMode !== 'cmyk') {
+      const base = [...artLayers];
+      artLayers = base.flatMap((pl) => {
+        const cfg = layers.find((l) => l.id === pl.id);
+        const extras = (cfg?.extraColors ?? []).map((ec, i) => {
+          const [r, g, b] = hexToRgb(ec);
+          return { ...pl, id: `${pl.id}:ec${i}`, color: [r, g, b] as [number, number, number] };
+        });
+        return [pl, ...extras];
+      });
     }
 
     const regPaddingPx = Math.round(regMarkPadding * documentDpi);
