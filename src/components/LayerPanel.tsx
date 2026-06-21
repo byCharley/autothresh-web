@@ -758,7 +758,7 @@ export function LayerPanel() {
                       />
                     </div>
                     <div className="layer-card-info" style={{ flex: 1, minWidth: 0 }}>
-                      <div className="layer-card-name" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <div className="layer-card-name" style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, overflow: 'hidden' }}>
                         {editingLayerId === layer.id ? (
                           <input
                             autoFocus
@@ -787,8 +787,8 @@ export function LayerPanel() {
                                 setEditingLayerId(layer.id);
                                 setEditValue(layer.name);
                               }}
-                              title="Double-click to rename"
-                              style={{ cursor: 'text' }}
+                              title={layer.name}
+                              style={{ cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
                             >
                               {layer.name}
                             </span>

@@ -127,7 +127,7 @@ function App() {
       artLayers = cmykSeparate(artImageData, documentDpi / cmykLpi, artBgMask, cmykAngles);
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
-      artLayers = processImage(artImageData, resolved, false, artBgMask, imageAdjustments, exportScaleFactor);
+      artLayers = processImage(artImageData, resolved, knockoutEnabled, artBgMask, imageAdjustments, exportScaleFactor);
       if (textureEnabled) {
         const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
         for (const layer of artLayers) {
