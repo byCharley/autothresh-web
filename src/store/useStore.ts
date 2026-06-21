@@ -243,7 +243,10 @@ export const useStore = create<AppState>((set) => ({
       useGlobalPattern: true,
       pattern: 'halftone-round', patternScale: 4, patternAngle: 45, patternDensity: 70,
     };
-    return { layers: redistributeThresholds([...s.layers, newLayer]) };
+    // Don't redistribute existing layers — user may have custom ranges set.
+    // New layer starts empty (0–0); user adjusts range to taste and knockout
+    // removes the overlap from lower layers automatically.
+    return { layers: [...s.layers, newLayer], selectedLayerId: newLayer.id };
   }),
   removeLayer: (id) => set((s) => {
     if (s.layers.length <= 1) return s;
@@ -275,6 +278,7 @@ export const useStore = create<AppState>((set) => ({
     const idx = s.layers.indexOf(src);
     return {
       layers: [...s.layers.slice(0, idx + 1), copy, ...s.layers.slice(idx + 1)],
+      selectedLayerId: copy.id,
     };
   }),
   setPaintMask: (layerId, mask) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: mask } })),
