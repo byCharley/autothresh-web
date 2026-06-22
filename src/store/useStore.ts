@@ -243,10 +243,19 @@ export const useStore = create<AppState>((set) => ({
       useGlobalPattern: true,
       pattern: 'halftone-round', patternScale: 4, patternAngle: 45, patternDensity: 70,
     };
-    // Don't redistribute existing layers — user may have custom ranges set.
-    // New layer starts empty (0–0); user adjusts range to taste and knockout
-    // removes the overlap from lower layers automatically.
-    return { layers: [...s.layers, newLayer], selectedLayerId: newLayer.id };
+    // Insert immediately above the selected layer so the new layer occupies
+    // the right knockout position: layers above it still knock it out, and it
+    // knocks out layers below it. Without a selection, append at the top.
+    const selIdx = s.selectedLayerId
+      ? s.layers.findIndex((l) => l.id === s.selectedLayerId)
+      : -1;
+    const insertAt = selIdx >= 0 ? selIdx + 1 : s.layers.length;
+    const newLayers = [
+      ...s.layers.slice(0, insertAt),
+      newLayer,
+      ...s.layers.slice(insertAt),
+    ];
+    return { layers: newLayers, selectedLayerId: newLayer.id };
   }),
   removeLayer: (id) => set((s) => {
     if (s.layers.length <= 1) return s;
