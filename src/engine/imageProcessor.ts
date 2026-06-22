@@ -588,10 +588,10 @@ export function processImage(
     : null;
 
   // ── 3. Per-layer processing ───────────────────────────────────────────────────
+  // Hidden layers still get their real mask so knockout boundaries are preserved
+  // when a layer is toggled off. renderComposite checks layer.visible and will
+  // skip hidden layers for display; only the knockout math needs the real mask.
   const results: ProcessedLayer[] = layers.map((layer, idx) => {
-    if (!layer.visible)
-      return { id: layer.id, mask: new Uint8Array(n), color: hexToRgb(layer.color), visible: false };
-
     // Per-layer exposure + blur on top of global adjustments
     let lums = new Float32Array(n) as F32;
     for (let i = 0; i < n; i++) lums[i] = applyExposure(globalLums[i], layer.exposure);
@@ -610,7 +610,7 @@ export function processImage(
       finalMask[i] = adjL >= layer.thresholdMin && adjL <= layer.thresholdMax ? 255 : 0;
     }
 
-    return { id: layer.id, mask: finalMask, color: hexToRgb(layer.color), visible: true };
+    return { id: layer.id, mask: finalMask, color: hexToRgb(layer.color), visible: layer.visible };
   });
 
   if (knockoutEnabled) {
@@ -628,10 +628,11 @@ export function processImage(
 export function applyKnockout(layers: ProcessedLayer[]): void {
   if (layers.length < 2) return;
   const n = layers[0].mask.length;
+  // Visibility is intentionally ignored: knockout boundaries are a property of the
+  // layer stack, not the preview toggle. renderComposite skips hidden layers for
+  // display; their masks still participate in removing overlapping ink from layers below.
   for (let i = 0; i < layers.length - 1; i++) {
-    if (!layers[i].visible) continue;
     for (let j = i + 1; j < layers.length; j++) {
-      if (!layers[j].visible) continue;
       for (let k = 0; k < n; k++) {
         if (layers[j].mask[k] === 255) layers[i].mask[k] = 0;
       }
