@@ -5,7 +5,7 @@ const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-
 export async function verifyToken(token: string): Promise<string | null> {
   if (!token) return null;
   // Dev bypass — only available in non-production environments
-  if (token === 'dev-bypass-token' && process.env.VERCEL_ENV !== 'production') {
+  if (token === 'dev-bypass' && process.env.VERCEL_ENV !== 'production') {
     return 'dev@localhost';
   }
   try {
