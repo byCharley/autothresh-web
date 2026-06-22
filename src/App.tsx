@@ -14,6 +14,7 @@ import { ControlPanel } from './components/ControlPanel';
 import { ExportModal } from './components/ExportModal';
 import type { ExportConfig } from './components/ExportModal';
 import { MockupPreview } from './components/MockupPreview';
+import { PresetsModal } from './components/PresetsModal';
 import { useStore } from './store/useStore';
 import {
   processImage, applyKnockout, renderComposite, renderCmykComposite, drawRegistrationMarks, computeBackgroundMask,
@@ -57,7 +58,7 @@ function isMobileDevice(): boolean {
 function App() {
   const { status, session, initiateLogin, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
-  const { mockupOpen, setMockupOpen } = useStore();
+  const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const {
     originalImage, layers, globalPattern, knockoutEnabled,
@@ -329,7 +330,7 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} />
       <div className="workspace">
         <LayerPanel />
         <CanvasView />
@@ -344,6 +345,9 @@ function App() {
       )}
       {mockupOpen && (
         <MockupPreview onClose={() => setMockupOpen(false)} />
+      )}
+      {presetsOpen && session?.token && (
+        <PresetsModal token={session.token} onClose={() => setPresetsOpen(false)} />
       )}
       <footer style={{
         height: 28, flexShrink: 0,

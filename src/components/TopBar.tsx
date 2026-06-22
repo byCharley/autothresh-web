@@ -4,13 +4,14 @@ import { AppIcon } from './AppIcon';
 interface TopBarProps {
   onExport: () => void;
   onMockup: () => void;
+  onPresets: () => void;
   onLogout?: () => void;
   userEmail?: string;
   firstName?: string;
   subscriptionExpiresAt?: string;
 }
 
-export function TopBar({ onExport, onMockup, onLogout, userEmail, firstName, subscriptionExpiresAt }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, firstName, subscriptionExpiresAt }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage } = useStore();
 
   const daysRemaining = subscriptionExpiresAt
@@ -125,6 +126,17 @@ export function TopBar({ onExport, onMockup, onLogout, userEmail, firstName, sub
         </div>
       )}
 
+      <button
+        className="btn btn-ghost"
+        onClick={onPresets}
+        title="Save and load layer presets"
+        style={{ height: 26 }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+        </svg>
+        Presets
+      </button>
       <button
         className="btn btn-ghost"
         onClick={onMockup}

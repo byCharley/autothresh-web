@@ -3,6 +3,26 @@ import type { LayerConfig, PatternConfig, ProcessedLayer, ImageAdjustments, Sepa
 import { DEFAULT_CMYK_ANGLES } from '../engine/imageProcessor';
 import type { TextureType } from '../engine/textureGenerator';
 
+export interface PresetData {
+  layers: LayerConfig[];
+  globalPattern: PatternConfig;
+  knockoutEnabled: boolean;
+  bgRemovalEnabled: boolean;
+  bgTolerance: number;
+  textureEnabled: boolean;
+  textureType: TextureType;
+  textureIntensity: number;
+  textureScale: number;
+  textureWidth: number;
+  textureSeed: number;
+  canvasColor: string;
+  documentDpi: number;
+  documentWidthIn: number;
+  documentHeightIn: number;
+  imageAdjustments: ImageAdjustments;
+  separationMode: SeparationMode;
+}
+
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
   exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0,
 };
@@ -153,6 +173,10 @@ interface AppState {
   setIsProcessing: (v: boolean) => void;
   setSoloLayerId: (id: string | null) => void;
   setMockupOpen: (v: boolean) => void;
+  presetsOpen: boolean;
+  setPresetsOpen: (v: boolean) => void;
+  loadPreset: (data: PresetData) => void;
+  capturePreset: () => PresetData;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -197,6 +221,7 @@ export const useStore = create<AppState>((set) => ({
   isProcessing: false,
   soloLayerId: null,
   mockupOpen: false,
+  presetsOpen: false,
 
   setTheme: (theme) => { localStorage.setItem('at-theme', theme); set({ theme }); },
   setOriginalImage: (originalImage, previewImage, imageFileName) =>
@@ -319,4 +344,46 @@ export const useStore = create<AppState>((set) => ({
   setIsProcessing: (isProcessing) => set({ isProcessing }),
   setSoloLayerId: (soloLayerId) => set({ soloLayerId }),
   setMockupOpen: (mockupOpen) => set({ mockupOpen }),
+  setPresetsOpen: (presetsOpen) => set({ presetsOpen }),
+  loadPreset: (data) => set({
+    layers:           data.layers,
+    globalPattern:    data.globalPattern,
+    knockoutEnabled:  data.knockoutEnabled,
+    bgRemovalEnabled: data.bgRemovalEnabled,
+    bgTolerance:      data.bgTolerance,
+    textureEnabled:   data.textureEnabled,
+    textureType:      data.textureType,
+    textureIntensity: data.textureIntensity,
+    textureScale:     data.textureScale,
+    textureWidth:     data.textureWidth,
+    textureSeed:      data.textureSeed,
+    canvasColor:      data.canvasColor,
+    documentDpi:      data.documentDpi,
+    documentWidthIn:  data.documentWidthIn,
+    documentHeightIn: data.documentHeightIn,
+    imageAdjustments: data.imageAdjustments,
+    separationMode:   data.separationMode,
+  }),
+  capturePreset: () => {
+    const s = useStore.getState();
+    return {
+      layers:           s.layers,
+      globalPattern:    s.globalPattern,
+      knockoutEnabled:  s.knockoutEnabled,
+      bgRemovalEnabled: s.bgRemovalEnabled,
+      bgTolerance:      s.bgTolerance,
+      textureEnabled:   s.textureEnabled,
+      textureType:      s.textureType,
+      textureIntensity: s.textureIntensity,
+      textureScale:     s.textureScale,
+      textureWidth:     s.textureWidth,
+      textureSeed:      s.textureSeed,
+      canvasColor:      s.canvasColor,
+      documentDpi:      s.documentDpi,
+      documentWidthIn:  s.documentWidthIn,
+      documentHeightIn: s.documentHeightIn,
+      imageAdjustments: s.imageAdjustments,
+      separationMode:   s.separationMode,
+    };
+  },
 }));
