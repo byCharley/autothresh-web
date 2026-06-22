@@ -4,12 +4,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-function sbHeaders() {
+function sbHeaders(extra?: Record<string, string>) {
   return {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${SERVICE_KEY}`,
     'apikey': SERVICE_KEY,
-    'Prefer': 'return=representation',
+    ...extra,
   };
 }
 
@@ -34,7 +34,7 @@ async function verifyToken(token: string): Promise<string | null> {
 // ── Handler ──────────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -56,12 +56,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const url = `${SUPABASE_URL}/rest/v1/presets`;
     const r = await fetch(url, {
       method: 'POST',
-      headers: sbHeaders(),
+      headers: sbHeaders({ 'Prefer': 'return=representation' }),
       body: JSON.stringify({ user_email: email, name: name.trim(), data }),
     });
     if (!r.ok) return res.status(500).json({ error: await r.text() });
     const rows = await r.json() as unknown[];
     return res.status(201).json(rows[0]);
+  }
+
+  // DELETE — ?id=<uuid>  (owner-scoped so users can only delete their own)
+  if (req.method === 'DELETE') {
+    const id = req.query.id;
+    if (!id || typeof id !== 'string') return res.status(400).json({ error: 'id required' });
+    const url = `${SUPABASE_URL}/rest/v1/presets?id=eq.${id}&user_email=eq.${encodeURIComponent(email)}`;
+    const r = await fetch(url, { method: 'DELETE', headers: sbHeaders() });
+    if (!r.ok) return res.status(500).json({ error: await r.text() });
+    return res.status(200).json({ success: true });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

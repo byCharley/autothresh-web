@@ -70,11 +70,12 @@ export function PresetsModal({ token, onClose }: Props) {
   async function handleDelete(id: string) {
     setDeletingId(id);
     try {
-      await fetch(`/api/presets/${id}`, { method: 'DELETE', headers: { Authorization: token } });
+      const r = await fetch(`/api/presets?id=${id}`, { method: 'DELETE', headers: { Authorization: token } });
+      if (!r.ok) throw new Error('Delete failed');
       setPresets((prev) => prev.filter((p) => p.id !== id));
       if (loadedId === id) setLoadedId(null);
     } catch {
-      // ignore
+      // leave preset in list if delete failed
     } finally {
       setDeletingId(null);
     }
