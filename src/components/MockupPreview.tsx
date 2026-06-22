@@ -15,21 +15,17 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
   const [isDragging, setIsDragging] = useState(false);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
 
-  // Only list mockups that haven't errored — recalculated whenever imgErrors changes
   const availableMockups = MOCKUPS.filter(m => !imgErrors[m.id]);
 
-  // Use refs for drag math so the mousemove handler never captures stale state
-  const dragRef    = useRef({ active: false, mx: 0, my: 0, ax: 0, ay: 0 });
-  const contentRef = useRef<HTMLDivElement>(null); // wraps img or placeholder
+  const dragRef     = useRef({ active: false, mx: 0, my: 0, ax: 0, ay: 0 });
+  const contentRef  = useRef<HTMLDivElement>(null);
   const artCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  // If the selected mockup errored, fall back to first available
   const mockup = availableMockups.find(m => m.id === mockupId) ?? availableMockups[0] ?? MOCKUPS[0];
   const effectiveBlend: string = blendMode === 'auto'
     ? (mockup.isDark ? 'screen' : 'multiply')
     : blendMode;
 
-  // Re-render composite when processed layers change
   useEffect(() => {
     const canvas = artCanvasRef.current;
     if (!canvas || !processedLayers.length || !processedLayerDims) return;
@@ -39,8 +35,6 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     const composite = renderComposite(processedLayers, w, h, true, '#ffffff', false);
     canvas.getContext('2d')!.putImageData(composite, 0, 0);
   }, [processedLayers, processedLayerDims]);
-
-  // ── Drag handlers (attached to the whole preview area) ─────────────────────
 
   const onPreviewMouseDown = (e: React.MouseEvent) => {
     if (!hasArt) return;
@@ -55,7 +49,6 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     const rect = contentRef.current.getBoundingClientRect();
     const dx = ((e.clientX - d.mx) / rect.width)  * 100;
     const dy = ((e.clientY - d.my) / rect.height) * 100;
-    // No hard bounds — let artwork move anywhere (pocket, sleeve, back-pocket, etc.)
     setArtPos({ x: d.ax + dx, y: d.ay + dy });
   };
 
@@ -63,7 +56,6 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     dragRef.current.active = false;
     setIsDragging(false);
   };
-
 
   const hasArt = processedLayers.length > 0 && !!processedLayerDims;
 
@@ -85,7 +77,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Header ─────────────────────────────────────────────────────────── */}
+        {/* ── Header ── */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)', flexShrink: 0,
@@ -100,95 +92,111 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* ── Body ───────────────────────────────────────────────────────────── */}
+        {/* ── Body ── */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
-          {/* Left: mockup selector */}
-          <div style={{ width: 160, borderRight: '1px solid var(--border)', overflowY: 'auto', padding: '8px 0', flexShrink: 0 }}>
-            <div style={{ padding: '4px 12px 8px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Garment
+          {/* Mockup area */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+            <div
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: '#0d0d0d', overflow: 'hidden', position: 'relative',
+                cursor: !hasArt ? 'default' : isDragging ? 'grabbing' : 'grab',
+                userSelect: 'none',
+              }}
+              onMouseDown={onPreviewMouseDown}
+              onMouseMove={onPreviewMouseMove}
+              onMouseUp={onPreviewMouseUp}
+              onMouseLeave={onPreviewMouseUp}
+            >
+              {!hasArt ? (
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#444' }}>
+                  Load artwork to preview on mockup
+                </span>
+              ) : (
+                <div ref={contentRef} style={{ position: 'relative', lineHeight: 0, maxHeight: '100%' }}>
+                  <img
+                    key={mockup.id}
+                    src={mockup.file}
+                    style={{
+                      display: 'block',
+                      maxHeight: 'calc(88vh - 44px - 32px)',
+                      maxWidth: 'calc(92vw - 220px)',
+                      objectFit: 'contain',
+                      pointerEvents: 'none',
+                    }}
+                    alt={mockup.name}
+                    onError={() => setImgErrors((prev) => ({ ...prev, [mockup.id]: true }))}
+                    draggable={false}
+                  />
+                  <canvas
+                    ref={artCanvasRef}
+                    style={{
+                      position: 'absolute',
+                      left: `${artPos.x}%`,
+                      top: `${artPos.y}%`,
+                      width: `${artScale}%`,
+                      height: 'auto',
+                      transform: 'translate(-50%, -50%)',
+                      mixBlendMode: effectiveBlend as React.CSSProperties['mixBlendMode'],
+                      pointerEvents: 'none',
+                    }}
+                  />
+                </div>
+              )}
             </div>
-            {availableMockups.map((m) => {
-              const active = m.id === mockup?.id;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => setMockupId(m.id)}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '7px 12px', background: 'none', border: 'none',
-                    borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
-                    cursor: 'pointer',
-                    color: active ? 'var(--accent)' : 'var(--text)',
-                    backgroundColor: active ? 'var(--accent-dim)' : 'transparent',
-                    textAlign: 'left',
-                  }}
-                >
-                  <div style={{ width: 20, height: 20, flexShrink: 0, borderRadius: 2, background: m.color, border: '1px solid var(--border-2)' }} />
-                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>{m.name}</span>
-                </button>
-              );
-            })}
-          </div>
 
-          {/* Center: preview — drag from anywhere here */}
-          <div
-            style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: '#0d0d0d', overflow: 'hidden', position: 'relative',
-              cursor: !hasArt ? 'default' : isDragging ? 'grabbing' : 'grab',
-              userSelect: 'none',
-            }}
-            onMouseDown={onPreviewMouseDown}
-            onMouseMove={onPreviewMouseMove}
-            onMouseUp={onPreviewMouseUp}
-            onMouseLeave={onPreviewMouseUp}
-          >
-            {!hasArt ? (
-              <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#444' }}>
-                Load artwork to preview on mockup
+            {/* Tooltip below mockup */}
+            <div style={{
+              height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderTop: '1px solid var(--border)',
+              gap: 6,
+            }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-dim)', flexShrink: 0 }}>
+                <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>
+              </svg>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.04em' }}>
+                Click and drag your artwork anywhere — resize with the scale slider
               </span>
-            ) : (
-              <div ref={contentRef} style={{ position: 'relative', lineHeight: 0, maxHeight: '100%' }}>
-                <img
-                  key={mockup.id}
-                  src={mockup.file}
-                  style={{
-                    display: 'block',
-                    maxHeight: 'calc(88vh - 44px)',
-                    maxWidth: 'calc(92vw - 160px - 200px)',
-                    objectFit: 'contain',
-                    pointerEvents: 'none',
-                  }}
-                  alt={mockup.name}
-                  onError={() => setImgErrors((prev) => ({ ...prev, [mockup.id]: true }))}
-                  draggable={false}
-                />
-
-                {/* Artwork canvas — positioned over mockup, blended */}
-                <canvas
-                  ref={artCanvasRef}
-                  style={{
-                    position: 'absolute',
-                    left: `${artPos.x}%`,
-                    top: `${artPos.y}%`,
-                    width: `${artScale}%`,
-                    height: 'auto',
-                    transform: 'translate(-50%, -50%)',
-                    mixBlendMode: effectiveBlend as React.CSSProperties['mixBlendMode'],
-                    pointerEvents: 'none', // outer div handles drag
-                  }}
-                />
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Right: controls */}
-          <div style={{ width: 200, borderLeft: '1px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column', gap: 18, flexShrink: 0, overflowY: 'auto' }}>
+          <div style={{ width: 220, borderLeft: '1px solid var(--border)', padding: 16, display: 'flex', flexDirection: 'column', gap: 20, flexShrink: 0, overflowY: 'auto' }}>
+
+            {/* Garment selector */}
+            <div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
+                Garment
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {availableMockups.map((m) => {
+                  const active = m.id === mockup?.id;
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => setMockupId(m.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '6px 8px', background: 'none', border: 'none',
+                        borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
+                        cursor: 'pointer',
+                        color: active ? 'var(--accent)' : 'var(--text)',
+                        backgroundColor: active ? 'var(--accent-dim)' : 'transparent',
+                        textAlign: 'left', width: '100%',
+                      }}
+                    >
+                      <div style={{ width: 16, height: 16, flexShrink: 0, borderRadius: 2, background: m.color, border: '1px solid var(--border-2)' }} />
+                      <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>{m.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Scale */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Scale</span>
                 <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{artScale}%</span>
               </div>
@@ -198,7 +206,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
 
             {/* Blend mode */}
             <div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
                 Blend Mode
               </div>
               <select className="at-select" value={blendMode} onChange={(e) => setBlendMode(e.target.value as BlendMode)}>
@@ -206,7 +214,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                   <option key={m} value={m}>{blendLabel(m)}</option>
                 ))}
               </select>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 6, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 6, lineHeight: 1.6 }}>
                 {effectiveBlend === 'screen'   && 'Light ink on dark fabric'}
                 {effectiveBlend === 'multiply' && 'Ink blends with fabric texture'}
                 {effectiveBlend === 'overlay'  && 'High-contrast blend'}
@@ -214,39 +222,6 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
               </div>
             </div>
 
-            {/* Pocket presets */}
-            <div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-                Presets
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <button className="btn btn-ghost" style={{ fontSize: 10, fontFamily: 'var(--font-mono)', height: 26, justifyContent: 'flex-start', paddingLeft: 8 }}
-                  onClick={() => { setArtPos({ x: 50, y: 38 }); setArtScale(55); }}>
-                  Full Front
-                </button>
-                <button className="btn btn-ghost" style={{ fontSize: 10, fontFamily: 'var(--font-mono)', height: 26, justifyContent: 'flex-start', paddingLeft: 8 }}
-                  onClick={() => { setArtPos({ x: 27, y: 28 }); setArtScale(18); }}>
-                  Left Chest
-                </button>
-                <button className="btn btn-ghost" style={{ fontSize: 10, fontFamily: 'var(--font-mono)', height: 26, justifyContent: 'flex-start', paddingLeft: 8 }}
-                  onClick={() => { setArtPos({ x: 50, y: 22 }); setArtScale(28); }}>
-                  Center Chest
-                </button>
-                <button className="btn btn-ghost" style={{ fontSize: 10, fontFamily: 'var(--font-mono)', height: 26, justifyContent: 'flex-start', paddingLeft: 8 }}
-                  onClick={() => { setArtPos({ x: 50, y: 65 }); setArtScale(55); }}>
-                  Full Back
-                </button>
-              </div>
-            </div>
-
-            {/* Tips */}
-            <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.7 }}>
-                Click anywhere on the<br />
-                mockup and drag to<br />
-                reposition artwork.
-              </div>
-            </div>
           </div>
         </div>
       </div>
