@@ -119,7 +119,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
       <div
         style={{
           background: 'var(--surface)', border: '1px solid var(--border)',
-          width: '92vw', maxWidth: 1160, height: '88vh',
+          width: '98vw', height: '94vh',
           display: 'flex', flexDirection: 'column', zIndex: 51,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -176,8 +176,8 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                       display: 'block',
                       height: 'auto',
                       width: 'auto',
-                      maxHeight: 'calc(88vh - 44px - 32px - 24px)',
-                      maxWidth: 'calc(92vw - 260px - 24px)',
+                      maxHeight: 'calc(94vh - 44px - 32px - 24px)',
+                      maxWidth: 'calc(98vw - 260px - 24px)',
                       pointerEvents: 'none',
                     }}
                     alt={mockup.name}
