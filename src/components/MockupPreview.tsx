@@ -20,6 +20,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
   const dragRef     = useRef({ active: false, mx: 0, my: 0, ax: 0, ay: 0 });
   const contentRef  = useRef<HTMLDivElement>(null);
   const artCanvasRef = useRef<HTMLCanvasElement>(null);
+  const imgRef      = useRef<HTMLImageElement>(null);
 
   const mockup = availableMockups.find(m => m.id === mockupId) ?? availableMockups[0] ?? MOCKUPS[0];
   const effectiveBlend: string = blendMode === 'auto'
@@ -55,6 +56,52 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
   const onPreviewMouseUp = () => {
     dragRef.current.active = false;
     setIsDragging(false);
+  };
+
+  const downloadPreview = () => {
+    const imgEl    = imgRef.current;
+    const artCanvas = artCanvasRef.current;
+    if (!imgEl || !artCanvas || !imgEl.complete || imgEl.naturalWidth === 0) return;
+
+    const natW = imgEl.naturalWidth;
+    const natH = imgEl.naturalHeight;
+    const renderedW = imgEl.offsetWidth;
+    const renderedH = imgEl.offsetHeight;
+    if (!renderedW || !renderedH) return;
+
+    const out = document.createElement('canvas');
+    out.width  = natW;
+    out.height = natH;
+    const ctx = out.getContext('2d')!;
+
+    // Draw mockup
+    ctx.drawImage(imgEl, 0, 0, natW, natH);
+
+    // Map artwork position/size from rendered → natural image coordinates
+    const scaleX      = natW / renderedW;
+    const scaleY      = natH / renderedH;
+    const artRW       = (artScale / 100) * renderedW;
+    const artAspect   = artCanvas.height / artCanvas.width;
+    const artRH       = artRW * artAspect;
+    const artNatX     = ((artPos.x / 100) * renderedW - artRW / 2) * scaleX;
+    const artNatY     = ((artPos.y / 100) * renderedH - artRH / 2) * scaleY;
+    const artNatW     = artRW * scaleX;
+    const artNatH     = artRH * scaleY;
+
+    ctx.globalCompositeOperation = (effectiveBlend === 'normal' ? 'source-over' : effectiveBlend) as GlobalCompositeOperation;
+    ctx.drawImage(artCanvas, artNatX, artNatY, artNatW, artNatH);
+
+    out.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href     = url;
+      a.download = `mockup-${mockup.name.toLowerCase().replace(/\s+/g, '-')}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 'image/png');
   };
 
   const hasArt = processedLayers.length > 0 && !!processedLayerDims;
@@ -97,12 +144,16 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
 
           {/* Mockup area */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+
+            {/* Drag / preview region */}
             <div
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: '#0d0d0d', overflow: 'hidden', position: 'relative',
                 cursor: !hasArt ? 'default' : isDragging ? 'grabbing' : 'grab',
                 userSelect: 'none',
+                minHeight: 0,
+                padding: 12,
               }}
               onMouseDown={onPreviewMouseDown}
               onMouseMove={onPreviewMouseMove}
@@ -114,15 +165,18 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                   Load artwork to preview on mockup
                 </span>
               ) : (
-                <div ref={contentRef} style={{ position: 'relative', lineHeight: 0, maxHeight: '100%' }}>
+                // contentRef must wrap the image exactly so % positions map to the shirt
+                <div ref={contentRef} style={{ position: 'relative', lineHeight: 0, flexShrink: 0 }}>
                   <img
+                    ref={imgRef}
                     key={mockup.id}
                     src={mockup.file}
+                    // Fill available height; width follows aspect ratio, capped by available width
                     style={{
                       display: 'block',
-                      maxHeight: 'calc(88vh - 44px - 32px)',
-                      maxWidth: 'calc(92vw - 220px)',
-                      objectFit: 'contain',
+                      height: 'calc(88vh - 44px - 32px - 24px)',
+                      width: 'auto',
+                      maxWidth: 'calc(92vw - 220px - 24px)',
                       pointerEvents: 'none',
                     }}
                     alt={mockup.name}
@@ -146,11 +200,10 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
               )}
             </div>
 
-            {/* Tooltip below mockup */}
+            {/* Tooltip bar */}
             <div style={{
               height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderTop: '1px solid var(--border)',
-              gap: 6,
+              borderTop: '1px solid var(--border)', gap: 6, flexShrink: 0,
             }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-dim)', flexShrink: 0 }}>
                 <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>
@@ -222,6 +275,22 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
               </div>
             </div>
 
+            {/* Download */}
+            <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <button
+                className="btn btn-primary"
+                onClick={downloadPreview}
+                disabled={!hasArt}
+                style={{ width: '100%', height: 32, opacity: hasArt ? 1 : 0.4, color: '#1a1a1a', fontSize: 11, fontFamily: 'var(--font-mono)', gap: 6 }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Save PNG
+              </button>
+            </div>
           </div>
         </div>
       </div>
