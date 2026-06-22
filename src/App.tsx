@@ -345,6 +345,41 @@ function App() {
       {mockupOpen && (
         <MockupPreview onClose={() => setMockupOpen(false)} />
       )}
+      <footer style={{
+        height: 28, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16,
+        borderTop: '1px solid var(--border)',
+        background: 'var(--surface)',
+      }}>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em' }}>
+          Designed &amp; Developed by Charley Pangus
+        </span>
+        <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em' }}>
+          AutoThresh® | 2026 All Rights Reserved
+        </span>
+        <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
+        <a href="https://www.charleypangus.com" target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', textDecoration: 'none' }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+        >
+          www.charleypangus.com
+        </a>
+        <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
+        <a href="https://www.instagram.com/charleypangus" target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+            <circle cx="12" cy="12" r="4"/>
+            <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+          </svg>
+          @charleypangus
+        </a>
+      </footer>
     </div>
   );
 }
