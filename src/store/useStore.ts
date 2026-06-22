@@ -101,8 +101,10 @@ interface AppState {
   cmykAngles: Record<string, number>;
 
   processedLayers: ProcessedLayer[];
+  processedLayerDims: { w: number; h: number } | null;
   isProcessing: boolean;
   soloLayerId: string | null;
+  mockupOpen: boolean;
 
   setTheme: (theme: 'dark' | 'light') => void;
   setOriginalImage: (img: ImageData, preview: ImageData, name: string) => void;
@@ -147,8 +149,10 @@ interface AppState {
   setCmykAngle: (id: string, angle: number) => void;
 
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
+  setProcessedLayerDims: (dims: { w: number; h: number } | null) => void;
   setIsProcessing: (v: boolean) => void;
   setSoloLayerId: (id: string | null) => void;
+  setMockupOpen: (v: boolean) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -189,8 +193,10 @@ export const useStore = create<AppState>((set) => ({
   cmykAngles: { ...DEFAULT_CMYK_ANGLES },
 
   processedLayers: [],
+  processedLayerDims: null,
   isProcessing: false,
   soloLayerId: null,
+  mockupOpen: false,
 
   setTheme: (theme) => { localStorage.setItem('at-theme', theme); set({ theme }); },
   setOriginalImage: (originalImage, previewImage, imageFileName) =>
@@ -309,6 +315,8 @@ export const useStore = create<AppState>((set) => ({
   setCmykAngle: (id, angle) => set((s) => ({ cmykAngles: { ...s.cmykAngles, [id]: Math.max(0, Math.min(180, angle)) } })),
 
   setProcessedLayers: (processedLayers) => set({ processedLayers }),
+  setProcessedLayerDims: (processedLayerDims) => set({ processedLayerDims }),
   setIsProcessing: (isProcessing) => set({ isProcessing }),
   setSoloLayerId: (soloLayerId) => set({ soloLayerId }),
+  setMockupOpen: (mockupOpen) => set({ mockupOpen }),
 }));

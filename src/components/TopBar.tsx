@@ -3,13 +3,14 @@ import { AppIcon } from './AppIcon';
 
 interface TopBarProps {
   onExport: () => void;
+  onMockup: () => void;
   onLogout?: () => void;
   userEmail?: string;
   firstName?: string;
   subscriptionExpiresAt?: string;
 }
 
-export function TopBar({ onExport, onLogout, userEmail, firstName, subscriptionExpiresAt }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onLogout, userEmail, firstName, subscriptionExpiresAt }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage } = useStore();
 
   const daysRemaining = subscriptionExpiresAt
@@ -124,6 +125,18 @@ export function TopBar({ onExport, onLogout, userEmail, firstName, subscriptionE
         </div>
       )}
 
+      <button
+        className="btn btn-ghost"
+        onClick={onMockup}
+        disabled={!originalImage}
+        title="Preview artwork on shirt mockups"
+        style={{ opacity: originalImage ? 1 : 0.4, height: 26 }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+          <path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0 0-1.34-2.23z"/>
+        </svg>
+        Mockup
+      </button>
       <button
         className="btn btn-primary"
         onClick={onExport}

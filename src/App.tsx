@@ -13,6 +13,7 @@ import { CanvasView } from './components/CanvasView';
 import { ControlPanel } from './components/ControlPanel';
 import { ExportModal } from './components/ExportModal';
 import type { ExportConfig } from './components/ExportModal';
+import { MockupPreview } from './components/MockupPreview';
 import { useStore } from './store/useStore';
 import {
   processImage, applyKnockout, renderComposite, renderCmykComposite, drawRegistrationMarks, computeBackgroundMask,
@@ -56,6 +57,7 @@ function isMobileDevice(): boolean {
 function App() {
   const { status, session, initiateLogin, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
+  const { mockupOpen, setMockupOpen } = useStore();
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const {
     originalImage, layers, globalPattern, knockoutEnabled,
@@ -327,7 +329,7 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} />
       <div className="workspace">
         <LayerPanel />
         <CanvasView />
@@ -339,6 +341,9 @@ function App() {
           onExport={handleExport}
           defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'autothresh'}
         />
+      )}
+      {mockupOpen && (
+        <MockupPreview onClose={() => setMockupOpen(false)} />
       )}
     </div>
   );

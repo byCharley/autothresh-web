@@ -59,7 +59,7 @@ export function CanvasView() {
     documentDpi, documentWidthIn, documentHeightIn,
     separationMode, cmykLpi, cmykVisibility, cmykAngles,
     paintMasks, paintMode, brushSize, selectedLayerId,
-    isProcessing, setOriginalImage, setProcessedLayers, setIsProcessing, setCanvasColor,
+    isProcessing, setOriginalImage, setProcessedLayers, setProcessedLayerDims, setIsProcessing, setCanvasColor,
     setPaintMask, setPaintMode, setBrushSize, clearPaintMask,
     soloLayerId,
   } = useStore();
@@ -241,6 +241,7 @@ export function CanvasView() {
           });
 
           setProcessedLayers(expanded);
+          setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
           // Solo mode: show only the target layer's knocked-out mask so users
           // can directly verify that knockout updates when ranges change.
