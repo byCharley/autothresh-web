@@ -32,6 +32,15 @@ function ShuffleIcon() {
   );
 }
 
+function SoloIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9"/>
+      <circle cx="12" cy="12" r="3.5" fill={active ? 'currentColor' : 'none'}/>
+    </svg>
+  );
+}
+
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
@@ -608,7 +617,7 @@ export function LayerPanel() {
     separationMode, setSeparationMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
     addLayer, removeLayer, duplicateLayer, paintMasks, paintMode,
-    globalPattern,
+    globalPattern, soloLayerId, setSoloLayerId,
   } = useStore();
 
   const handleAutoPalette = () => {
@@ -729,9 +738,24 @@ export function LayerPanel() {
                   <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#22c55e', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Auto</span>
                 </div>
               </div>
-              <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                Ink overlap removed
-              </div>
+              {soloLayerId ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                    Solo: {layers.find(l => l.id === soloLayerId)?.name ?? soloLayerId}
+                  </span>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ fontSize: 9, height: 18, padding: '0 6px' }}
+                    onClick={() => setSoloLayerId(null)}
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : (
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                  Solo a layer to verify knockout
+                </div>
+              )}
             </div>
 
             {/* Layer cards */}
@@ -836,6 +860,16 @@ export function LayerPanel() {
                           </svg>
                         </button>
                       )}
+                      <button
+                        className="vis-btn"
+                        title={soloLayerId === layer.id ? 'Exit solo — show all layers' : 'Solo: view this layer\'s knocked-out mask'}
+                        onClick={(e) => { e.stopPropagation(); setSoloLayerId(soloLayerId === layer.id ? null : layer.id); }}
+                        style={{ color: soloLayerId === layer.id ? 'var(--accent)' : 'var(--text-dim)', opacity: soloLayerId && soloLayerId !== layer.id ? 0.35 : 0.7 }}
+                        onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = soloLayerId === layer.id ? '0.9' : soloLayerId ? '0.35' : '0.7')}
+                      >
+                        <SoloIcon active={soloLayerId === layer.id} />
+                      </button>
                       <button
                         className={`vis-btn ${!layer.visible ? 'hidden-layer' : ''}`}
                         onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}

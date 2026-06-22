@@ -61,6 +61,7 @@ export function CanvasView() {
     paintMasks, paintMode, brushSize, selectedLayerId,
     isProcessing, setOriginalImage, setProcessedLayers, setIsProcessing, setCanvasColor,
     setPaintMask, setPaintMode, setBrushSize, clearPaintMask,
+    soloLayerId,
   } = useStore();
 
   // Increments when real texture PNGs finish loading so the processing effect reruns.
@@ -175,9 +176,10 @@ export function CanvasView() {
   // not a re-render at higher resolution).
   useEffect(() => {
     if (!originalImage) return;
+    let rafId: number | undefined;
     const tid = setTimeout(() => {
       setIsProcessing(true);
-      requestAnimationFrame(() => {
+      rafId = requestAnimationFrame(() => {
         // Always use the fixed base resolution — never zoom-scaled.
         const layout = computeDocLayout(MAX_PREVIEW_DIM);
         if (!layout) { setIsProcessing(false); return; }
@@ -239,7 +241,13 @@ export function CanvasView() {
           });
 
           setProcessedLayers(expanded);
-          artComposite = renderComposite(expanded, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
+
+          // Solo mode: show only the target layer's knocked-out mask so users
+          // can directly verify that knockout updates when ranges change.
+          const displayLayers = soloLayerId
+            ? expanded.filter((pl) => pl.id === soloLayerId || pl.id.startsWith(`${soloLayerId}:`))
+            : expanded;
+          artComposite = renderComposite(displayLayers, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
         }
 
         // Build document canvas: fabric bg + artwork at 1:1 (zero scaling = zero blur).
@@ -266,7 +274,7 @@ export function CanvasView() {
         setIsProcessing(false);
       });
     }, 40);
-    return () => clearTimeout(tid);
+    return () => { clearTimeout(tid); if (rafId !== undefined) cancelAnimationFrame(rafId); };
   }, [
     originalImage, layers, knockoutEnabled, globalPattern,
     bgRemovalEnabled, bgTolerance, canvasColor, showFabricBg, imageAdjustments,
@@ -275,6 +283,7 @@ export function CanvasView() {
     documentWidthIn, documentHeightIn, documentDpi,
     separationMode, cmykLpi, cmykVisibility, cmykAngles,
     paintMasks,
+    soloLayerId,
     // renderDim intentionally excluded — zoom must never trigger a reprocess
   ]);
 

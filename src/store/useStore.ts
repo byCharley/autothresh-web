@@ -102,6 +102,7 @@ interface AppState {
 
   processedLayers: ProcessedLayer[];
   isProcessing: boolean;
+  soloLayerId: string | null;
 
   setTheme: (theme: 'dark' | 'light') => void;
   setOriginalImage: (img: ImageData, preview: ImageData, name: string) => void;
@@ -147,6 +148,7 @@ interface AppState {
 
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
   setIsProcessing: (v: boolean) => void;
+  setSoloLayerId: (id: string | null) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -188,6 +190,7 @@ export const useStore = create<AppState>((set) => ({
 
   processedLayers: [],
   isProcessing: false,
+  soloLayerId: null,
 
   setTheme: (theme) => { localStorage.setItem('at-theme', theme); set({ theme }); },
   setOriginalImage: (originalImage, previewImage, imageFileName) =>
@@ -307,4 +310,5 @@ export const useStore = create<AppState>((set) => ({
 
   setProcessedLayers: (processedLayers) => set({ processedLayers }),
   setIsProcessing: (isProcessing) => set({ isProcessing }),
+  setSoloLayerId: (soloLayerId) => set({ soloLayerId }),
 }));
