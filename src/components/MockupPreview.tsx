@@ -15,12 +15,16 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
   const [isDragging, setIsDragging] = useState(false);
   const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
 
+  // Only list mockups that haven't errored — recalculated whenever imgErrors changes
+  const availableMockups = MOCKUPS.filter(m => !imgErrors[m.id]);
+
   // Use refs for drag math so the mousemove handler never captures stale state
   const dragRef    = useRef({ active: false, mx: 0, my: 0, ax: 0, ay: 0 });
   const contentRef = useRef<HTMLDivElement>(null); // wraps img or placeholder
   const artCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  const mockup = MOCKUPS.find(m => m.id === mockupId) ?? MOCKUPS[0];
+  // If the selected mockup errored, fall back to first available
+  const mockup = availableMockups.find(m => m.id === mockupId) ?? availableMockups[0] ?? MOCKUPS[0];
   const effectiveBlend: string = blendMode === 'auto'
     ? (mockup.isDark ? 'screen' : 'multiply')
     : blendMode;
@@ -62,7 +66,6 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
 
 
   const hasArt = processedLayers.length > 0 && !!processedLayerDims;
-  const mockupMissing = imgErrors[mockupId];
 
   const blendLabel = (m: BlendMode) => {
     if (m === 'auto') return `Auto (${mockup.isDark ? 'Screen' : 'Multiply'})`;
@@ -105,8 +108,8 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
             <div style={{ padding: '4px 12px 8px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Garment
             </div>
-            {MOCKUPS.map((m) => {
-              const active = m.id === mockupId;
+            {availableMockups.map((m) => {
+              const active = m.id === mockup?.id;
               return (
                 <button
                   key={m.id}
@@ -123,17 +126,9 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                 >
                   <div style={{ width: 20, height: 20, flexShrink: 0, borderRadius: 2, background: m.color, border: '1px solid var(--border-2)' }} />
                   <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>{m.name}</span>
-                  {imgErrors[m.id] && (
-                    <span title="Mockup file not found" style={{ marginLeft: 'auto', fontSize: 9, color: 'var(--text-dim)' }}>✕</span>
-                  )}
                 </button>
               );
             })}
-            <div style={{ padding: '12px 12px 4px', marginTop: 8, borderTop: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-                Drop PNGs into<br />/public/mockups/<br />to add more.
-              </div>
-            </div>
           </div>
 
           {/* Center: preview — drag from anywhere here */}
@@ -154,33 +149,21 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                 Load artwork to preview on mockup
               </span>
             ) : (
-              // contentRef wraps the mockup so coordinate math works for both
-              // the real image and the placeholder fallback
               <div ref={contentRef} style={{ position: 'relative', lineHeight: 0, maxHeight: '100%' }}>
-                {mockupMissing ? (
-                  <div style={{
-                    width: 440, height: 520, background: mockup.color,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    border: '1px solid var(--border)',
-                  }}>
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: mockup.isDark ? '#555' : '#aaa' }}>{mockup.name}</span>
-                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: mockup.isDark ? '#444' : '#bbb' }}>{mockup.file}</span>
-                  </div>
-                ) : (
-                  <img
-                    src={mockup.file}
-                    style={{
-                      display: 'block',
-                      maxHeight: 'calc(88vh - 44px)',
-                      maxWidth: 'calc(92vw - 160px - 200px)',
-                      objectFit: 'contain',
-                      pointerEvents: 'none', // let the outer div handle all mouse events
-                    }}
-                    alt={mockup.name}
-                    onError={() => setImgErrors((prev) => ({ ...prev, [mockupId]: true }))}
-                    draggable={false}
-                  />
-                )}
+                <img
+                  key={mockup.id}
+                  src={mockup.file}
+                  style={{
+                    display: 'block',
+                    maxHeight: 'calc(88vh - 44px)',
+                    maxWidth: 'calc(92vw - 160px - 200px)',
+                    objectFit: 'contain',
+                    pointerEvents: 'none',
+                  }}
+                  alt={mockup.name}
+                  onError={() => setImgErrors((prev) => ({ ...prev, [mockup.id]: true }))}
+                  draggable={false}
+                />
 
                 {/* Artwork canvas — positioned over mockup, blended */}
                 <canvas

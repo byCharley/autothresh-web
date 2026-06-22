@@ -6,14 +6,9 @@ export interface MockupDef {
   color: string;  // approximate swatch color
 }
 
-// Add PNG files to /public/mockups/ and add entries here.
-// isDark=true  → auto blend defaults to "screen"  (white/light inks show on dark fabric)
-// isDark=false → auto blend defaults to "multiply" (ink blends with light fabric texture)
 export const MOCKUPS: MockupDef[] = [
-  { id: 'black-tee',  name: 'Black',  file: '/mockups/black-tee.png',  isDark: true,  color: '#111111' },
-  { id: 'white-tee',  name: 'White',  file: '/mockups/white-tee.png',  isDark: false, color: '#F5F5F5' },
-  { id: 'navy-tee',   name: 'Navy',   file: '/mockups/navy-tee.png',   isDark: true,  color: '#1A2448' },
-  { id: 'grey-tee',   name: 'Grey',   file: '/mockups/grey-tee.png',   isDark: false, color: '#9A9898' },
-  { id: 'red-tee',    name: 'Red',    file: '/mockups/red-tee.png',    isDark: true,  color: '#CC1820' },
-  { id: 'forest-tee', name: 'Forest', file: '/mockups/forest-tee.png', isDark: true,  color: '#205030' },
+  { id: 'la-black-front', name: 'Black Front', file: '/mockups/LosAngelesApparel_1801_Front.png',       isDark: true,  color: '#111111' },
+  { id: 'la-black-back',  name: 'Black Back',  file: '/mockups/LosAngelesApparel_1801_Back.png',        isDark: true,  color: '#111111' },
+  { id: 'la-white-front', name: 'White Front', file: '/mockups/LosAngelesApparel_1801_Front_White.png', isDark: false, color: '#F2F0EC' },
+  { id: 'la-white-back',  name: 'White Back',  file: '/mockups/LosAngelesApparel_1801_Back_White.png',  isDark: false, color: '#F2F0EC' },
 ];
