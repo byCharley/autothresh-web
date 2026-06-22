@@ -179,7 +179,7 @@ interface AppState {
   capturePreset: () => PresetData;
 }
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>((set, get) => ({
   theme: (localStorage.getItem('at-theme') as 'dark' | 'light') ?? 'dark',
   originalImage: null,
   previewImage: null,
@@ -364,8 +364,8 @@ export const useStore = create<AppState>((set) => ({
     imageAdjustments: data.imageAdjustments,
     separationMode:   data.separationMode,
   }),
-  capturePreset: () => {
-    const s = useStore.getState();
+  capturePreset: (): PresetData => {
+    const s = get();
     return {
       layers:           s.layers,
       globalPattern:    s.globalPattern,
