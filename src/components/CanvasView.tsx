@@ -203,10 +203,9 @@ export function CanvasView() {
           artComposite = renderCmykComposite(visibleLayers, artPrevW, artPrevH, localBgMask);
         } else {
           const resolved = resolvePatterns(layers, globalPattern);
-          // Range-based knockout runs inside processImage (clearing lower layers
-          // by configured range, not just by pattern overlap). After paint masks,
-          // the external applyKnockout call resolves any painted-pixel conflicts.
-          const processed = processImage(artScaled, resolved, knockoutEnabled, localBgMask, imageAdjustments);
+          // Run without internal knockout so paint masks can be applied first,
+          // then the external applyKnockout call below handles overlap removal.
+          const processed = processImage(artScaled, resolved, false, localBgMask, imageAdjustments);
 
           if (textureEnabled) {
             const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
