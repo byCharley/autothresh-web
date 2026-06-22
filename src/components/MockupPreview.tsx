@@ -171,12 +171,13 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                     ref={imgRef}
                     key={mockup.id}
                     src={mockup.file}
-                    // Fill available height; width follows aspect ratio, capped by available width
+                    // Both axes constrained so the full shirt (including sleeves) is always visible
                     style={{
                       display: 'block',
-                      height: 'calc(88vh - 44px - 32px - 24px)',
+                      height: 'auto',
                       width: 'auto',
-                      maxWidth: 'calc(92vw - 220px - 24px)',
+                      maxHeight: 'calc(88vh - 44px - 32px - 24px)',
+                      maxWidth: 'calc(92vw - 260px - 24px)',
                       pointerEvents: 'none',
                     }}
                     alt={mockup.name}
@@ -215,7 +216,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Right: controls */}
-          <div style={{ width: 220, borderLeft: '1px solid var(--border)', padding: 16, display: 'flex', flexDirection: 'column', gap: 20, flexShrink: 0, overflowY: 'auto' }}>
+          <div style={{ width: 260, borderLeft: '1px solid var(--border)', padding: 16, display: 'flex', flexDirection: 'column', gap: 20, flexShrink: 0, overflowY: 'auto' }}>
 
             {/* Garment selector */}
             <div>
