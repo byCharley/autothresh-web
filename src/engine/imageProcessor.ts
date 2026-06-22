@@ -614,10 +614,29 @@ export function processImage(
   });
 
   if (knockoutEnabled) {
-    for (let i = 0; i < results.length - 1; i++)
-      for (let j = i + 1; j < results.length; j++)
-        for (let k = 0; k < n; k++)
-          if (results[j].mask[k] === 255) results[i].mask[k] = 0;
+    // Range-based ownership: the highest-index visible layer whose configured
+    // threshold range covers a pixel (by global luminance) exclusively owns it.
+    // Every lower layer loses that pixel from its mask, regardless of dither
+    // pattern or per-layer exposure — so no lower-layer ink bleeds into an
+    // upper layer's zone through pattern gaps or exposure shifts.
+    // The owning layer's own pattern mask is never modified.
+    const owner = new Int8Array(n).fill(-1);
+    for (let j = results.length - 1; j >= 0; j--) {
+      if (!results[j].visible) continue;
+      const { thresholdMin, thresholdMax } = layers[j];
+      for (let k = 0; k < n; k++) {
+        if (owner[k] >= 0) continue;
+        if (bgMask && bgMask[k] === 255) continue;
+        if (globalLums[k] >= thresholdMin && globalLums[k] <= thresholdMax) owner[k] = j;
+      }
+    }
+    for (let i = 0; i < results.length; i++) {
+      if (!results[i].visible) continue;
+      const mask = results[i].mask;
+      for (let k = 0; k < n; k++) {
+        if (owner[k] > i) mask[k] = 0;
+      }
+    }
   }
 
   return results;
