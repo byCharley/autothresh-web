@@ -310,14 +310,14 @@ function DocumentSection() {
     setDocumentWidth, setDocumentHeight,
     showRegistrationMarks, setShowRegistrationMarks,
     regMarkPadding, setRegMarkPadding,
-    originalImage, globalPattern,
+    originalImage, globalPattern, separationMode,
   } = useStore();
 
+  const isVector = separationMode === 'vector';
   const docPxW = Math.round(documentWidthIn * documentDpi);
   const docPxH = Math.round(documentHeightIn * documentDpi);
   const lpi = Math.round(documentDpi / Math.max(1, globalPattern.patternScale));
 
-  // Artwork dimensions at current DPI
   const artWIn = originalImage ? (originalImage.width / documentDpi).toFixed(2) : null;
   const artHIn = originalImage ? (originalImage.height / documentDpi).toFixed(2) : null;
 
@@ -362,48 +362,59 @@ function DocumentSection() {
         </div>
       </div>
 
-      {/* DPI */}
-      <div className="field">
-        <span className="field-label">Output DPI</span>
-        <select className="at-select" value={documentDpi}
-          onChange={(e) => setDocumentDpi(Number(e.target.value))}>
-          {DPI_OPTIONS.map((d) => (
-            <option key={d} value={d}>
-              {d} DPI{d === 300 ? ' · standard' : d === 72 ? ' · screen' : d === 600 ? ' · hi-res' : ''}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* DPI — hidden for vector since SVG is resolution-independent */}
+      {!isVector && (
+        <div className="field">
+          <span className="field-label">Output DPI</span>
+          <select className="at-select" value={documentDpi}
+            onChange={(e) => setDocumentDpi(Number(e.target.value))}>
+            {DPI_OPTIONS.map((d) => (
+              <option key={d} value={d}>
+                {d} DPI{d === 300 ? ' · standard' : d === 72 ? ' · screen' : d === 600 ? ' · hi-res' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Info */}
       <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8, marginTop: 4 }}>
-        <div>Output: {docPxW.toLocaleString()} × {docPxH.toLocaleString()} px</div>
-        <div>Pattern: {globalPattern.patternScale}px scale → ~{lpi} LPI</div>
+        {isVector ? (
+          <div>SVG · resolution independent · scales to any size</div>
+        ) : (
+          <>
+            <div>Output: {docPxW.toLocaleString()} × {docPxH.toLocaleString()} px</div>
+            <div>Pattern: {globalPattern.patternScale}px scale → ~{lpi} LPI</div>
+          </>
+        )}
         {artWIn && artHIn && (
           <div style={{ color: 'var(--text-dim)', marginTop: 2 }}>
-            Artwork: {artWIn}" × {artHIn}" @ {documentDpi} DPI
+            Artwork: {artWIn}" × {artHIn}"
+            {!isVector && ` @ ${documentDpi} DPI`}
           </div>
         )}
       </div>
 
-      {/* Registration Marks — tied to document corners */}
-      <div style={{ borderTop: '1px solid var(--border)', marginTop: 10, paddingTop: 10 }}>
-        <SwitchRow
-          label="Registration Marks"
-          checked={showRegistrationMarks}
-          onChange={setShowRegistrationMarks}
-          hint={showRegistrationMarks ? 'Shown at document corners — visible in preview and baked into export' : undefined}
-        />
-        {showRegistrationMarks && (
-          <Slider
-            label="Padding"
-            value={regMarkPadding}
-            min={0.1} max={2.0} step={0.1}
-            onChange={setRegMarkPadding}
-            unit='"'
+      {/* Registration Marks — not applicable to vector exports */}
+      {!isVector && (
+        <div style={{ borderTop: '1px solid var(--border)', marginTop: 10, paddingTop: 10 }}>
+          <SwitchRow
+            label="Registration Marks"
+            checked={showRegistrationMarks}
+            onChange={setShowRegistrationMarks}
+            hint={showRegistrationMarks ? 'Shown at document corners — visible in preview and baked into export' : undefined}
           />
-        )}
-      </div>
+          {showRegistrationMarks && (
+            <Slider
+              label="Padding"
+              value={regMarkPadding}
+              min={0.1} max={2.0} step={0.1}
+              onChange={setRegMarkPadding}
+              unit='"'
+            />
+          )}
+        </div>
+      )}
     </Section>
   );
 }
@@ -417,15 +428,6 @@ const DIFFUSION_PATTERNS: { id: PatternType; label: string }[] = [
   { id: 'stucki',     label: 'Stucki' },
 ];
 
-const ORDERED_PATTERNS: { id: PatternType; label: string }[] = [
-  { id: 'bayer-2',    label: 'Bayer 2×2' },
-  { id: 'bayer-4',    label: 'Bayer 4×4' },
-  { id: 'bayer-8',    label: 'Bayer 8×8' },
-  { id: 'bayer-16',   label: 'Bayer 16×16' },
-  { id: 'bayer-32',   label: 'Bayer 32×32' },
-  { id: 'blue-noise', label: 'Blue Noise' },
-  { id: 'none',       label: 'Solid' },
-];
 
 const ERROR_DIFF_PATTERNS: PatternType[] = ['diffusion', 'atkinson', 'jarvis', 'stucki'];
 

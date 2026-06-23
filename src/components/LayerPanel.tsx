@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
-import { extractPalette } from '../engine/imageProcessor';
 import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, generateHarmonicPalettes } from '../engine/colorSeparation';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -849,6 +848,7 @@ export function LayerPanel() {
   const {
     layers, selectedLayerId, selectLayer, updateLayer,
     previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
+    paletteNumColors,
     separationMode, setSeparationMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
     addLayer, removeLayer, duplicateLayer, paintMasks, paintMode,

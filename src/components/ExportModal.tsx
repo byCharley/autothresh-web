@@ -29,6 +29,9 @@ const FORMATS_DITHER: { value: ExportFormat; label: string; ext: string }[] = [
 ];
 
 function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean) {
+  if (format === 'svg') {
+    return { pkg: 'Single file', layers: 'Scalable vector paths', bg: 'Transparent', marks: 'Not included' };
+  }
   if (isDither) {
     switch (format) {
       case 'png': return { pkg: 'Single file', layers: 'Dithered composite image', bg: 'White', marks: 'Not included' };

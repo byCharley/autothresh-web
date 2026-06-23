@@ -641,8 +641,8 @@ export function computeZones(
     if (imageAdj && imageAdj.blur > 0) {
       const bgFlags = new Uint8Array(n);
       for (let i = 0; i < n; i++) { if (lums[i] < 0) { bgFlags[i] = 1; lums[i] = 128; } }
-      lums = boxBlur(lums, w, h, imageAdj.blur * 2);
-      lums = boxBlur(lums, w, h, imageAdj.blur);
+      lums = boxBlur(lums as Float32Array<ArrayBuffer>, w, h, imageAdj.blur * 2);
+      lums = boxBlur(lums as Float32Array<ArrayBuffer>, w, h, imageAdj.blur);
       for (let i = 0; i < n; i++) { if (bgFlags[i]) lums[i] = -1; }
     }
     return lums;
@@ -857,7 +857,7 @@ export function computeZones(
       const blurR = Math.max(1, Math.round(cellPx * softness / 50));
       const bgFlags2 = new Uint8Array(n);
       for (let ii = 0; ii < n; ii++) { if (lum[ii] < 0) { bgFlags2[ii] = 1; lum[ii] = 128; } }
-      lum = boxBlur(lum, w, h, blurR);
+      lum = boxBlur(lum as Float32Array<ArrayBuffer>, w, h, blurR);
       for (let ii = 0; ii < n; ii++) { if (bgFlags2[ii]) lum[ii] = -1; }
     }
     if (!tile) {
