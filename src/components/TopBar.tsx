@@ -12,7 +12,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, firstName, subscriptionExpiresAt }: TopBarProps) {
-  const { theme, setTheme, imageFileName, originalImage, clearImage } = useStore();
+  const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings } = useStore();
 
   const daysRemaining = subscriptionExpiresAt
     ? Math.ceil((new Date(subscriptionExpiresAt).getTime() - Date.now()) / 86_400_000)
@@ -40,19 +40,35 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
       )}
 
       {originalImage && (
-        <button
-          className="btn btn-ghost"
-          onClick={clearImage}
-          title="Clear image and start over"
-          style={{ fontSize: 11, fontFamily: 'var(--font-mono)', opacity: 0.6, marginLeft: 4 }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.6')}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 4 }}>
-            <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
-          </svg>
-          New
-        </button>
+        <>
+          <button
+            className="btn btn-ghost"
+            onClick={clearImage}
+            title="Clear image and start over"
+            style={{ fontSize: 11, fontFamily: 'var(--font-mono)', opacity: 0.6, marginLeft: 4 }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.6')}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 4 }}>
+              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
+            </svg>
+            New
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={resetAllSettings}
+            title="Reset all settings to defaults (keeps image)"
+            style={{ fontSize: 11, fontFamily: 'var(--font-mono)', opacity: 0.6 }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.6')}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 4 }}>
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <polyline points="3 3 3 8 8 8"/>
+            </svg>
+            Reset
+          </button>
+        </>
       )}
 
       <div className="topbar-spacer" />

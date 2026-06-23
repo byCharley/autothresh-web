@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import type { PresetData } from '../store/useStore';
 
+type PresetMode = 'threshold' | 'palette';
+
 interface SavedPreset {
   id: string;
   name: string;
@@ -16,16 +18,19 @@ interface Props {
 }
 
 export function PresetsModal({ token, onClose }: Props) {
-  const { loadPreset, capturePreset } = useStore();
+  const { loadPreset, capturePreset, separationMode } = useStore();
 
-  const [presets, setPresets]       = useState<SavedPreset[]>([]);
-  const [loading, setLoading]       = useState(true);
+  const [presets, setPresets]           = useState<SavedPreset[]>([]);
+  const [loading, setLoading]           = useState(true);
   const [apiAvailable, setApiAvailable] = useState(true);
-  const [saving, setSaving]         = useState(false);
-  const [saveError, setSaveError]   = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [newName, setNewName]       = useState('');
-  const [loadedId, setLoadedId]     = useState<string | null>(null);
+  const [saving, setSaving]             = useState(false);
+  const [saveError, setSaveError]       = useState('');
+  const [deletingId, setDeletingId]     = useState<string | null>(null);
+  const [newName, setNewName]           = useState('');
+  const [loadedId, setLoadedId]         = useState<string | null>(null);
+  const [activeTab, setActiveTab]       = useState<PresetMode>(
+    separationMode === 'palette' ? 'palette' : 'threshold'
+  );
 
   useEffect(() => { fetchPresets(); }, []);
 
@@ -37,7 +42,6 @@ export function PresetsModal({ token, onClose }: Props) {
       setPresets(await r.json());
       setApiAvailable(true);
     } catch {
-      // Silently fall back — API may be unavailable in local dev without `vercel dev`
       setApiAvailable(false);
     } finally {
       setLoading(false);
@@ -90,7 +94,14 @@ export function PresetsModal({ token, onClose }: Props) {
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  const isEmpty = !loading && presets.length === 0;
+  function getPresetMode(data: PresetData): PresetMode {
+    return (data.mode === 'palette' || data.separationMode === 'palette') ? 'palette' : 'threshold';
+  }
+
+  const tabPresets = presets.filter((p) => getPresetMode(p.data) === activeTab);
+  const isEmpty = !loading && tabPresets.length === 0;
+
+  const TAB_LABELS: Record<PresetMode, string> = { threshold: 'Threshold', palette: 'Dither' };
 
   return (
     <div
@@ -125,6 +136,38 @@ export function PresetsModal({ token, onClose }: Props) {
 
           {/* Left: saved presets list */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid var(--border)' }}>
+
+            {/* Mode tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              {(['threshold', 'palette'] as PresetMode[]).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    flex: 1, height: 36, fontSize: 10, fontFamily: 'var(--font-mono)',
+                    fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+                    cursor: 'pointer', border: 'none',
+                    borderBottom: `2px solid ${activeTab === tab ? 'var(--accent)' : 'transparent'}`,
+                    background: activeTab === tab ? 'var(--accent-dim)' : 'transparent',
+                    color: activeTab === tab ? 'var(--accent)' : 'var(--text-muted)',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {TAB_LABELS[tab]}
+                  {!loading && (
+                    <span style={{
+                      marginLeft: 6, fontSize: 9, opacity: 0.6,
+                      background: activeTab === tab ? 'var(--accent)' : 'var(--surface-2)',
+                      color: activeTab === tab ? '#000' : 'var(--text-dim)',
+                      padding: '1px 5px', borderRadius: 3,
+                    }}>
+                      {presets.filter((p) => getPresetMode(p.data) === tab).length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
             {loading ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Loading…</span>
@@ -135,21 +178,21 @@ export function PresetsModal({ token, onClose }: Props) {
                   <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
                 </svg>
                 <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text)', fontWeight: 600 }}>
-                  No presets saved yet
+                  No {TAB_LABELS[activeTab]} presets saved yet
                 </div>
                 <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.7, maxWidth: 220 }}>
                   {apiAvailable
-                    ? 'Give your current layer settings a name and save them — they\'ll be available every time you log in.'
+                    ? `Switch to ${TAB_LABELS[activeTab]} mode, set up your settings, then save a preset from the right panel.`
                     : 'Save a preset to get started. Your settings will sync to your account once connected.'}
                 </div>
               </div>
             ) : (
               <>
                 <div style={{ padding: '8px 14px 6px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', flexShrink: 0 }}>
-                  Saved Presets ({presets.length})
+                  {TAB_LABELS[activeTab]} Presets ({tabPresets.length})
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
-                  {presets.map((preset) => {
+                  {tabPresets.map((preset) => {
                     const isLoaded = loadedId === preset.id;
                     return (
                       <div
@@ -162,8 +205,10 @@ export function PresetsModal({ token, onClose }: Props) {
                         }}
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: isLoaded ? 'var(--accent)' : 'var(--text)', fontWeight: isLoaded ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {preset.name}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: isLoaded ? 'var(--accent)' : 'var(--text)', fontWeight: isLoaded ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {preset.name}
+                            </span>
                           </div>
                           <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 2 }}>
                             {formatDate(preset.updated_at)}
@@ -205,8 +250,22 @@ export function PresetsModal({ token, onClose }: Props) {
             <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Save Current Settings
             </div>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 8px', background: 'var(--surface-2)',
+              border: '1px solid var(--border)', alignSelf: 'flex-start',
+            }}>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                Mode:
+              </span>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                {separationMode === 'palette' ? 'Dither' : 'Threshold'}
+              </span>
+            </div>
             <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.7 }}>
-              Saves layers, colors, thresholds, patterns, texture, and document settings.
+              {separationMode === 'palette'
+                ? 'Saves dither style, ink colors, scale, color mode, and image adjustments.'
+                : 'Saves layers, colors, thresholds, patterns, texture, and document settings.'}
             </div>
             <input
               type="text"

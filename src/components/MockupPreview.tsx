@@ -6,7 +6,7 @@ import { MOCKUPS } from '../config/mockups';
 type BlendMode = 'auto' | 'multiply' | 'screen' | 'overlay' | 'normal';
 
 export function MockupPreview({ onClose }: { onClose: () => void }) {
-  const { processedLayers, processedLayerDims } = useStore();
+  const { processedLayers, processedLayerDims, ditherComposite, separationMode } = useStore();
 
   const [mockupId, setMockupId]   = useState(MOCKUPS[0]?.id ?? '');
   const [artPos, setArtPos]       = useState({ x: 50, y: 38 });
@@ -29,13 +29,24 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     const canvas = artCanvasRef.current;
-    if (!canvas || !processedLayers.length || !processedLayerDims) return;
+    if (!canvas) return;
+
+    if (separationMode === 'palette' && ditherComposite) {
+      // Use the final rendered composite (includes color mode blend, bg removal, etc.)
+      const { data, w, h } = ditherComposite;
+      canvas.width  = w;
+      canvas.height = h;
+      canvas.getContext('2d')!.putImageData(data, 0, 0);
+      return;
+    }
+
+    if (!processedLayers.length || !processedLayerDims) return;
     const { w, h } = processedLayerDims;
     canvas.width  = w;
     canvas.height = h;
     const composite = renderComposite(processedLayers, w, h, true, '#ffffff', false);
     canvas.getContext('2d')!.putImageData(composite, 0, 0);
-  }, [processedLayers, processedLayerDims]);
+  }, [processedLayers, processedLayerDims, ditherComposite, separationMode]);
 
   const onPreviewMouseDown = (e: React.MouseEvent) => {
     if (!hasArt) return;
@@ -104,7 +115,9 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     }, 'image/png');
   };
 
-  const hasArt = processedLayers.length > 0 && !!processedLayerDims;
+  const hasArt = separationMode === 'palette'
+    ? !!ditherComposite
+    : processedLayers.length > 0 && !!processedLayerDims;
 
   const blendLabel = (m: BlendMode) => {
     if (m === 'auto') return `Auto (${mockup.isDark ? 'Screen' : 'Multiply'})`;

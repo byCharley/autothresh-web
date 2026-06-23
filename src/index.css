@@ -7,8 +7,8 @@
 
   --radius: 0px;
   --topbar-h: 48px;
-  --panel-left-w: 224px;
-  --panel-right-w: 288px;
+  --panel-left-w: 264px;
+  --panel-right-w: 320px;
 
   /* Layer colors for UI */
   --layer-thumb-size: 28px;
@@ -80,6 +80,38 @@ html, body, #root {
   overflow: hidden;
   min-height: 0;
 }
+
+/* ─── Panel collapse wrappers ─────────────────────────────────────────────── */
+.panel-wrap {
+  display: flex;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.22s ease, min-width 0.22s ease;
+}
+.panel-wrap--left  { width: var(--panel-left-w);  min-width: var(--panel-left-w); }
+.panel-wrap--right { width: var(--panel-right-w); min-width: var(--panel-right-w); }
+.panel-wrap--left.panel-wrap--closed  { width: 0; min-width: 0; }
+.panel-wrap--right.panel-wrap--closed { width: 0; min-width: 0; }
+
+/* ─── Panel toggle tabs ───────────────────────────────────────────────────── */
+.panel-tab {
+  flex-shrink: 0;
+  width: 14px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background 0.15s, color 0.15s;
+  position: relative;
+  z-index: 5;
+}
+.panel-tab:hover { background: var(--surface-2); color: var(--text); }
+.panel-tab--left  { border-right: 1px solid var(--border); }
+.panel-tab--right { border-left:  1px solid var(--border); }
 
 /* ─── TopBar ──────────────────────────────────────────────────────────────────── */
 .topbar {

@@ -1,9 +1,10 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SeparationMode = 'threshold' | 'cmyk';
+export type SeparationMode = 'threshold' | 'cmyk' | 'palette' | 'vector';
 
 export type PatternType =
   | 'none'
+  | 'diffusion'
   | 'noise'
   | 'noise-coarse'
   | 'noise-texture'
@@ -23,7 +24,37 @@ export type PatternType =
   | 'reticulation'
   | 'bayer-2'
   | 'bayer-4'
-  | 'bayer-8';
+  | 'bayer-8'
+  | 'bayer-16'
+  | 'bayer-32'
+  // Classic error diffusion variants
+  | 'atkinson'
+  | 'jarvis'
+  | 'stucki'
+  // Classic ordered
+  | 'blue-noise'
+  // Pattern tiles
+  | 'grid'
+  | 'checker'
+  | 'hex'
+  | 'hatch'
+  // Artistic tiles
+  | 'bytewave'
+  | 'shader'
+  | 'stipple'
+  | 'engraving'
+  | 'etching'
+  | 'newspaper'
+  | 'comic'
+  // Atmospheric
+  | 'scanline'
+  | 'crt'
+  // Experimental algorithmic
+  | 'glitch'
+  | 'pixel-sort'
+  | 'voronoi'
+  | 'ascii'
+  | 'grain-micro';
 
 export interface ImageAdjustments {
   exposure: number;    // -100 to 100  overall brightness (EV)
@@ -79,7 +110,7 @@ function applyExposure(lum: number, exposure: number): number {
 
 type F32 = Float32Array<ArrayBuffer>;
 
-function boxBlur(src: F32, w: number, h: number, r: number): F32 {
+export function boxBlur(src: F32, w: number, h: number, r: number): F32 {
   if (r <= 0) return src;
   const rad = Math.max(1, Math.round(r));
   const tmp = new Float32Array(w * h) as F32;
@@ -178,6 +209,24 @@ function noiseCoarseValues(w: number, h: number, scale: number, seed: number): F
     for (let x = 0; x < w; x++)
       noise[y * w + x] = pseudoRandom(Math.floor(x / s), Math.floor(y / s), seed);
   return noise;
+}
+
+function grainMicroValues(w: number, h: number, seed: number): F32 {
+  // Per-pixel Gaussian-approximated noise (average of 3 independent uniform samples).
+  // The Gaussian distribution (bell-curve at 0.5) produces organic, photographic-
+  // looking grain: mid-tones get the most activity, shadows/highlights stay clean.
+  // This pattern intentionally ignores patternScale — the export code also skips
+  // the scale multiplier so grain stays at 1px at any output resolution.
+  const vals = new Float32Array(w * h) as F32;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const a = pseudoRandom(x,          y,          seed);
+      const b = pseudoRandom(x ^ 0x1357, y ^ 0x2468, seed);
+      const c = pseudoRandom(x ^ 0xFEDC, y ^ 0xBA98, seed);
+      vals[y * w + x] = (a + b + c) / 3;
+    }
+  }
+  return vals;
 }
 
 function halftoneValues(
@@ -302,7 +351,7 @@ function bayerValues(w: number, h: number, scale: number, order: 2 | 4 | 8): F32
 
 // ─── Global Image Adjustments ─────────────────────────────────────────────────
 
-function applyGlobalAdjustments(lum: number, adj: ImageAdjustments): number {
+export function applyGlobalAdjustments(lum: number, adj: ImageAdjustments): number {
   let l = lum;
   if (adj.exposure !== 0)    l = l * Math.pow(2, (adj.exposure / 100) * 3);
   if (adj.contrast !== 0)    l = (l - 128) * (1 + (adj.contrast / 100) * 1.5) + 128;
@@ -317,6 +366,56 @@ function applyGlobalAdjustments(lum: number, adj: ImageAdjustments): number {
   return Math.max(0, Math.min(255, l));
 }
 
+// Analyzes the luminance histogram of non-background pixels and returns
+// optimal exposure + contrast to stretch the tonal range to [0, 255].
+// Prevents highlight pile-up (white pixel artifacts) in dither mode without
+// requiring manual slider tweaking per image.
+export function autoImageAdjustments(
+  imageData: ImageData,
+  bgMask: Uint8Array | null,
+): ImageAdjustments {
+  const { data, width, height } = imageData;
+  const n = width * height;
+
+  const hist = new Uint32Array(256);
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    if (bgMask && bgMask[i] === 255) continue;
+    const lum = Math.round(0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]);
+    hist[Math.max(0, Math.min(255, lum))]++;
+    count++;
+  }
+
+  if (count < 100) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0 };
+
+  const p2target  = count * 0.02;
+  const p98target = count * 0.98;
+  let p2 = 0, p98 = 255, cumulative = 0;
+  for (let v = 0; v < 256; v++) {
+    cumulative += hist[v];
+    if (cumulative <= p2target)  p2  = v;
+    if (cumulative <= p98target) p98 = v;
+  }
+
+  // Image already has good tonal range — no adjustment needed
+  if (p98 - p2 >= 220) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0 };
+
+  const mid = (p2 + p98) / 2;
+
+  // Exposure: scale so the midpoint lands at 128
+  const factor   = mid > 0 ? Math.max(0.5, Math.min(2, 128 / mid)) : 1;
+  const exposure = Math.max(-50, Math.min(50, (Math.log2(factor) / 3) * 100));
+
+  // Contrast: after exposure centering, stretch [p2', p98'] → [0, 255]
+  const p2Adj        = p2  * factor;
+  const p98Adj       = p98 * factor;
+  const adjustedRange = Math.max(1, p98Adj - p2Adj);
+  const S             = 255 / adjustedRange;
+  const contrast      = Math.max(-50, Math.min(60, ((S - 1) / 1.5) * 100));
+
+  return { exposure, contrast, shadows: 0, highlights: 0, blur: 0 };
+}
+
 function buildPatternValues(w: number, h: number, layer: LayerConfig, idx: number): F32 | null {
   const { pattern, patternScale, patternAngle, patternDensity } = layer;
   const seed = idx + 1;
@@ -326,7 +425,8 @@ function buildPatternValues(w: number, h: number, layer: LayerConfig, idx: numbe
     case 'grain-soft':       return noiseValues(w, h, patternScale, seed);
     case 'noise-coarse':
     case 'grain-coarse':     return noiseCoarseValues(w, h, patternScale, seed);
-    case 'noise-texture':     return samplePatternTexture('noise-texture', w, h, patternScale, seed) ?? noiseValues(w, h, patternScale, seed);
+    case 'noise-texture':    return samplePatternTexture('noise-texture', w, h, patternScale, seed) ?? noiseValues(w, h, patternScale, seed);
+    case 'grain-micro':      return grainMicroValues(w, h, seed);
     case 'halftone-round':   return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'round');
     case 'halftone-diamond': return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'diamond');
     case 'halftone-ellipse': return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'ellipse');
@@ -576,8 +676,12 @@ export function processImage(
   // Scale pattern parameters to keep visual dot/grain size consistent across
   // different canvas resolutions (e.g. zoom changes artPrevW but dots should
   // stay the same physical size).
-  const scaleLayer = (l: LayerConfig): LayerConfig =>
-    patternScaleFactor === 1 ? l : { ...l, patternScale: l.patternScale * patternScaleFactor };
+  const scaleLayer = (l: LayerConfig): LayerConfig => {
+    // grain-micro always renders at 1px regardless of output resolution —
+    // skip the export scale multiplier so it stays genuinely fine at print DPI.
+    if (patternScaleFactor === 1 || l.pattern === 'grain-micro') return l;
+    return { ...l, patternScale: l.patternScale * patternScaleFactor };
+  };
 
   // ── 2. One shared pattern for all global-pattern layers (continuous film overlay)
   const firstGlobal = layers.find(
@@ -610,7 +714,7 @@ export function processImage(
       finalMask[i] = adjL >= layer.thresholdMin && adjL <= layer.thresholdMax ? 255 : 0;
     }
 
-    return { id: layer.id, mask: finalMask, color: hexToRgb(layer.color), visible: layer.visible };
+    return { id: layer.id, name: layer.name, mask: finalMask, color: hexToRgb(layer.color), visible: layer.visible };
   });
 
   if (knockoutEnabled) {
@@ -763,33 +867,243 @@ export const DEFAULT_CMYK_ANGLES: Record<string, number> = {
   'cmyk-k': 45, 'cmyk-c': 15, 'cmyk-m': 75, 'cmyk-y': 0,
 };
 
+// ─── CMYK Quality Parameters ──────────────────────────────────────────────────
+
+export interface CmykParams {
+  // ── Auto CMYK (beginner — shown by default) ───────────────────────────────
+  detail:         number; // 0–100  edge detail preservation (70)
+  contrast:       number; // 0–100  tonal contrast S-curve (55)
+  colorStrength:  number; // 0–100  CMY plate saturation — 0=B&W, 100=vivid (75)
+  blackStrength:  number; // 0–100  K plate density / shadow weight (82)
+  printStyle:     number; // 0=Soft · 50=Standard · 100=Sharp
+  garmentColor:   number; // 0=White · 50=Light · 100=Dark
+
+  // ── Advanced (hidden by default) ──────────────────────────────────────────
+  gcrAmount:       number; // 0–100  gray component → K (70)
+  ucrAmount:       number; // 0–100  under color removal in shadows (55)
+  cyanWarmProtect: number; // 0–100  suppress C in warm/red areas (75)
+  highlightProtect:number; // 0–60   ink suppression near white (25)
+  yellowClean:     number; // 0–100  reduce Y in near-neutral areas (45)
+  totalInkLimit:   number; // 200–400 max C+M+Y+K % (280)
+  dotGain:         number; // 0–40   dot gain compensation (15)
+  smoothFlat:      number; // 0–100  blur sigma scale — leave 0 to derive from printStyle
+}
+
+export const DEFAULT_CMYK_PARAMS: CmykParams = {
+  detail:          70,
+  contrast:        55,
+  colorStrength:   75,
+  blackStrength:   82,
+  printStyle:      50,
+  garmentColor:    0,
+
+  gcrAmount:       70,
+  ucrAmount:       55,
+  cyanWarmProtect: 75,
+  highlightProtect:25,
+  yellowClean:     45,
+  totalInkLimit:   280,
+  dotGain:         15,
+  smoothFlat:      0,   // 0 = derive from printStyle automatically
+};
+
+// ─── Screen-print pixel conversion ───────────────────────────────────────────
+// Goal: visual reconstruction of original artwork, not mathematical CMYK accuracy.
+// K carries structure (luminosity-based). CMY carry only chromatic content.
+// Warm colors are protected from cyan contamination.
+function convertPixelCmyk(
+  r: number, g: number, b: number, p: Partial<CmykParams>,
+): [c: number, m: number, y: number, k: number] {
+  // ── Read params (with defaults) ──────────────────────────────────────────
+  const blackStr  = (p.blackStrength   ?? 82) / 100;
+  const colorStr  = (p.colorStrength   ?? 75) / 100;
+  const contrast  = (p.contrast        ?? 55) / 100;
+  const gcrAmt    = (p.gcrAmount       ?? 70) / 100;
+  const ucrAmt    = (p.ucrAmount       ?? 55) / 100;
+  const hlProt    = (p.highlightProtect?? 25) / 100;
+  const yclean    = (p.yellowClean     ?? 45) / 100;
+  const cyanWarm  = (p.cyanWarmProtect ?? 75) / 100;
+  const tac       = (p.totalInkLimit   ?? 280) / 100;
+  const style     = (p.printStyle      ?? 50) / 100;  // 0=soft … 1=sharp
+  const garment   = (p.garmentColor    ?? 0)  / 100;  // 0=white … 1=dark
+
+  // ── K plate: luminosity-based (not max-channel) ──────────────────────────
+  // Luminosity follows human perception → K carries the artwork's visual weight.
+  // blackStrength controls the gamma (shadow density).
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  const kGamma = Math.max(0.3, 1.6 - blackStr * 1.2); // 82%→0.62, 50%→1.0, 100%→0.4
+  let k = Math.pow(1 - lum, kGamma);
+
+  // ── Ideal CMY (full pigment, before any black substitution) ─────────────
+  const ci = 1 - r, mi = 1 - g, yi = 1 - b;
+
+  // ── GCR: pull gray component into K so CMY carry only chromatic content ─
+  const grayComp = Math.min(ci, mi, yi);
+  const gcrShift = grayComp * gcrAmt;
+  let c = Math.max(0, ci - gcrShift);
+  let m = Math.max(0, mi - gcrShift);
+  let y = Math.max(0, yi - gcrShift);
+
+  // ── UCR: reduce CMY further in shadows to prevent muddy overprinting ────
+  if (ucrAmt > 0 && lum < 0.4) {
+    const shadowF = 1 - ucrAmt * Math.pow(Math.max(0, (0.4 - lum) / 0.4), 0.8);
+    c *= shadowF; m *= shadowF; y *= shadowF;
+  }
+
+  // ── Scale CMY by color strength ──────────────────────────────────────────
+  c *= colorStr; m *= colorStr; y *= colorStr;
+
+  // ── Warm color protection: suppress C in red/gold/skin areas ────────────
+  if (cyanWarm > 0) {
+    const warmScore = Math.max(0, Math.min(1, (r - b) * 3));
+    c *= 1 - warmScore * cyanWarm;
+  }
+
+  // ── Yellow cleanup: suppress Y in near-neutral areas ────────────────────
+  if (yclean > 0) {
+    const chromaSat = Math.max(ci, mi, yi) - Math.min(ci, mi, yi);
+    y *= Math.min(1, chromaSat / 0.18 + (1 - yclean));
+  }
+
+  // ── Contrast: power-function S-curve on all plates ─────────────────────
+  // contrast=55 (default) → slight gamma boost for punch.
+  // style adds +contrast for Sharp, -contrast for Soft.
+  const effectiveContrast = contrast + (style - 0.5) * 0.25;
+  const cGamma = Math.max(0.3, 1.6 - effectiveContrast * 1.2);
+  if (Math.abs(cGamma - 1) > 0.02) {
+    k = Math.pow(Math.max(0, k), cGamma);
+    c = Math.pow(Math.max(0, c), cGamma);
+    m = Math.pow(Math.max(0, m), cGamma);
+    y = Math.pow(Math.max(0, y), cGamma);
+  }
+
+  // ── Garment adjustment ──────────────────────────────────────────────────
+  // Light garments: tighten ink budget. Dark: boost K, trim CMY.
+  if (garment > 0) {
+    const gf = garment; // 0=white … 1=dark
+    k  = Math.min(1, k * (1 + gf * 0.3));
+    c *= (1 - gf * 0.2); m *= (1 - gf * 0.2); y *= (1 - gf * 0.2);
+  }
+
+  // ── Highlight protection: ramp all channels to 0 near white ────────────
+  if (hlProt > 0) {
+    const thr = 1 - hlProt * 0.7;
+    if (lum > thr) {
+      const f = Math.max(0, 1 - (lum - thr) / Math.max(0.001, 1 - thr));
+      c *= f; m *= f; y *= f; k *= f;
+    }
+  }
+
+  // ── Total ink limit ──────────────────────────────────────────────────────
+  const total = c + m + y + k;
+  if (total > tac) { const s = tac / total; c *= s; m *= s; y *= s; k *= s; }
+
+  return [Math.max(0, c), Math.max(0, m), Math.max(0, y), Math.max(0, k)];
+}
+
+// ─── Plate smoothing (edge-aware Gaussian) ────────────────────────────────────
+
+function boxPassH(src: Float32Array, w: number, h: number, r: number): Float32Array {
+  const dst = new Float32Array(src.length);
+  const inv = 1 / (2 * r + 1);
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    const fv = src[row], lv = src[row + w - 1];
+    let val = (r + 1) * fv;
+    for (let j = 0; j < r; j++) val += src[row + j];
+    let ti = row, li = row, ri = row + r;
+    for (let x = 0; x <= r; x++)        { val += src[ri++] - fv;        dst[ti++] = val * inv; }
+    for (let x = r + 1; x < w - r; x++) { val += src[ri++] - src[li++]; dst[ti++] = val * inv; }
+    for (let x = w - r; x < w; x++)     { val += lv - src[li++];        dst[ti++] = val * inv; }
+  }
+  return dst;
+}
+
+function boxPassV(src: Float32Array, w: number, h: number, r: number): Float32Array {
+  const dst = new Float32Array(src.length);
+  const inv = 1 / (2 * r + 1);
+  for (let x = 0; x < w; x++) {
+    const fv = src[x], lv = src[(h - 1) * w + x];
+    let val = (r + 1) * fv;
+    for (let j = 0; j < r; j++) val += src[j * w + x];
+    let ti = x, li = x, ri = r * w + x;
+    for (let y = 0; y <= r; y++)        { val += src[ri] - fv;      ri += w; dst[ti] = val * inv; ti += w; }
+    for (let y = r + 1; y < h - r; y++) { val += src[ri] - src[li]; ri += w; li += w; dst[ti] = val * inv; ti += w; }
+    for (let y = h - r; y < h; y++)     { val += lv - src[li];      li += w; dst[ti] = val * inv; ti += w; }
+  }
+  return dst;
+}
+
+// Three-pass box blur approximates Gaussian. sigma ≈ r / sqrt(3).
+function blurPlate(src: Float32Array, w: number, h: number, sigma: number): Float32Array {
+  const r = Math.max(1, Math.round(sigma * Math.SQRT2));
+  let p = src;
+  for (let i = 0; i < 3; i++) { p = boxPassH(p, w, h, r); p = boxPassV(p, w, h, r); }
+  return p;
+}
+
+// Sobel edge map [0,1], soft-dilated so edges protect a neighborhood of ~spreadSigma radius.
+function buildEdgeMask(data: Uint8ClampedArray, w: number, h: number, spreadSigma: number): Float32Array {
+  const e = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const L = (dx: number, dy: number): number => {
+        const idx = ((y + dy) * w + (x + dx)) * 4;
+        return (0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]) / 255;
+      };
+      const gx = L(1,-1) - L(-1,-1) + 2*(L(1,0) - L(-1,0)) + L(1,1) - L(-1,1);
+      const gy = L(-1,1) - L(-1,-1) + 2*(L(0,1) - L(0,-1)) + L(1,1) - L(1,-1);
+      e[y * w + x] = Math.min(1, Math.sqrt(gx * gx + gy * gy) * 3);
+    }
+  }
+  // Spread edge signal outward, then re-saturate so the mask stays high near edges
+  if (spreadSigma > 0.5) {
+    const spread = blurPlate(e, w, h, spreadSigma);
+    for (let i = 0; i < e.length; i++) e[i] = Math.min(1, spread[i] * 5);
+  }
+  return e;
+}
+
 export function cmykSeparate(
   imageData: ImageData,
   cellSize: number,
   bgMask: Uint8Array | null,
   angleOverrides?: Record<string, number>,
   scaleFactor = 1,
+  params: Partial<CmykParams> = {},
 ): ProcessedLayer[] {
   const { width: w, height: h, data } = imageData;
   const cs = Math.max(1, cellSize * scaleFactor);
 
-  // Pre-compute CMYK channels (0–1 float)
-  const chanK = new Float32Array(w * h);
+  // ── Step 1: RGB → CMYK continuous-tone plates via GCR + corrections ──────────
   const chanC = new Float32Array(w * h);
   const chanM = new Float32Array(w * h);
   const chanY = new Float32Array(w * h);
+  const chanK = new Float32Array(w * h);
 
   for (let i = 0; i < w * h; i++) {
-    const r = data[i * 4]     / 255;
-    const g = data[i * 4 + 1] / 255;
-    const b = data[i * 4 + 2] / 255;
-    const k = 1 - Math.max(r, g, b);
-    chanK[i] = k;
-    if (k < 1) {
-      const d = 1 - k;
-      chanC[i] = (1 - r - k) / d;
-      chanM[i] = (1 - g - k) / d;
-      chanY[i] = (1 - b - k) / d;
+    const [c, m, y, k] = convertPixelCmyk(
+      data[i * 4] / 255, data[i * 4 + 1] / 255, data[i * 4 + 2] / 255, params,
+    );
+    chanC[i] = c; chanM[i] = m; chanY[i] = y; chanK[i] = k;
+  }
+
+  // ── Step 2: Edge-aware plate smoothing ───────────────────────────────────────
+  // Gaussian blur removes per-pixel noise in flat tonal areas so halftone cells
+  // receive stable ink densities → large regular dots, not random speckle.
+  // The edge mask restores original values near high-frequency detail.
+  // smoothFlat=0 means auto-derive from printStyle: Soft→3×cs, Standard→2×cs, Sharp→0.8×cs
+  const styleFactor  = (params.printStyle ?? 50) / 100;
+  const autoSigma    = cs * (3 - styleFactor * 2.2);  // 50→~1.9cs, 0→3cs, 100→0.8cs
+  const rawSmooth    = params.smoothFlat ?? 0;
+  const smoothSigma  = rawSmooth > 0 ? cs * Math.max(0.2, rawSmooth / 50) : autoSigma;
+  const edgeWeight   = Math.max(0, (params.detail ?? 70) / 100);
+  const em = buildEdgeMask(data, w, h, cs * 0.6);
+  for (const ch of [chanK, chanC, chanM, chanY]) {
+    const blurred = blurPlate(ch, w, h, smoothSigma);
+    for (let i = 0; i < w * h; i++) {
+      const e = em[i] * edgeWeight;
+      ch[i] = e * ch[i] + (1 - e) * blurred[i];
     }
   }
 
@@ -818,12 +1132,15 @@ export function cmykSeparate(
         // Sample ink value at cell center (back-rotate to image space)
         const ix = Math.max(0, Math.min(w - 1, Math.round(cu * cosA - cv * sinA)));
         const iy = Math.max(0, Math.min(h - 1, Math.round(cu * sinA + cv * cosA)));
-        const ink = chan[iy * w + ix];
+        const rawInk = chan[iy * w + ix];
 
-        // Correct AM halftone: area coverage = ink density.
-        // Below π/4 (~78.5%): growing round dot from 0→78.5% cell area.
-        // Above π/4: shrinking hole in solid ink from 78.5→100%.
-        // This ensures K=1.0 produces 100% coverage (solid black), no white gaps.
+        // Dot gain compensation: shrink nominal dot slightly so physical ink spread
+        // doesn't increase coverage beyond intent. Murray-Davies approximation.
+        const dg = (params.dotGain ?? 15) / 100;
+        const ink = Math.max(0, rawInk - dg * rawInk * (1 - rawInk) * 4);
+
+        // AM halftone: area coverage = ink density.
+        // Below π/4 (~78.5%): growing round dot. Above: shrinking hole in solid.
         const du = su - cu, dv = sv - cv;
         const distSq = du * du + dv * dv;
         let inDot: boolean;
@@ -919,48 +1236,126 @@ export function renderCmykHalftoneProof(
 }
 
 // Smooth continuous-tone CMYK preview — no halftone screen, just pixel-accurate color.
-// Used for canvas preview so the result looks photographic (same as the printed output
-// at viewing distance). Export still uses cmykSeparate → renderCmykComposite for actual dots.
+// Uses the same GCR pipeline as cmykSeparate so the composite proof matches the plates.
+// ─── Garment color helper ─────────────────────────────────────────────────────
+// Converts the 0-100 garmentColor param to an RGB triple.
+// 0=white (#ffffff), 50=light fabric (~#d0c8b4), 100=dark (#1a1a1a)
+export function garmentRgbFromParam(g: number): [number, number, number] {
+  const t = Math.max(0, Math.min(1, g / 100));
+  const mid: [number, number, number] = [210, 202, 180]; // warm light-fabric tone
+  if (t <= 0.5) {
+    const s = t * 2;
+    return [
+      Math.round(255 + s * (mid[0] - 255)),
+      Math.round(255 + s * (mid[1] - 255)),
+      Math.round(255 + s * (mid[2] - 255)),
+    ];
+  }
+  const s = (t - 0.5) * 2;
+  return [
+    Math.round(mid[0] + s * (26 - mid[0])),
+    Math.round(mid[1] + s * (26 - mid[1])),
+    Math.round(mid[2] + s * (26 - mid[2])),
+  ];
+}
+
+// ─── CMYK composite renderer ──────────────────────────────────────────────────
+// Renders a continuous-tone color proof of the CMYK separation on a substrate.
+// Supports white paper, light fabric, and dark garment (with underbase simulation).
+// This is the authoritative composite renderer — export and preview both use it.
+// Pixels where bgMask=255 are set to alpha=0 so callers can composite over substrate.
 export function renderCmykSmooth(
   imageData: ImageData,
   bgMask: Uint8Array | null,
   visibility: Record<string, boolean>,
+  params: Partial<CmykParams> = {},
 ): ImageData {
+  const [gR, gG, gB] = garmentRgbFromParam(params.garmentColor ?? 0);
+  const isDark = (params.garmentColor ?? 0) > 30; // needs underbase simulation
+
   const { width: w, height: h, data } = imageData;
   const out = new ImageData(w, h);
 
   for (let i = 0; i < w * h; i++) {
     if (bgMask && bgMask[i] === 255) {
-      // Transparent — fabric background color shows through
       out.data[i * 4 + 3] = 0;
       continue;
     }
 
-    const r = data[i * 4]     / 255;
-    const g = data[i * 4 + 1] / 255;
-    const b = data[i * 4 + 2] / 255;
-
-    // RGB → CMYK (max-K UCR)
-    const kRaw = 1 - Math.max(r, g, b);
-    let cRaw = 0, mRaw = 0, yRaw = 0;
-    if (kRaw < 1) {
-      const d = 1 - kRaw;
-      cRaw = (1 - r - kRaw) / d;
-      mRaw = (1 - g - kRaw) / d;
-      yRaw = (1 - b - kRaw) / d;
-    }
+    const [cRaw, mRaw, yRaw, kRaw] = convertPixelCmyk(
+      data[i * 4] / 255, data[i * 4 + 1] / 255, data[i * 4 + 2] / 255, params,
+    );
 
     const c = visibility['cmyk-c'] ? cRaw : 0;
     const m = visibility['cmyk-m'] ? mRaw : 0;
     const y = visibility['cmyk-y'] ? yRaw : 0;
     const k = visibility['cmyk-k'] ? kRaw : 0;
 
-    // CMYK → RGB subtractive (white paper baseline)
-    out.data[i * 4]     = Math.round((1 - c) * (1 - k) * 255);
-    out.data[i * 4 + 1] = Math.round((1 - m) * (1 - k) * 255);
-    out.data[i * 4 + 2] = Math.round((1 - y) * (1 - k) * 255);
+    // Base = garment color (normalized 0-1)
+    let baseR = gR / 255, baseG = gG / 255, baseB = gB / 255;
+
+    if (isDark) {
+      // White underbase simulation: where ink exists, bleach the substrate toward white
+      // so CMY colors have a reflective base to work against (same as plastisol printing).
+      const totalInk = Math.min(1, (c + m + y + k) * 0.8);
+      baseR += totalInk * (1 - baseR);
+      baseG += totalInk * (1 - baseG);
+      baseB += totalInk * (1 - baseB);
+    }
+
+    // Subtractive CMYK on the substrate
+    out.data[i * 4]     = Math.round(baseR * (1 - c) * (1 - k) * 255);
+    out.data[i * 4 + 1] = Math.round(baseG * (1 - m) * (1 - k) * 255);
+    out.data[i * 4 + 2] = Math.round(baseB * (1 - y) * (1 - k) * 255);
     out.data[i * 4 + 3] = 255;
   }
 
   return out;
+}
+
+// ─── Visual quality score (0–100) ─────────────────────────────────────────────
+// Compares the CMYK smooth proof against the original pixel-by-pixel.
+// Returns a score weighted toward visual similarity (60%) + printability (40%).
+export function computeCmykQuality(
+  original: ImageData,
+  params: Partial<CmykParams> = {},
+): number {
+  const { width: w, height: h, data } = original;
+
+  let mseR = 0, mseG = 0, mseB = 0;
+  let inkOverCount = 0;
+  const tac = (params.totalInkLimit ?? 280) / 100;
+  const n = w * h;
+
+  for (let i = 0; i < n; i++) {
+    const r = data[i * 4] / 255;
+    const g = data[i * 4 + 1] / 255;
+    const b = data[i * 4 + 2] / 255;
+
+    const [c, m, y, k] = convertPixelCmyk(r, g, b, params);
+
+    // Reconstruct on garment substrate (same logic as renderCmykSmooth)
+    const [gR, gG, gB] = garmentRgbFromParam(params.garmentColor ?? 0);
+    let baseR = gR / 255, baseG = gG / 255, baseB = gB / 255;
+    if ((params.garmentColor ?? 0) > 30) {
+      const ti = Math.min(1, (c + m + y + k) * 0.8);
+      baseR += ti * (1 - baseR); baseG += ti * (1 - baseG); baseB += ti * (1 - baseB);
+    }
+    const rOut = baseR * (1 - c) * (1 - k);
+    const gOut = baseG * (1 - m) * (1 - k);
+    const bOut = baseB * (1 - y) * (1 - k);
+
+    const dr = r - rOut, dg = g - gOut, dbv = b - bOut;
+    mseR += dr * dr; mseG += dg * dg; mseB += dbv * dbv;
+
+    if (c + m + y + k > tac + 0.05) inkOverCount++;
+  }
+
+  const mse = (mseR + mseG + mseB) / (3 * n);
+  const psnr = mse < 1e-10 ? 50 : Math.min(50, 10 * Math.log10(1 / mse));
+  const similarityScore = Math.round((psnr / 50) * 60);
+
+  const printabilityScore = Math.round((1 - inkOverCount / Math.max(1, n)) * 40);
+
+  return Math.max(0, Math.min(100, similarityScore + printabilityScore));
 }

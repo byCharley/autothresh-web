@@ -3,11 +3,14 @@ import { useStore } from '../store/useStore';
 import {
   processImage, applyKnockout, renderComposite, scaleImageData, scaleImageDataExact,
   computeBackgroundMask, detectBackgroundColor, hexToRgb, registerPatternTexture,
-  cmykSeparate, renderCmykComposite, contrastColor,
+  cmykSeparate, renderCmykComposite, renderCmykSmooth, computeCmykQuality,
+  garmentRgbFromParam, contrastColor, autoImageAdjustments,
 } from '../engine/imageProcessor';
+import { kMeansColors, paletteSeparate, renderPaletteComposite, bayerOrder } from '../engine/colorSeparation';
 import type { LayerConfig, PatternConfig } from '../engine/imageProcessor';
 import { generateTextureMask } from '../engine/textureGenerator';
 import { loadAllTextures } from '../engine/textureLoader';
+import { traceImageToSVG } from '../engine/vectorTracer';
 
 function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerConfig[] {
   return layers.map((l) =>
@@ -35,10 +38,12 @@ function RegMark({ x, y, size }: { x: number; y: number; size: number }) {
 }
 
 export function CanvasView() {
-  const canvasRef        = useRef<HTMLCanvasElement>(null);
-  const paintOverlayRef  = useRef<HTMLCanvasElement>(null);
-  const brushSizeRef     = useRef(20);
-  const containerRef     = useRef<HTMLDivElement>(null);
+  const canvasRef           = useRef<HTMLCanvasElement>(null);
+  const paintOverlayRef     = useRef<HTMLCanvasElement>(null);
+  const brushSizeRef        = useRef(20);
+  const containerRef        = useRef<HTMLDivElement>(null);
+  const lastAutoDetectKey   = useRef('');
+  const lastAutoAdjImageRef = useRef<ImageData | null>(null);
   const fileInputRef     = useRef<HTMLInputElement>(null);
   const artboardStageRef = useRef<HTMLDivElement>(null);
   const dimTimerRef      = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -57,11 +62,16 @@ export function CanvasView() {
     canvasColor, showFabricBg,
     imageAdjustments,
     documentDpi, documentWidthIn, documentHeightIn,
-    separationMode, cmykLpi, cmykVisibility, cmykAngles,
+    separationMode, cmykLpi, cmykVisibility, cmykAngles, cmykParams, cmykViewMode,
+    paletteNumColors, paletteColors, paletteVisibility, palettePattern, palettePatternScale, paletteColorMode,
+    paletteDensity, paletteAngle, paletteSoftness,
+    paletteAnalyzeKey,
+    setPaletteColors,
     paintMasks, paintMode, brushSize, selectedLayerId,
-    isProcessing, setOriginalImage, setProcessedLayers, setProcessedLayerDims, setIsProcessing, setCanvasColor,
+    isProcessing, setOriginalImage, setProcessedLayers, setProcessedLayerDims, setDitherComposite, setIsProcessing, setCanvasColor, setImageAdjustment,
     setPaintMask, setPaintMode, setBrushSize, clearPaintMask,
-    soloLayerId,
+    soloLayerId, setCmykQuality,
+    vectorNumColors, vectorDetail, vectorInkColor, vectorSvg, setVectorSvg, setVectorColors,
   } = useStore();
 
   // Increments when real texture PNGs finish loading so the processing effect reruns.
@@ -72,6 +82,8 @@ export function CanvasView() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart]   = useState({ x: 0, y: 0 });
   const [isDragOver, setIsDragOver] = useState(false);
+
+  const [splitView, setSplitView] = useState(false);
 
   // renderDim: the effective max-dim used for the CURRENT canvas render.
   // Scales up with zoom so the canvas resolution matches the display, giving
@@ -103,11 +115,12 @@ export function CanvasView() {
    * `dim` defaults to `renderDim` (zoom-aware). Pass MAX_PREVIEW_DIM explicitly
    * for layout calculations that should be zoom-independent (Fit, initial load).
    */
-  function computeDocLayout(dim = renderDim) {
+  function computeDocLayout(dim = renderDim, dpiOverride?: number) {
     if (!originalImage) return null;
     const ow = originalImage.width, oh = originalImage.height;
-    const docPxW = Math.round(documentWidthIn * documentDpi);
-    const docPxH = Math.round(documentHeightIn * documentDpi);
+    const effectiveDpi = dpiOverride ?? documentDpi;
+    const docPxW = Math.round(documentWidthIn * effectiveDpi);
+    const docPxH = Math.round(documentHeightIn * effectiveDpi);
     const sf     = Math.min(docPxW / ow, docPxH / oh);
     const artInDocW = Math.round(ow * sf);
     const artInDocH = Math.round(oh * sf);
@@ -181,29 +194,205 @@ export function CanvasView() {
       setIsProcessing(true);
       rafId = requestAnimationFrame(() => {
         // Always use the fixed base resolution — never zoom-scaled.
-        const layout = computeDocLayout(MAX_PREVIEW_DIM);
+        // Palette mode: fix layout at 300 DPI so changing DPI doesn't resize the canvas.
+        // DPI still affects pattern density via the effectiveTileSize formula below.
+        const layout = separationMode === 'palette'
+          ? computeDocLayout(MAX_PREVIEW_DIM, 300)
+          : computeDocLayout(MAX_PREVIEW_DIM);
         if (!layout) { setIsProcessing(false); return; }
         const { docPrevW, docPrevH, artPrevW, artPrevH, artPrevOffX, artPrevOffY } = layout;
 
         // Single high-quality scale from original → exact slot size.
         const artScaled    = scaleImageDataExact(originalImage, artPrevW, artPrevH);
-        const localBgMask  = bgRemovalEnabled ? computeBackgroundMask(artScaled, bgTolerance) : null;
+        const localBgMask = (() => {
+          if (!bgRemovalEnabled) return null;
+          if (separationMode !== 'palette') {
+            return computeBackgroundMask(artScaled, bgTolerance);
+          }
+          // Palette mode with bg removal on: auto-pick tolerance based on background
+          // luminance to handle feathered/vignette edges on light backgrounds.
+          const d = artScaled.data, w = artScaled.width, h = artScaled.height;
+          const corners = [0, (w - 1) * 4, (h - 1) * w * 4, ((h - 1) * w + w - 1) * 4];
+          const bgLum = corners.reduce((s, p) => s + 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2], 0) / 4;
+          const tol = bgLum > 200 ? 40 : bgTolerance;
+          return computeBackgroundMask(artScaled, tol);
+        })();
 
         let artComposite: ImageData;
         if (separationMode === 'cmyk') {
           const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
-          const isSoloPlate = visibleIds.length === 1;
+          const ALL_VIS = { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true };
 
-          // Preview cell size uses export dot scale (documentDpi / cmykLpi) so the LPI
-          // slider visually changes dot sizes. 25 LPI → 12px, 65 LPI → 4.6px, etc.
-          const minCell = isSoloPlate ? 3 : 4;
-          const cellSize = Math.max(minCell, documentDpi / cmykLpi);
-          const allLayers = cmykSeparate(artScaled, cellSize, localBgMask, cmykAngles);
+          const cellSize = Math.max(3, documentDpi / cmykLpi);
+          const allLayers = cmykSeparate(artScaled, cellSize, localBgMask, cmykAngles, 1, cmykParams);
           const visibleLayers = allLayers.filter(l => visibleIds.includes(l.id));
           setProcessedLayers(visibleLayers);
 
-          artComposite = renderCmykComposite(visibleLayers, artPrevW, artPrevH, localBgMask);
+          if (cmykViewMode === 'composite') {
+            // Composite view: full-color proof on garment substrate (all channels, no halftone)
+            artComposite = renderCmykSmooth(artScaled, localBgMask, ALL_VIS, cmykParams);
+          } else {
+            // Plates view: show halftone structure for solo channel, smooth for multi
+            const isSoloPlate = visibleIds.length === 1;
+            if (isSoloPlate) {
+              artComposite = renderCmykComposite(visibleLayers, artPrevW, artPrevH, localBgMask);
+            } else {
+              artComposite = renderCmykSmooth(artScaled, localBgMask, cmykVisibility, cmykParams);
+            }
+          }
+          const score = computeCmykQuality(artScaled, cmykParams);
+          setCmykQuality(score);
+        } else if (separationMode === 'palette') {
+          // ── Auto-analyze new images to find optimal exposure/contrast ─────
+          // Runs once per image load. Computes p2/p98 percentile luminance of
+          // non-background pixels and stretches the tonal range to [0,255] so
+          // highlights don't pile up into zone k-1 (white pixel artifacts).
+          if (originalImage !== lastAutoAdjImageRef.current) {
+            lastAutoAdjImageRef.current = originalImage;
+            const autoAdj = autoImageAdjustments(artScaled, localBgMask);
+            const changed =
+              autoAdj.exposure !== imageAdjustments.exposure ||
+              autoAdj.contrast !== imageAdjustments.contrast ||
+              imageAdjustments.shadows !== 0 || imageAdjustments.highlights !== 0;
+            if (changed) {
+              setImageAdjustment('exposure',   autoAdj.exposure);
+              setImageAdjustment('contrast',   autoAdj.contrast);
+              setImageAdjustment('shadows',    0);
+              setImageAdjustment('highlights', 0);
+              return; // re-fires with new adjustments applied
+            }
+          }
+
+          // ── Color Match — auto-detect colors then posterize + dither ─────
+          // Re-run k-means whenever the image or ink count changes so the
+          // colors always match the actual image. Presets override this.
+          const autoKey = `${artPrevW}x${artPrevH}-${paletteNumColors}-${paletteAnalyzeKey}`;
+          if (autoKey !== lastAutoDetectKey.current) {
+            lastAutoDetectKey.current = autoKey;
+            const detected = kMeansColors(artScaled, paletteNumColors, 12345, localBgMask);
+            setPaletteColors(detected);
+            return; // colors updated → effect re-fires → separation runs below
+          }
+
+          if (paletteColors.length === 0) return; // guard for first-render edge case
+
+          // Tile size from palettePatternScale:
+          //   Error diffusion: block size in pixels (1 = full-res Floyd-Steinberg, ≥2 = block mode).
+          //   Bayer ordered:   cellSize = palettePatternScale × (documentDpi / 300) pixels per Bayer cell.
+          //                    Tile period = N × cellSize  (N = matrix order, e.g. 8 for Bayer 8×8).
+          //                    Matrix size and cell size are fully independent.
+          //   Other ordered:   cellSize treated as tile period.
+          const isErrDiff = ['diffusion', 'atkinson', 'jarvis', 'stucki'].includes(palettePattern);
+          const bN = bayerOrder(palettePattern);
+          const cellSize = Math.max(1, Math.round(palettePatternScale * documentDpi / 300));
+          const effectiveTileSize = isErrDiff
+            ? Math.max(1, Math.round(palettePatternScale))
+            : bN > 0
+              ? bN * cellSize           // Bayer: period = N × cellSize
+              : Math.max(2, cellSize);  // other ordered: period = cellSize
+
+          const plateLayers = paletteSeparate(
+            artScaled, paletteColors, localBgMask,
+            palettePattern, effectiveTileSize, imageAdjustments,
+            paletteDensity, paletteAngle, paletteSoftness,
+          );
+          setProcessedLayers(plateLayers.filter(l => paletteVisibility[l.id] !== false));
+
+          artComposite = renderPaletteComposite(
+            artScaled, paletteColors, localBgMask, paletteVisibility,
+            palettePattern, effectiveTileSize, imageAdjustments,
+            paletteDensity, paletteAngle, paletteSoftness,
+          );
+
+          // Color mode: overlay original image with 'color' blend to restore original hues
+          if (paletteColorMode) {
+            const tmpCanvas = document.createElement('canvas');
+            tmpCanvas.width = artPrevW; tmpCanvas.height = artPrevH;
+            const tmpCtx = tmpCanvas.getContext('2d')!;
+            tmpCtx.putImageData(artComposite, 0, 0);
+
+            // Mask background pixels in the original so they don't bleed through the
+            // transparent destination — 'color' onto alpha=0 produces source color at
+            // source alpha, which would restore the removed background.
+            const origData = new ImageData(
+              new Uint8ClampedArray(artScaled.data), artPrevW, artPrevH,
+            );
+            if (localBgMask) {
+              for (let i = 0; i < localBgMask.length; i++) {
+                if (localBgMask[i] === 255) origData.data[i * 4 + 3] = 0;
+              }
+            }
+
+            const origCanvas = document.createElement('canvas');
+            origCanvas.width = artPrevW; origCanvas.height = artPrevH;
+            origCanvas.getContext('2d')!.putImageData(origData, 0, 0);
+
+            tmpCtx.globalCompositeOperation = 'color';
+            tmpCtx.drawImage(origCanvas, 0, 0);
+            artComposite = tmpCtx.getImageData(0, 0, artPrevW, artPrevH);
+          }
+
+          // Store final composite for mockup (no split view — mockup needs clean data)
+          setDitherComposite({ data: artComposite, w: artPrevW, h: artPrevH });
+          setProcessedLayerDims({ w: artPrevW, h: artPrevH });
+
+          // Split view: left = original (bg-masked), right = dithered result
+          if (splitView) {
+            const split = new ImageData(artPrevW, artPrevH);
+            const halfW = Math.floor(artPrevW / 2);
+            for (let y = 0; y < artPrevH; y++) {
+              for (let x = 0; x < artPrevW; x++) {
+                const i = (y * artPrevW + x) * 4;
+                if (x < halfW) {
+                  const isBg = localBgMask && localBgMask[y * artPrevW + x] === 255;
+                  if (isBg) {
+                    split.data[i+3] = 0;
+                  } else {
+                    split.data[i]   = artScaled.data[i];
+                    split.data[i+1] = artScaled.data[i+1];
+                    split.data[i+2] = artScaled.data[i+2];
+                    split.data[i+3] = artScaled.data[i+3];
+                  }
+                } else {
+                  split.data[i]   = artComposite.data[i];
+                  split.data[i+1] = artComposite.data[i+1];
+                  split.data[i+2] = artComposite.data[i+2];
+                  split.data[i+3] = artComposite.data[i+3];
+                }
+              }
+              // Divider line at halfW
+              const di = (y * artPrevW + halfW) * 4;
+              split.data[di] = 255; split.data[di+1] = 255; split.data[di+2] = 255; split.data[di+3] = 200;
+            }
+            artComposite = split;
+          }
+        } else if (separationMode === 'vector') {
+          setDitherComposite(null);
+
+          // Build pre-processed imageData with bg pixels made transparent
+          const traceData = new ImageData(
+            new Uint8ClampedArray(artScaled.data), artPrevW, artPrevH,
+          );
+          if (localBgMask) {
+            for (let i = 0; i < localBgMask.length; i++) {
+              if (localBgMask[i] === 255) traceData.data[i * 4 + 3] = 0;
+            }
+          }
+
+          const result = traceImageToSVG(traceData, {
+            numColors: vectorNumColors,
+            detail: vectorDetail,
+            inkColor: vectorInkColor,
+          });
+          setVectorSvg(result.svgString);
+          setVectorColors(result.colors);
+
+          // Canvas shows only the fabric background — SVG is overlaid in JSX
+          artComposite = new ImageData(artPrevW, artPrevH);
+
         } else {
+          if (vectorSvg !== null) { setVectorSvg(null); setVectorColors([]); }
+          setDitherComposite(null);
           const resolved = resolvePatterns(layers, globalPattern);
           // Run without internal knockout so paint masks can be applied first,
           // then the external applyKnockout call below handles overlap removal.
@@ -255,7 +444,14 @@ export function CanvasView() {
         const docCanvas = document.createElement('canvas');
         docCanvas.width = docPrevW; docCanvas.height = docPrevH;
         const dCtx = docCanvas.getContext('2d')!;
-        if (showFabricBg) { dCtx.fillStyle = canvasColor; dCtx.fillRect(0, 0, docPrevW, docPrevH); }
+        if (showFabricBg) {
+          // In CMYK composite view, show garment color as the substrate background
+          const bgFill = (separationMode === 'cmyk' && cmykViewMode === 'composite')
+            ? (() => { const [r,g,b] = garmentRgbFromParam(cmykParams.garmentColor ?? 0); return `rgb(${r},${g},${b})`; })()
+            : canvasColor;
+          dCtx.fillStyle = bgFill;
+          dCtx.fillRect(0, 0, docPrevW, docPrevH);
+        }
 
         const artCanvas = document.createElement('canvas');
         artCanvas.width = artPrevW; artCanvas.height = artPrevH;
@@ -282,9 +478,14 @@ export function CanvasView() {
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     textureVersion,
     documentWidthIn, documentHeightIn, documentDpi,
-    separationMode, cmykLpi, cmykVisibility, cmykAngles,
+    separationMode, cmykLpi, cmykVisibility, cmykAngles, cmykParams, cmykViewMode,
+    paletteNumColors, paletteColors, paletteVisibility, palettePattern, palettePatternScale, paletteColorMode,
+    paletteDensity, paletteAngle, paletteSoftness,
+    paletteAnalyzeKey,
+    splitView,
     paintMasks,
     soloLayerId,
+    vectorNumColors, vectorDetail, vectorInkColor,
     // renderDim intentionally excluded — zoom must never trigger a reprocess
   ]);
 
@@ -713,6 +914,23 @@ export function CanvasView() {
                 ))}
               </svg>
             )}
+
+            {/* Vector SVG overlay — absolutely positioned over artworkBounds, inherits pan/zoom */}
+            {separationMode === 'vector' && vectorSvg && artworkBounds && (
+              <img
+                src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(vectorSvg)}`}
+                style={{
+                  position: 'absolute',
+                  top: artworkBounds.y,
+                  left: artworkBounds.x,
+                  width: artworkBounds.w,
+                  height: artworkBounds.h,
+                  pointerEvents: 'none',
+                  display: 'block',
+                  imageRendering: 'auto',
+                }}
+              />
+            )}
           </div>
 
           {isProcessing && (
@@ -799,6 +1017,27 @@ export function CanvasView() {
                 setOffset({ x: (cw - layout.docPrevW * fitZoom) / 2, y: (ch - layout.docPrevH * fitZoom) / 2 });
               }}
             >Fit</button>
+            {originalImage && separationMode === 'palette' && (
+              <>
+                <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                <button
+                  className="btn btn-ghost"
+                  style={{
+                    fontSize: 10, padding: '0 8px', height: 26, gap: 4,
+                    color: splitView ? 'var(--accent)' : 'var(--text-muted)',
+                    background: splitView ? 'var(--accent-dim)' : undefined,
+                    border: splitView ? '1px solid var(--accent)' : '1px solid transparent',
+                  }}
+                  title="Split view — original left, dithered right"
+                  onClick={() => setSplitView((v) => !v)}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
+                    <rect x="3" y="3" width="18" height="18"/><line x1="12" y1="3" x2="12" y2="21"/>
+                  </svg>
+                  Split
+                </button>
+              </>
+            )}
             {originalImage && (
               <>
                 <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />

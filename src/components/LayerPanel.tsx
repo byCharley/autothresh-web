@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { extractPalette } from '../engine/imageProcessor';
+import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, generateHarmonicPalettes } from '../engine/colorSeparation';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -451,11 +452,162 @@ const BRAND_PALETTES: { brand: string; colors: { hex: string; name: string }[] }
   },
 ];
 
+// ─── Inks Section ─────────────────────────────────────────────────────────────
+
+function InksSection() {
+  const [open, setOpen] = useState(true);
+  const {
+    paletteColors, paletteVisibility, setPaletteVisibility, setPaletteColor,
+    paletteNumColors, setPaletteNumColors, setPaletteColors,
+  } = useStore();
+
+  return (
+    <>
+      {/* Collapsible header with inline stepper */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', width: '100%',
+          padding: '0 12px', height: 32,
+          background: 'none', border: 'none', borderTop: '1px solid var(--border)',
+          cursor: 'pointer', color: 'var(--text-muted)',
+        }}
+      >
+        <span style={{
+          flex: 1, textAlign: 'left', fontSize: 10, fontWeight: 600,
+          letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)',
+        }}>Inks</span>
+        {/* Stepper — stops propagation so it doesn't toggle collapse */}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{ display: 'flex', alignItems: 'center', marginRight: 8 }}
+        >
+          <button
+            onClick={() => setPaletteNumColors(Math.max(2, paletteNumColors - 1))}
+            style={{
+              width: 20, height: 20, border: '1px solid var(--border-2)',
+              borderRadius: '3px 0 0 3px', background: 'var(--bg-3)',
+              color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+            }}>−</button>
+          <span style={{
+            width: 26, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+            background: 'var(--bg-3)',
+            borderTop: '1px solid var(--border-2)', borderBottom: '1px solid var(--border-2)',
+          }}>{paletteNumColors}</span>
+          <button
+            onClick={() => setPaletteNumColors(Math.min(16, paletteNumColors + 1))}
+            style={{
+              width: 20, height: 20, border: '1px solid var(--border-2)',
+              borderRadius: '0 3px 3px 0', background: 'var(--bg-3)',
+              color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+            }}>+</button>
+        </div>
+        <ChevronIcon open={open} />
+      </button>
+
+      {open && (
+        <>
+          {/* Preset buttons */}
+          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', padding: '8px 12px 10px' }}>
+            {Object.keys(COLOR_PRESETS).map((key) => {
+              const stops = (COLOR_PRESETS[key].stops ?? []) as [number, number, number][];
+              return (
+                <button key={key}
+                  onClick={() => setPaletteColors(defaultPaletteColors(paletteNumColors, key))}
+                  title={COLOR_PRESETS[key].label}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 3,
+                    height: 22, padding: '0 7px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                    border: '1px solid var(--border-2)', borderRadius: 3, cursor: 'pointer',
+                    background: 'var(--bg-3)', color: 'var(--text-dim)', letterSpacing: '0.03em',
+                  }}>
+                  <span style={{ display: 'flex', gap: 1.5 }}>
+                    {stops.slice(0, 4).map(([r, g, b], i) => (
+                      <span key={i} style={{
+                        width: 5, height: 5, borderRadius: '50%',
+                        background: `rgb(${r},${g},${b})`, flexShrink: 0,
+                      }} />
+                    ))}
+                  </span>
+                  {COLOR_PRESETS[key].label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Color rows */}
+          {paletteColors.length === 0 ? (
+            <div style={{
+              padding: '0 12px 12px', fontSize: 10, color: 'var(--text-dim)',
+              fontFamily: 'var(--font-mono)', opacity: 0.6, textAlign: 'center',
+            }}>
+              Load an image to detect colors
+            </div>
+          ) : (
+            <div style={{ paddingBottom: 8 }}>
+              {paletteColors.map(([r, g, b], ci) => {
+                const id = `palette-${ci}`;
+                const vis = paletteVisibility[id] !== false;
+                const hex = rgbToHex([r, g, b]);
+                return (
+                  <div key={id} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '3px 12px',
+                    opacity: vis ? 1 : 0.45,
+                    transition: 'opacity 0.15s',
+                  }}>
+                    {/* Swatch — click opens color picker */}
+                    <div style={{
+                      position: 'relative', flexShrink: 0,
+                      width: 32, height: 20, borderRadius: 4,
+                      background: hex, border: '1px solid rgba(255,255,255,0.1)',
+                      cursor: 'pointer',
+                    }}>
+                      <input type="color" value={hex}
+                        title={`Ink ${ci + 1}: ${hex.toUpperCase()}`}
+                        onChange={(e) => setPaletteColor(ci, hexToRgb(e.target.value))}
+                        style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+                    </div>
+                    {/* Label */}
+                    <span style={{ flex: 1, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      Ink {ci + 1}
+                    </span>
+                    {/* Hex */}
+                    <span style={{
+                      fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+                      letterSpacing: '0.03em', userSelect: 'all',
+                    }}>{hex.toUpperCase()}</span>
+                    {/* Eye toggle */}
+                    <button
+                      title={vis ? 'Hide ink' : 'Show ink'}
+                      onClick={() => setPaletteVisibility(id, !vis)}
+                      style={{
+                        flexShrink: 0, width: 20, height: 20, borderRadius: 4, padding: 0,
+                        border: 'none', cursor: 'pointer', background: 'transparent',
+                        color: 'var(--text-dim)', opacity: vis ? 0.65 : 0.3,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                      <EyeIcon visible={vis} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 // ─── Fabric Section ───────────────────────────────────────────────────────────
 
 function FabricSection() {
   const [open, setOpen] = useState(true);
-  const [brand, setBrand] = useState('Bella Canvas');
+  const [brand, setBrand] = useState('LA Apparel');
   const { canvasColor, setCanvasColor, showFabricBg, setShowFabricBg } = useStore();
 
   const palette = BRAND_PALETTES.find((b) => b.brand === brand)?.colors ?? [];
@@ -590,6 +742,67 @@ function ArtworkSection() {
   );
 }
 
+// ─── Vector Colors Section ────────────────────────────────────────────────────
+
+function VectorColorsSection() {
+  const { vectorColors, vectorSvg, isProcessing, vectorNumColors, vectorInkColor, setVectorInkColor } = useStore();
+
+  return (
+    <>
+      <div style={{
+        padding: '8px 12px 6px',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          Colors
+        </span>
+        {vectorSvg && (
+          <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+            {vectorColors.length} found
+          </span>
+        )}
+      </div>
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+        {isProcessing ? (
+          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Tracing…</div>
+        ) : vectorNumColors === 1 ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ position: 'relative', width: 26, height: 26, flexShrink: 0 }}>
+              <div style={{ width: 26, height: 26, background: vectorInkColor, border: '1px solid var(--border-2)', borderRadius: 3 }} />
+              <input type="color" value={vectorInkColor} onChange={(e) => setVectorInkColor(e.target.value)}
+                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
+            </div>
+            <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+              {vectorInkColor}
+            </span>
+          </div>
+        ) : vectorColors.length > 0 ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {vectorColors.map((color) => (
+              <div
+                key={color}
+                title={color}
+                style={{
+                  width: 22, height: 22,
+                  background: color,
+                  border: '1px solid var(--border-2)',
+                  borderRadius: 3,
+                  flexShrink: 0,
+                }}
+              />
+            ))}
+          </div>
+        ) : vectorSvg ? (
+          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>No colors detected</div>
+        ) : (
+          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Load an image to trace</div>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ─── CMYK Channel Definitions ─────────────────────────────────────────────────
 
 const CMYK_CARD_DEFS = [
@@ -601,9 +814,31 @@ const CMYK_CARD_DEFS = [
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
+const MODE_INFO = [
+  {
+    mode: 'threshold',
+    label: 'Thresh',
+    title: 'Threshold (Spot Color)',
+    desc: 'Separates your artwork into stacked halftone layers, one per ink color. Each layer is a discrete spot color you can fully customize. The standard choice for traditional screen printing.',
+  },
+  {
+    mode: 'palette',
+    label: 'Dither',
+    title: 'Dither (Palette)',
+    desc: 'Simulates a full range of colors using dithering patterns — fewer inks suggest more colors through optical mixing. Great for photo-realistic prints, gradients, and DTG.',
+  },
+  {
+    mode: 'vector',
+    label: 'Vector',
+    title: 'Vector (SVG Trace)',
+    desc: 'Traces your image into clean scalable vector paths and exports as an .SVG file. Best for logos, bold graphics, and artwork that needs to scale to any size without quality loss.',
+  },
+] as const;
+
 export function LayerPanel() {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [modeInfoOpen, setModeInfoOpen] = useState(false);
 
   const commitLayerName = (id: string) => {
     if (editValue.trim()) updateLayer(id, { name: editValue.trim() });
@@ -622,12 +857,12 @@ export function LayerPanel() {
 
   const handleAutoPalette = () => {
     if (!previewImage) return;
-    const palettes = [
-      extractPalette(previewImage, 4),
-      extractPalette(previewImage, 4),
-      extractPalette(previewImage, 4),
-    ];
-    setPalettePool(palettes);
+    const k = paletteNumColors;
+    const baseColors = kMeansColors(previewImage, k);
+    const rawPalette = baseColors.map(rgbToHex);
+    const harmonics = generateHarmonicPalettes(baseColors, k);
+    // Pool: raw extracted colors first, then 7 harmonic variants
+    setPalettePool([rawPalette, ...harmonics]);
     applyPalette(0);
   };
 
@@ -649,27 +884,92 @@ export function LayerPanel() {
 
       {/* Single scrollable column */}
       <div className="left-scroll">
-        {/* Mode Switcher — CMYK only visible in local dev */}
-        <div style={{ display: 'flex', padding: '6px 8px', gap: 4, borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          {(['threshold', ...(import.meta.env.DEV ? ['cmyk'] : [])] as ('threshold' | 'cmyk')[]).map((mode) => (
+        {/* Mode Switcher */}
+        <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', padding: '6px 8px', gap: 4 }}>
+            {(['threshold', 'palette', 'vector'] as ('threshold' | 'palette' | 'vector')[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setSeparationMode(mode)}
+                style={{
+                  flex: 1, height: 28, fontSize: 10, fontFamily: 'var(--font-mono)',
+                  fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                  cursor: 'pointer', border: '1px solid var(--border)',
+                  background: separationMode === mode ? 'var(--accent)' : 'var(--surface-2)',
+                  color: separationMode === mode ? '#000' : 'var(--text-muted)',
+                  transition: 'background 0.15s, color 0.15s',
+                }}
+              >
+                {mode === 'threshold' ? 'Thresh' : mode === 'palette' ? 'Dither' : 'Vector'}
+              </button>
+            ))}
             <button
-              key={mode}
-              onClick={() => setSeparationMode(mode)}
+              onClick={() => setModeInfoOpen((v) => !v)}
+              title="What does each mode do?"
               style={{
-                flex: 1, height: 28, fontSize: 10, fontFamily: 'var(--font-mono)',
-                fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
-                cursor: 'pointer', border: '1px solid var(--border)',
-                background: separationMode === mode ? 'var(--accent)' : 'var(--surface-2)',
-                color: separationMode === mode ? '#000' : 'var(--text-muted)',
+                width: 28, height: 28, flexShrink: 0, cursor: 'pointer',
+                border: '1px solid var(--border)',
+                background: modeInfoOpen ? 'var(--surface-3)' : 'var(--surface-2)',
+                color: modeInfoOpen ? 'var(--accent)' : 'var(--text-dim)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'background 0.15s, color 0.15s',
               }}
             >
-              {mode === 'threshold' ? 'Threshold' : 'CMYK'}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="8" strokeWidth="2.5" strokeLinecap="round"/>
+                <line x1="12" y1="12" x2="12" y2="16" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
             </button>
-          ))}
+          </div>
+
+          {modeInfoOpen && (
+            <div style={{ padding: '0 8px 10px' }}>
+              {MODE_INFO.map(({ mode, label, title, desc }) => (
+                <div
+                  key={mode}
+                  style={{
+                    marginTop: 6, padding: '8px 10px',
+                    background: separationMode === mode ? 'color-mix(in srgb, var(--accent) 8%, var(--surface-2))' : 'var(--surface-2)',
+                    border: `1px solid ${separationMode === mode ? 'var(--accent)' : 'var(--border)'}`,
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => { setSeparationMode(mode as 'threshold' | 'palette' | 'vector'); setModeInfoOpen(false); }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <span style={{
+                      fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                      letterSpacing: '0.08em', textTransform: 'uppercase',
+                      background: separationMode === mode ? 'var(--accent)' : 'var(--surface-3)',
+                      color: separationMode === mode ? '#000' : 'var(--text-muted)',
+                      padding: '1px 6px',
+                    }}>
+                      {label}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{title}</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.55, fontFamily: 'var(--font-sans, sans-serif)' }}>
+                    {desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {separationMode === 'cmyk' ? (
+        {separationMode === 'vector' ? (
+          <>
+            <VectorColorsSection />
+            <FabricSection />
+            <ArtworkSection />
+          </>
+        ) : separationMode === 'palette' ? (
+          <>
+            <InksSection />
+            <FabricSection />
+            <ArtworkSection />
+          </>
+        ) : separationMode === 'cmyk' ? (
           <>
             {/* CMYK layer cards */}
             <div style={{ padding: '8px 8px 0px' }}>

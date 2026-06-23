@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import type { PatternType } from '../engine/imageProcessor';
 import { autoDetectPatternSettings } from '../engine/imageProcessor';
+import { getBayer } from '../engine/colorSeparation';
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -86,12 +87,14 @@ function SwitchRow({ label, checked, onChange, hint }: {
 
 const PATTERN_LABELS: Record<PatternType, string> = {
   'none':                'None (Solid fill)',
+  'diffusion':           'Diffusion · Floyd-Steinberg',
   'noise':               'Noise · Standard',
   'noise-coarse':        'Noise · Coarse',
   'noise-texture':       'Noise · Texture',
   'grain':               'Noise · Standard',
   'grain-soft':          'Noise · Standard',
   'grain-coarse':        'Noise · Coarse',
+  'grain-micro':         'Grain · Micro (Print-Res)',
   'halftone-round':      'Halftone · Round',
   'halftone-diamond':    'Halftone · Diamond',
   'halftone-ellipse':    'Halftone · Ellipse',
@@ -106,6 +109,30 @@ const PATTERN_LABELS: Record<PatternType, string> = {
   'bayer-2':             'Bayer · 2×2',
   'bayer-4':             'Bayer · 4×4',
   'bayer-8':             'Bayer · 8×8',
+  'bayer-16':            'Bayer · 16×16',
+  'bayer-32':            'Bayer · 32×32',
+  // Dither-mode-only patterns
+  'atkinson':    'Atkinson Diffusion',
+  'jarvis':      'Jarvis Diffusion',
+  'stucki':      'Stucki Diffusion',
+  'blue-noise':  'Blue Noise',
+  'grid':        'Grid',
+  'checker':     'Checker',
+  'hex':         'Hex',
+  'hatch':       'Hatch',
+  'bytewave':    'Bytewave',
+  'shader':      'Shader',
+  'stipple':     'Stipple',
+  'engraving':   'Engraving',
+  'etching':     'Etching',
+  'newspaper':   'Newspaper',
+  'comic':       'Comic',
+  'scanline':    'Scanline',
+  'crt':         'CRT',
+  'glitch':      'Glitch',
+  'pixel-sort':  'Pixel Sort',
+  'voronoi':     'Voronoi',
+  'ascii':       'ASCII',
 };
 
 function PatternSelect({ value, onChange }: { value: PatternType; onChange: (v: PatternType) => void }) {
@@ -116,6 +143,7 @@ function PatternSelect({ value, onChange }: { value: PatternType; onChange: (v: 
         <option value="noise">Noise · Standard</option>
         <option value="noise-coarse">Noise · Coarse</option>
         <option value="noise-texture">Noise · Texture</option>
+        <option value="grain-micro">Grain · Micro (Print-Res)</option>
       </optgroup>
       <optgroup label="─ Halftone Dots ─">
         <option value="halftone-round">Halftone · Round</option>
@@ -156,6 +184,7 @@ function PatternControls({
 }) {
   const isHalftone = pattern.startsWith('halftone-');
   const isGrain = pattern.startsWith('grain') || pattern.startsWith('noise');
+  const isMicro = pattern === 'grain-micro';
   const hasPattern = pattern !== 'none';
   const scaleMin  = isGrain ? 0.5 : 1;
   const scaleMax  = isGrain ? 6  : 40;
@@ -168,10 +197,17 @@ function PatternControls({
       </div>
       {hasPattern && (
         <>
-          <Slider label="Scale" value={Math.min(scale, scaleMax)} min={scaleMin} max={scaleMax} step={scaleStep} onChange={onScale} />
+          {!isMicro && (
+            <Slider label="Scale" value={Math.min(scale, scaleMax)} min={scaleMin} max={scaleMax} step={scaleStep} onChange={onScale} />
+          )}
           <Slider label="Density" value={density} min={5} max={100} onChange={onDensity} unit="%" />
           {isHalftone && (
             <Slider label="Angle" value={angle} min={0} max={180} onChange={onAngle} unit="°" />
+          )}
+          {isMicro && (
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.5, marginTop: 2 }}>
+              1px at print resolution · preview appears coarser
+            </div>
           )}
         </>
       )}
@@ -372,24 +408,443 @@ function DocumentSection() {
   );
 }
 
+// ─── Palette (Dither) Section ─────────────────────────────────────────────────
+
+const DIFFUSION_PATTERNS: { id: PatternType; label: string }[] = [
+  { id: 'diffusion',  label: 'Floyd-Steinberg' },
+  { id: 'atkinson',   label: 'Atkinson' },
+  { id: 'jarvis',     label: 'Jarvis' },
+  { id: 'stucki',     label: 'Stucki' },
+];
+
+const ORDERED_PATTERNS: { id: PatternType; label: string }[] = [
+  { id: 'bayer-2',    label: 'Bayer 2×2' },
+  { id: 'bayer-4',    label: 'Bayer 4×4' },
+  { id: 'bayer-8',    label: 'Bayer 8×8' },
+  { id: 'bayer-16',   label: 'Bayer 16×16' },
+  { id: 'bayer-32',   label: 'Bayer 32×32' },
+  { id: 'blue-noise', label: 'Blue Noise' },
+  { id: 'none',       label: 'Solid' },
+];
+
+const ERROR_DIFF_PATTERNS: PatternType[] = ['diffusion', 'atkinson', 'jarvis', 'stucki'];
+
+function DitherPatternBtn({ id, label, active, onSelect }: {
+  id: PatternType; label: string; active: boolean; onSelect: (id: PatternType) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(id)}
+      title={PATTERN_LABELS[id]}
+      style={{
+        height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
+        border: '1px solid var(--border-2)', borderRadius: 3, cursor: 'pointer',
+        background: active ? 'var(--accent)' : 'var(--bg-3)',
+        color: active ? '#1a1a1a' : 'var(--text-dim)',
+        fontWeight: active ? 700 : 400,
+        transition: 'background 0.1s, color 0.1s',
+        padding: '0 4px', lineHeight: 1.2, textAlign: 'center',
+        overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function DitherGroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+      color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 4, marginTop: 10,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+// Renders a horizontal gradient (dark→light) dithered with Bayer matrix N at 2px/cell.
+// Used purely as a static visual reference in the Bayer selector strip.
+function BayerPreviewStrip({
+  selectedPattern,
+  onSelect,
+}: {
+  selectedPattern: string;
+  onSelect: (id: string) => void;
+}) {
+  const BAYER_OPTS = [
+    { id: 'bayer-2',  label: '2×2',  N: 2  },
+    { id: 'bayer-4',  label: '4×4',  N: 4  },
+    { id: 'bayer-8',  label: '8×8',  N: 8  },
+    { id: 'bayer-16', label: '16×16', N: 16 },
+    { id: 'bayer-32', label: '32×32', N: 32 },
+  ];
+  const W = 56, H = 28, CELL = 2;
+
+  const previews = useMemo(() => BAYER_OPTS.map(({ N }) => {
+    const bayer = getBayer(N);
+    const data = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const L = x / (W - 1);
+        const tx = Math.floor(x / CELL) % N;
+        const ty = Math.floor(y / CELL) % N;
+        const threshold = bayer[ty * N + tx] + 0.5;
+        const v = L < threshold ? 0 : 255;
+        const i = (y * W + x) * 4;
+        data[i] = data[i+1] = data[i+2] = v; data[i+3] = 255;
+      }
+    }
+    const imgData = new ImageData(data, W, H);
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    c.getContext('2d')!.putImageData(imgData, 0, 0);
+    return c.toDataURL('image/png');
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div style={{ display: 'flex', gap: 3 }}>
+      {BAYER_OPTS.map(({ id, label }, idx) => {
+        const active = selectedPattern === id;
+        return (
+          <div key={id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer', flex: 1 }}
+            onClick={() => onSelect(id)}>
+            <img src={previews[idx]} width="100%" height={H} alt={label} style={{
+              display: 'block', borderRadius: 3, imageRendering: 'pixelated', width: '100%',
+              border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border-2)'}`,
+              boxSizing: 'border-box',
+            }} />
+            <span style={{
+              fontSize: 8, fontFamily: 'var(--font-mono)', lineHeight: 1,
+              color: active ? 'var(--accent)' : 'var(--text-dim)',
+              fontWeight: active ? 700 : 400,
+            }}>
+              {label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PaletteSection() {
+  const {
+    separationMode,
+    palettePattern, setPalettePattern,
+    palettePatternScale, setPalettePatternScale,
+    paletteColorMode, setPaletteColorMode,
+    paletteDensity, setPaletteDensity,
+    paletteAngle, setPaletteAngle,
+    paletteSoftness, setPaletteSoftness,
+  } = useStore();
+  if (separationMode !== 'palette') return null;
+
+  const isErrDiff = ERROR_DIFF_PATTERNS.includes(palettePattern);
+  const isBayer   = ['bayer-2', 'bayer-4', 'bayer-8', 'bayer-16', 'bayer-32'].includes(palettePattern);
+  const isNone    = palettePattern === 'none';
+
+  const handlePatternSelect = (id: PatternType) => {
+    const willBeErrDiff = ERROR_DIFF_PATTERNS.includes(id);
+    const wasErrDiff    = ERROR_DIFF_PATTERNS.includes(palettePattern);
+    setPalettePattern(id);
+    if (willBeErrDiff) {
+      setPalettePatternScale(1); // block size 1 = full-res error diffusion
+    } else if (wasErrDiff) {
+      setPalettePatternScale(2); // 2px cells — matches preview strip cell size, makes matrix sizes clearly distinct
+    }
+    // Switching between ordered types (including Bayer sizes) keeps current scale —
+    // matrix size and pattern scale are independent controls.
+  };
+
+  return (
+    <>
+      {/* ── Dither Style ── */}
+      <Section title="Dither Style" defaultOpen={true}>
+        <DitherGroupLabel>Error Diffusion</DitherGroupLabel>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 3 }}>
+          {DIFFUSION_PATTERNS.map(({ id, label }) => (
+            <DitherPatternBtn key={id} id={id} label={label} active={palettePattern === id} onSelect={handlePatternSelect} />
+          ))}
+        </div>
+
+        <DitherGroupLabel>Bayer Ordered</DitherGroupLabel>
+        {/* Clickable gradient previews — each shows how that matrix dithers a gradient */}
+        <BayerPreviewStrip selectedPattern={palettePattern} onSelect={(id) => handlePatternSelect(id as PatternType)} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 3, marginTop: 2 }}>
+          <DitherPatternBtn id="blue-noise" label="Blue Noise" active={palettePattern === 'blue-noise'} onSelect={handlePatternSelect} />
+          <DitherPatternBtn id="none" label="Solid" active={palettePattern === 'none'} onSelect={handlePatternSelect} />
+        </div>
+
+        {/* Controls — vary by pattern family */}
+        {!isNone && (
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 10, paddingTop: 10,
+            display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {isErrDiff ? (
+              <>
+                <Slider label="Block Size" value={palettePatternScale} min={1} max={16} step={1}
+                  onChange={setPalettePatternScale} unit="px" />
+                <Slider label="Error Spread" value={paletteDensity} min={0} max={150} step={1}
+                  onChange={setPaletteDensity} unit="%" />
+              </>
+            ) : isBayer ? (
+              <>
+                <Slider label="Cell Size" value={Math.max(1, palettePatternScale)} min={1} max={16} step={1}
+                  onChange={setPalettePatternScale} unit="px" />
+                <Slider label="Softness" value={paletteSoftness} min={0} max={100} step={1}
+                  onChange={setPaletteSoftness} unit="%" />
+                <Slider label="Contrast" value={paletteDensity} min={0} max={150} step={1}
+                  onChange={setPaletteDensity} unit="%" />
+                <Slider label="Angle" value={paletteAngle} min={0} max={360} step={1}
+                  onChange={setPaletteAngle} unit="°" />
+              </>
+            ) : (
+              <>
+                <Slider label="Scale" value={Math.max(2, palettePatternScale)} min={2} max={40} step={1}
+                  onChange={setPalettePatternScale} unit="px" />
+                <Slider label="Density" value={paletteDensity} min={0} max={150} step={1}
+                  onChange={setPaletteDensity} unit="%" />
+                <Slider label="Angle" value={paletteAngle} min={0} max={360} step={1}
+                  onChange={setPaletteAngle} unit="°" />
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Color Mode toggle */}
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              Color Mode
+            </div>
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 2, lineHeight: 1.5 }}>
+              Overlay original hues onto dither pattern
+            </div>
+          </div>
+          <button onClick={() => setPaletteColorMode(!paletteColorMode)}
+            style={{
+              width: 36, height: 20, borderRadius: 10, flexShrink: 0, cursor: 'pointer',
+              border: 'none', padding: 0, position: 'relative', transition: 'background 0.2s',
+              background: paletteColorMode ? 'var(--accent)' : 'var(--surface-3)',
+            }}>
+            <span style={{
+              position: 'absolute', top: 2, left: paletteColorMode ? 18 : 2,
+              width: 16, height: 16, borderRadius: '50%',
+              background: paletteColorMode ? '#000' : 'var(--text-dim)',
+              transition: 'left 0.2s',
+            }} />
+          </button>
+        </div>
+      </Section>
+    </>
+  );
+}
+
+// ─── Vector Section ───────────────────────────────────────────────────────────
+
+function VectorSection() {
+  const {
+    separationMode,
+    vectorNumColors, setVectorNumColors,
+    vectorDetail, setVectorDetail,
+    vectorInkColor, setVectorInkColor,
+    vectorSvg, vectorColors,
+  } = useStore();
+  if (separationMode !== 'vector') return null;
+
+  const fileSizeKb = vectorSvg ? Math.round(vectorSvg.length / 1024) : null;
+
+  return (
+    <Section title="Vector Settings">
+      <Slider label="Colors" value={vectorNumColors} min={1} max={16} step={1}
+        onChange={setVectorNumColors} />
+      <Slider label="Detail" value={vectorDetail} min={1} max={10} step={1}
+        onChange={setVectorDetail} />
+
+      {vectorNumColors === 1 && (
+        <div className="field" style={{ marginTop: 6 }}>
+          <span className="field-label">Ink Color</span>
+          <div className="color-field">
+            <div className="color-swatch-btn" style={{ background: vectorInkColor }}>
+              <input type="color" value={vectorInkColor}
+                onChange={(e) => setVectorInkColor(e.target.value)} />
+            </div>
+            <input className="color-hex" type="text" value={vectorInkColor} maxLength={7}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (/^#[0-9a-fA-F]{6}$/.test(v)) setVectorInkColor(v);
+              }} />
+          </div>
+        </div>
+      )}
+
+      {fileSizeKb !== null && (
+        <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 6, lineHeight: 1.5 }}>
+          {vectorColors.length} {vectorColors.length === 1 ? 'color' : 'colors'} · ~{fileSizeKb} KB SVG
+        </div>
+      )}
+    </Section>
+  );
+}
+
+// ─── CMYK Auto Section (beginner-friendly) ───────────────────────────────────
+
+function CmykTabGroup({ label, options, value, onChange }: {
+  label: string;
+  options: { label: string; value: number }[];
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6, gap: 6 }}>
+      <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', minWidth: 88 }}>{label}</span>
+      <div style={{ display: 'flex', gap: 2, flex: 1 }}>
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            style={{
+              flex: 1, height: 24, fontSize: 10, fontFamily: 'var(--font-mono)',
+              border: '1px solid var(--border-2)', borderRadius: 3, cursor: 'pointer',
+              background: value === opt.value ? 'var(--accent)' : 'var(--bg-3)',
+              color: value === opt.value ? '#fff' : 'var(--text-dim)',
+              fontWeight: value === opt.value ? 700 : 400,
+              transition: 'background 0.15s',
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CmykAutoSection({ quality }: { quality: number | null }) {
+  const { separationMode, cmykParams, setCmykParam, cmykViewMode, setCmykViewMode } = useStore();
+  if (separationMode !== 'cmyk') return null;
+  const p = cmykParams;
+
+  const scoreColor = quality === null ? 'var(--text-dim)'
+    : quality >= 80 ? '#4caf50'
+    : quality >= 60 ? '#ff9800'
+    : '#f44336';
+
+  return (
+    <Section title="Print Settings">
+      {/* View mode toggle */}
+      <div style={{ display: 'flex', gap: 3, marginBottom: 10 }}>
+        {(['composite', 'plates'] as const).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setCmykViewMode(mode)}
+            style={{
+              flex: 1, height: 26, fontSize: 10, fontFamily: 'var(--font-mono)',
+              border: '1px solid var(--border-2)', borderRadius: 3, cursor: 'pointer',
+              background: cmykViewMode === mode ? 'var(--accent)' : 'var(--bg-3)',
+              color: cmykViewMode === mode ? '#fff' : 'var(--text-dim)',
+              fontWeight: cmykViewMode === mode ? 700 : 400,
+              letterSpacing: '0.04em', textTransform: 'uppercase',
+            }}
+          >
+            {mode === 'composite' ? 'Composite' : 'Plate View'}
+          </button>
+        ))}
+      </div>
+
+      {/* Quality score badge */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+          Visual quality score
+        </span>
+        <span style={{
+          fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700,
+          color: scoreColor,
+          background: 'var(--bg-3)', border: `1px solid ${scoreColor}`,
+          borderRadius: 4, padding: '1px 8px',
+        }}>
+          {quality === null ? '–' : `${quality}/100`}
+        </span>
+      </div>
+
+      <CmykTabGroup
+        label="Print Style"
+        options={[{ label: 'Soft', value: 0 }, { label: 'Standard', value: 50 }, { label: 'Sharp', value: 100 }]}
+        value={p.printStyle}
+        onChange={(v) => setCmykParam('printStyle', v)}
+      />
+      <CmykTabGroup
+        label="Garment"
+        options={[{ label: 'White', value: 0 }, { label: 'Light', value: 50 }, { label: 'Dark', value: 100 }]}
+        value={p.garmentColor}
+        onChange={(v) => setCmykParam('garmentColor', v)}
+      />
+
+      <div style={{ marginTop: 6 }}>
+        <Slider label="Detail"        value={p.detail}        min={0} max={100} step={1}
+          onChange={(v) => setCmykParam('detail', v)}        unit="%" />
+        <Slider label="Contrast"      value={p.contrast}      min={0} max={100} step={1}
+          onChange={(v) => setCmykParam('contrast', v)}      unit="%" />
+        <Slider label="Color Strength" value={p.colorStrength} min={0} max={100} step={1}
+          onChange={(v) => setCmykParam('colorStrength', v)} unit="%" />
+        <Slider label="Black Strength" value={p.blackStrength} min={0} max={100} step={1}
+          onChange={(v) => setCmykParam('blackStrength', v)} unit="%" />
+      </div>
+    </Section>
+  );
+}
+
+// ─── CMYK Advanced Section (hidden by default) ────────────────────────────────
+
+function CmykAdvancedSection() {
+  const { separationMode, cmykParams, setCmykParam } = useStore();
+  if (separationMode !== 'cmyk') return null;
+  const p = cmykParams;
+  return (
+    <Section title="Advanced" defaultOpen={false}>
+      <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 8, lineHeight: 1.6 }}>
+        Fine-tune ink separation and screening behavior.
+      </div>
+      <Slider label="Cyan Warm Protect" value={p.cyanWarmProtect}  min={0}   max={100} step={1}
+        onChange={(v) => setCmykParam('cyanWarmProtect', v)}  unit="%" />
+      <Slider label="Yellow Cleanup"    value={p.yellowClean}      min={0}   max={100} step={1}
+        onChange={(v) => setCmykParam('yellowClean', v)}      unit="%" />
+      <Slider label="Highlight Protect" value={p.highlightProtect} min={0}   max={60}  step={1}
+        onChange={(v) => setCmykParam('highlightProtect', v)} unit="%" />
+      <Slider label="UCR Amount"        value={p.ucrAmount}        min={0}   max={100} step={1}
+        onChange={(v) => setCmykParam('ucrAmount', v)}        unit="%" />
+      <Slider label="GCR Amount"        value={p.gcrAmount}        min={0}   max={100} step={1}
+        onChange={(v) => setCmykParam('gcrAmount', v)}        unit="%" />
+      <Slider label="Total Ink Limit"   value={p.totalInkLimit}    min={200} max={400} step={5}
+        onChange={(v) => setCmykParam('totalInkLimit', v)}    unit="%" />
+      <Slider label="Dot Gain Comp"     value={p.dotGain}          min={0}   max={40}  step={1}
+        onChange={(v) => setCmykParam('dotGain', v)}          unit="%" />
+      <Slider label="Smooth Flat Tones" value={p.smoothFlat}       min={0}   max={100} step={1}
+        onChange={(v) => setCmykParam('smoothFlat', v)}       unit="%" />
+    </Section>
+  );
+}
+
 // ─── CMYK Screen Section ──────────────────────────────────────────────────────
 
 function CmykScreenSection() {
   const { separationMode, cmykLpi, setCmykLpi, documentDpi, cmykAngles, setCmykAngle } = useStore();
   if (separationMode !== 'cmyk') return null;
   const dotPx = (documentDpi / cmykLpi).toFixed(1);
+  const DEFAULTS = { 'cmyk-k': 45, 'cmyk-c': 15, 'cmyk-m': 75, 'cmyk-y': 0 };
   const channels = [
     { id: 'cmyk-k', label: 'K  Black' },
     { id: 'cmyk-c', label: 'C  Cyan' },
     { id: 'cmyk-m', label: 'M  Magenta' },
     { id: 'cmyk-y', label: 'Y  Yellow' },
   ];
+  const isDirty = channels.some(({ id }) => (cmykAngles[id] ?? 0) !== DEFAULTS[id as keyof typeof DEFAULTS]);
   return (
-    <Section title="CMYK Screen">
+    <Section title="Screen" defaultOpen={false}>
       <Slider label="Screen Ruling" value={cmykLpi} min={25} max={150} step={1}
         onChange={setCmykLpi} unit=" LPI" />
       <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 4 }}>
-        <div>~{dotPx}px per dot @ {documentDpi} DPI · Round dot</div>
+        ~{dotPx}px per dot @ {documentDpi} DPI · Round dot
       </div>
       <div style={{ marginTop: 10 }}>
         {channels.map(({ id, label }) => (
@@ -398,13 +853,22 @@ function CmykScreenSection() {
             onChange={(v) => setCmykAngle(id, v)} unit="°" />
         ))}
       </div>
+      {isDirty && (
+        <button
+          className="btn btn-ghost"
+          onClick={() => channels.forEach(({ id }) => setCmykAngle(id, DEFAULTS[id as keyof typeof DEFAULTS]))}
+          style={{ marginTop: 8, fontSize: 10, fontFamily: 'var(--font-mono)', height: 24, padding: '0 10px', opacity: 0.7 }}
+        >
+          Reset angles to defaults (K45° C15° M75° Y0°)
+        </button>
+      )}
     </Section>
   );
 }
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
-export function ControlPanel() {
+export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | null }) {
   const { layers, selectedLayerId, updateLayer, globalPattern, originalImage, separationMode } = useStore();
   const layer = layers.find((l) => l.id === selectedLayerId);
 
@@ -424,6 +888,10 @@ export function ControlPanel() {
       <div className="panel-header">
         {separationMode === 'cmyk' ? (
           <span className="panel-title">CMYK</span>
+        ) : separationMode === 'palette' ? (
+          <span className="panel-title">Dither</span>
+        ) : separationMode === 'vector' ? (
+          <span className="panel-title">Vector</span>
         ) : layer ? (
           <>
             <span className="panel-title">{layer.name}</span>
@@ -436,7 +904,19 @@ export function ControlPanel() {
 
       <div className="control-scroll">
         <DocumentSection />
-        {separationMode === 'cmyk' ? <CmykScreenSection /> : <GlobalPatternSection />}
+        {separationMode === 'cmyk' ? (
+          <>
+            <CmykAutoSection quality={cmykQuality} />
+            <CmykAdvancedSection />
+            <CmykScreenSection />
+          </>
+        ) : separationMode === 'palette' ? (
+          <PaletteSection />
+        ) : separationMode === 'vector' ? (
+          <VectorSection />
+        ) : (
+          <GlobalPatternSection />
+        )}
         <ImageAdjustmentsSection />
 
         {/* Per-layer controls — threshold mode only */}

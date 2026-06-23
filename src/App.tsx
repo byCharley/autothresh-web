@@ -16,8 +16,10 @@ import type { ExportConfig } from './components/ExportModal';
 import { MockupPreview } from './components/MockupPreview';
 import { PresetsModal } from './components/PresetsModal';
 import { useStore } from './store/useStore';
+import { paletteSeparate, renderPaletteComposite } from './engine/colorSeparation';
 import {
-  processImage, applyKnockout, renderComposite, renderCmykComposite, drawRegistrationMarks, computeBackgroundMask,
+  processImage, applyKnockout, renderComposite, renderCmykSmooth, garmentRgbFromParam,
+  drawRegistrationMarks, computeBackgroundMask,
   cmykSeparate, contrastColor, hexToRgb,
 } from './engine/imageProcessor';
 import type { LayerConfig, PatternConfig, ProcessedLayer } from './engine/imageProcessor';
@@ -58,6 +60,8 @@ function isMobileDevice(): boolean {
 function App() {
   const { status, session, initiateLogin, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
   const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const {
@@ -65,8 +69,10 @@ function App() {
     bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor,
     documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
-    separationMode, cmykLpi, cmykAngles,
+    separationMode, cmykLpi, cmykAngles, cmykParams, cmykQuality,
+    paletteColors, paletteVisibility, palettePattern, palettePatternScale,
     paintMasks,
+    vectorSvg,
   } = useStore();
 
   useEffect(() => {
@@ -95,8 +101,17 @@ function App() {
     return <SubscribePage firstName={session?.firstName} onLogout={logout} />;
   }
 
-  const handleExport = async ({ mode, format, fileName }: ExportConfig) => {
+  const handleExport = async ({ mode: _mode, format, fileName }: ExportConfig) => {
     if (!originalImage) return;
+
+    // ── Vector mode: download the traced SVG directly ────────────────────────
+    if (separationMode === 'vector') {
+      if (!vectorSvg) return;
+      const blob = new Blob([vectorSvg], { type: 'image/svg+xml' });
+      saveAs(blob, `${fileName || 'vector'}.svg`);
+      return;
+    }
+    const mode = _mode;
 
     // ── Document geometry ────────────────────────────────────────────────────
     const docPxW    = Math.round(documentWidthIn * documentDpi);
@@ -127,7 +142,12 @@ function App() {
     let artLayers: ProcessedLayer[];
     if (separationMode === 'cmyk') {
       // Cell size derived from LPI: output DPI / LPI = pixels per halftone dot
-      artLayers = cmykSeparate(artImageData, documentDpi / cmykLpi, artBgMask, cmykAngles);
+      artLayers = cmykSeparate(artImageData, documentDpi / cmykLpi, artBgMask, cmykAngles, 1, cmykParams);
+    } else if (separationMode === 'palette') {
+      artLayers = paletteSeparate(
+        artImageData, paletteColors, artBgMask,
+        palettePattern, palettePatternScale,
+      ).filter(l => paletteVisibility[l.id] !== false);
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
       artLayers = processImage(artImageData, resolved, false, artBgMask, imageAdjustments, exportScaleFactor);
@@ -200,14 +220,57 @@ function App() {
       return canvas;
     };
 
-    const buildCompositeCanvas = (withMarks: boolean): HTMLCanvasElement => {
-      // Composite artwork layers, then place in document canvas
+    // CMYK-only: grayscale positive plate — black where ink prints, white where it doesn't.
+    // This is the standard film/screen format used by RIPs and screen printers.
+    const buildCmykPlateCanvas = (pl: ProcessedLayer): HTMLCanvasElement => {
+      const data = new ImageData(docPxW, docPxH);
+      for (let i = 0; i < docPxW * docPxH; i++) {
+        data.data[i * 4] = 255; data.data[i * 4 + 1] = 255; data.data[i * 4 + 2] = 255; data.data[i * 4 + 3] = 255;
+      }
+      for (let ay = 0; ay < artScaleH; ay++) {
+        for (let ax = 0; ax < artScaleW; ax++) {
+          if (pl.mask[ay * artScaleW + ax] !== 255) continue;
+          const dx = artOffX + ax, dy = artOffY + ay;
+          if (dx < 0 || dx >= docPxW || dy < 0 || dy >= docPxH) continue;
+          const pi = (dy * docPxW + dx) * 4;
+          data.data[pi] = 0; data.data[pi + 1] = 0; data.data[pi + 2] = 0; data.data[pi + 3] = 255;
+        }
+      }
+      return canvasFromImageData(data);
+    };
+
+    // Helper: derive garment hex string from cmykParams.garmentColor (0-100)
+    const garmentHex = (() => {
+      const [r, g, b] = garmentRgbFromParam(cmykParams.garmentColor ?? 0);
+      return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+    })();
+
+    const buildCompositeCanvas = (withMarks: boolean, overrideGarment?: string): HTMLCanvasElement => {
+      const effectiveGarment = overrideGarment ?? garmentHex;
+      const [gR, gG, gB] = overrideGarment
+        ? overrideGarment.match(/[\da-f]{2}/gi)!.map(h => parseInt(h, 16)) as [number,number,number]
+        : garmentRgbFromParam(cmykParams.garmentColor ?? 0);
+      const overrideParams = overrideGarment
+        ? { ...cmykParams, garmentColor: Math.round(100 - (gR + gG + gB) / 3 / 2.55) }
+        : cmykParams;
+
       const artComposite = separationMode === 'cmyk'
-        ? renderCmykComposite(artLayers, artScaleW, artScaleH, artBgMask)
-        : renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
+        ? renderCmykSmooth(artImageData, artBgMask, { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true }, overrideParams)
+        : separationMode === 'palette'
+          ? renderPaletteComposite(artImageData, paletteColors, artBgMask,
+              Object.fromEntries(paletteColors.map((_, i) => [`palette-${i}`, true])),
+              palettePattern, palettePatternScale)
+          : renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
       const docCanvas = document.createElement('canvas');
       docCanvas.width = docPxW; docCanvas.height = docPxH;
       const dCtx = docCanvas.getContext('2d')!;
+      if (separationMode === 'cmyk') {
+        dCtx.fillStyle = effectiveGarment;
+        dCtx.fillRect(0, 0, docPxW, docPxH);
+      } else if (separationMode === 'palette') {
+        dCtx.fillStyle = '#ffffff';
+        dCtx.fillRect(0, 0, docPxW, docPxH);
+      }
       dCtx.drawImage(canvasFromImageData(artComposite), artOffX, artOffY);
       if (withMarks && showRegistrationMarks) {
         drawRegistrationMarks(dCtx, docPxW, docPxH, regPaddingPx, '#000000');
@@ -242,6 +305,20 @@ function App() {
       if (mode === 'dtg') {
         const blob = await canvasToBlob(buildCompositeCanvas(true));
         saveAs(blob, `${baseName}-dtg.png`);
+      } else if (separationMode === 'cmyk') {
+        // Plates (grayscale positives) + proofs on white and on garment
+        const zip    = new JSZip();
+        const plates = zip.folder('plates')!;
+        for (const pl of visibleLayers) {
+          plates.file(`${layerName(pl).toLowerCase().replace(/\s*·\s*/g, '-')}.png`, await canvasToBlob(buildCmykPlateCanvas(pl)));
+        }
+        zip.file('proof-on-garment.png', await canvasToBlob(buildCompositeCanvas(false)));
+        zip.file('proof-on-white.png',   await canvasToBlob(buildCompositeCanvas(false, '#ffffff')));
+        saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-cmyk-plates.zip`);
+      } else if (separationMode === 'palette') {
+        // Single composite PNG for Color Match
+        const blob = await canvasToBlob(buildCompositeCanvas(false));
+        saveAs(blob, `${baseName}-dither.png`);
       } else {
         const zip    = new JSZip();
         const folder = zip.folder('screen-print')!;
@@ -265,12 +342,67 @@ function App() {
           ],
         });
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-dtg.psd`);
+      } else if (separationMode === 'cmyk') {
+        // True separation PSD:
+        // • Bottom: Garment fill (the substrate — change to any color without affecting plates)
+        // • Middle: Color Proof — pre-rendered by our engine, Normal blend, fully opaque.
+        //   Correct on any Photoshop background, no Multiply dependency.
+        // • Top group: Grayscale halftone plates (black=ink, white=no ink), hidden by default.
+        //   Toggle individual plates to inspect or send to RIP.
+
+        // Garment layer
+        const garmentCanvas = document.createElement('canvas');
+        garmentCanvas.width = docPxW; garmentCanvas.height = docPxH;
+        garmentCanvas.getContext('2d')!.fillStyle = garmentHex;
+        garmentCanvas.getContext('2d')!.fillRect(0, 0, docPxW, docPxH);
+
+        // Color proof — rendered on garment by our engine, no blend modes needed
+        const proofCanvas = buildCompositeCanvas(false);
+
+        // Grayscale plates (hidden — data, not display)
+        const plateLayers = visibleLayers.map((pl) => ({
+          name:    layerName(pl) + ' [Plate]',
+          canvas:  buildCmykPlateCanvas(pl),
+          top: 0, left: 0,
+          blendMode: 'normal' as const,
+          opacity: 1,
+          hidden: true,
+        }));
+
+        const buffer = writePsd({
+          width: docPxW, height: docPxH,
+          children: [
+            { name: 'Garment',     canvas: garmentCanvas, top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+            { name: 'Color Proof', canvas: proofCanvas,   top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+            ...plateLayers,
+          ],
+        });
+        saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk.psd`);
+      } else if (separationMode === 'palette') {
+        // PSD: White background + colored dithered ink layers
+        const whiteBg = document.createElement('canvas');
+        whiteBg.width = docPxW; whiteBg.height = docPxH;
+        whiteBg.getContext('2d')!.fillStyle = '#ffffff';
+        whiteBg.getContext('2d')!.fillRect(0, 0, docPxW, docPxH);
+        const plateLayers = visibleLayers.map((pl) => ({
+          name:    layerName(pl),
+          canvas:  buildLayerCanvas(pl, false),
+          top: 0, left: 0, blendMode: 'normal' as const, opacity: 1,
+        }));
+        const buffer = writePsd({
+          width: docPxW, height: docPxH,
+          children: [
+            { name: 'White Paper', canvas: whiteBg,               top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+            { name: 'Color Proof', canvas: buildCompositeCanvas(false), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+            ...plateLayers,
+          ],
+        });
+        saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-color-match.psd`);
       } else {
         const psdLayers = visibleLayers.map((pl) => ({
           name:      layerName(pl),
           canvas:    buildLayerCanvas(pl, true),
-          top:       0,
-          left:      0,
+          top:       0, left:      0,
           blendMode: 'normal' as const,
           opacity:   1,
         }));
@@ -295,15 +427,16 @@ function App() {
         page.drawImage(img, { x: 0, y: 0, width: ptW, height: ptH });
       };
 
-      if (mode === 'dtg') {
-        await addPage(buildCompositeCanvas(true));
+      if (separationMode === 'palette' || mode === 'dtg') {
+        await addPage(buildCompositeCanvas(false));
       } else {
         for (const pl of visibleLayers) await addPage(buildLayerCanvas(pl, true));
         await addPage(buildCompositeCanvas(true));
       }
 
+      const suffix = separationMode === 'palette' ? 'dither' : mode;
       const pdfBytes = await pdfDoc.save();
-      saveAs(new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }), `${baseName}-${mode}.pdf`);
+      saveAs(new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }), `${baseName}-${suffix}.pdf`);
       return;
     }
 
@@ -332,15 +465,42 @@ function App() {
     <div className="app">
       <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} />
       <div className="workspace">
-        <LayerPanel />
+        <div className={`panel-wrap panel-wrap--left${leftOpen ? '' : ' panel-wrap--closed'}`}>
+          <LayerPanel />
+        </div>
+        <button
+          className="panel-tab panel-tab--left"
+          title={leftOpen ? 'Hide left panel' : 'Show left panel'}
+          onClick={() => setLeftOpen(o => !o)}
+        >
+          <svg width="8" height="12" viewBox="0 0 8 12" fill="none" stroke="currentColor" strokeWidth="1.8">
+            {leftOpen
+              ? <polyline points="6 1 2 6 6 11" />
+              : <polyline points="2 1 6 6 2 11" />}
+          </svg>
+        </button>
         <CanvasView />
-        <ControlPanel />
+        <button
+          className="panel-tab panel-tab--right"
+          title={rightOpen ? 'Hide right panel' : 'Show right panel'}
+          onClick={() => setRightOpen(o => !o)}
+        >
+          <svg width="8" height="12" viewBox="0 0 8 12" fill="none" stroke="currentColor" strokeWidth="1.8">
+            {rightOpen
+              ? <polyline points="2 1 6 6 2 11" />
+              : <polyline points="6 1 2 6 6 11" />}
+          </svg>
+        </button>
+        <div className={`panel-wrap panel-wrap--right${rightOpen ? '' : ' panel-wrap--closed'}`}>
+          <ControlPanel cmykQuality={cmykQuality} />
+        </div>
       </div>
       {showExport && (
         <ExportModal
           onClose={() => setShowExport(false)}
           onExport={handleExport}
           defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'autothresh'}
+          separationMode={separationMode}
         />
       )}
       {mockupOpen && (
