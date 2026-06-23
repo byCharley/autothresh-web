@@ -909,7 +909,7 @@ export function CanvasView() {
                     strokeWidth={1.5} strokeDasharray="6 4" opacity={0.5}
                   />
                 )}
-                {showRegistrationMarks && regMarkData.positions.map((pos, i) => (
+                {showRegistrationMarks && separationMode !== 'vector' && regMarkData.positions.map((pos, i) => (
                   <RegMark key={i} x={pos.x} y={pos.y} size={regMarkData.markSize} />
                 ))}
               </svg>
