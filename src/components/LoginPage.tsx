@@ -66,7 +66,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
         <div style={{
           fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.6,
           background: 'var(--surface-2)', border: '1px solid var(--border)',
-          padding: '8px 12px', marginBottom: 20, textAlign: 'left',
+          padding: '8px 12px', marginBottom: 20, textAlign: 'center',
           fontFamily: 'var(--font-mono)',
         }}>
           <span style={{ color: 'var(--accent)', marginRight: 6 }}>!</span>
