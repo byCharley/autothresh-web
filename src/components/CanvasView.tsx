@@ -336,40 +336,10 @@ export function CanvasView() {
             artComposite = tmpCtx.getImageData(0, 0, artPrevW, artPrevH);
           }
 
-          // Store final composite for mockup (no split view — mockup needs clean data)
+          // Store final composite for mockup (before split view alters it)
           setDitherComposite({ data: artComposite, w: artPrevW, h: artPrevH });
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
-          // Split view: left = original (bg-masked), right = dithered result
-          if (splitView) {
-            const split = new ImageData(artPrevW, artPrevH);
-            const halfW = Math.floor(artPrevW / 2);
-            for (let y = 0; y < artPrevH; y++) {
-              for (let x = 0; x < artPrevW; x++) {
-                const i = (y * artPrevW + x) * 4;
-                if (x < halfW) {
-                  const isBg = localBgMask && localBgMask[y * artPrevW + x] === 255;
-                  if (isBg) {
-                    split.data[i+3] = 0;
-                  } else {
-                    split.data[i]   = artScaled.data[i];
-                    split.data[i+1] = artScaled.data[i+1];
-                    split.data[i+2] = artScaled.data[i+2];
-                    split.data[i+3] = artScaled.data[i+3];
-                  }
-                } else {
-                  split.data[i]   = artComposite.data[i];
-                  split.data[i+1] = artComposite.data[i+1];
-                  split.data[i+2] = artComposite.data[i+2];
-                  split.data[i+3] = artComposite.data[i+3];
-                }
-              }
-              // Divider line at halfW
-              const di = (y * artPrevW + halfW) * 4;
-              split.data[di] = 255; split.data[di+1] = 255; split.data[di+2] = 255; split.data[di+3] = 200;
-            }
-            artComposite = split;
-          }
         } else if (separationMode === 'color-sep') {
           setDitherComposite(null);
 
@@ -465,6 +435,36 @@ export function CanvasView() {
             ? expanded.filter((pl) => pl.id === soloLayerId || pl.id.startsWith(`${soloLayerId}:`))
             : expanded;
           artComposite = renderComposite(displayLayers, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
+        }
+
+        // Split view: left = original image, right = processed result (all modes)
+        if (splitView) {
+          const split = new ImageData(artPrevW, artPrevH);
+          const halfW = Math.floor(artPrevW / 2);
+          for (let y = 0; y < artPrevH; y++) {
+            for (let x = 0; x < artPrevW; x++) {
+              const i = (y * artPrevW + x) * 4;
+              if (x < halfW) {
+                const isBg = localBgMask && localBgMask[y * artPrevW + x] === 255;
+                if (isBg) {
+                  split.data[i+3] = 0;
+                } else {
+                  split.data[i]   = artScaled.data[i];
+                  split.data[i+1] = artScaled.data[i+1];
+                  split.data[i+2] = artScaled.data[i+2];
+                  split.data[i+3] = artScaled.data[i+3];
+                }
+              } else {
+                split.data[i]   = artComposite.data[i];
+                split.data[i+1] = artComposite.data[i+1];
+                split.data[i+2] = artComposite.data[i+2];
+                split.data[i+3] = artComposite.data[i+3];
+              }
+            }
+            const di = (y * artPrevW + halfW) * 4;
+            split.data[di] = 255; split.data[di+1] = 255; split.data[di+2] = 255; split.data[di+3] = 200;
+          }
+          artComposite = split;
         }
 
         // Build document canvas: fabric bg + artwork at 1:1 (zero scaling = zero blur).
