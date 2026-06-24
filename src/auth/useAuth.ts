@@ -198,7 +198,7 @@ export function useAuth() {
     sessionStorage.setItem(STATE_KEY, state);
     sessionStorage.setItem(NONCE_KEY, nonce);
     const r = await fetch(
-      `/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}&prompt=login`
+      `/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}&prompt=select_account`
     );
     const { redirectUrl } = await r.json() as { redirectUrl: string };
     window.location.href = redirectUrl;
