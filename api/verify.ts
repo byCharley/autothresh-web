@@ -1,50 +1,54 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const STORE_ID        = process.env.SHOPIFY_STORE_ID!;
-const STORE_DOMAIN    = process.env.SHOPIFY_STORE_DOMAIN!;
-const ADM_TOKEN       = process.env.shopify_private_access_token!;
-const ADM_URL         = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json`;
-const PRODUCT_KEYWORD = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
-const TESTER_EMAILS   = new Set(
+const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
+const TESTER_EMAILS = new Set(
   (process.env.TESTER_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
 );
 
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
-async function adminCheckSubscription(email: string): Promise<{ hasSub: boolean; nextBillingDate?: string }> {
+const SEAL_TOKEN   = process.env.SEAL_API_TOKEN!;
+const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
+
+type SealSub = {
+  status: string;
+  next_billing_date?: string;
+  next_charge_at?: string;
+};
+
+type SealResponse = SealSub[] | { subscriptions?: SealSub[] } | { data?: SealSub[] };
+
+async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; nextBillingDate?: string }> {
   try {
-    const r = await fetch(ADM_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': ADM_TOKEN },
-      body: JSON.stringify({
-        query: `query($q: String!) {
-          customers(first: 1, query: $q) {
-            edges { node {
-              subscriptionContracts(first: 20) {
-                edges { node {
-                  status
-                  nextBillingDate
-                  lines(first: 10) { edges { node { title } } }
-                } }
-              }
-            } }
-          }
-        }`,
-        variables: { q: `email:${email}` },
-      }),
-    });
-    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; nextBillingDate?: string; lines: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
-    const cust = body?.data?.customers?.edges?.[0]?.node;
-    if (!cust) return { hasSub: false };
+    const r = await fetch(
+      `${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`,
+      { headers: { 'X-Seal-Token': SEAL_TOKEN } },
+    );
+    if (!r.ok) {
+      console.error('Seal API HTTP error:', r.status, (await r.text()).slice(0, 200));
+      return { hasSub: false };
+    }
+    const raw = await r.json() as SealResponse;
+
+    const subs: SealSub[] = Array.isArray(raw)
+      ? raw
+      : (raw as { subscriptions?: SealSub[] }).subscriptions
+        ?? (raw as { data?: SealSub[] }).data
+        ?? [];
+
+    console.log('Seal subs for', email, ':', JSON.stringify(subs.map(s => ({ status: s.status }))));
+
     let nextBillingDate: string | undefined;
-    const hasSub = cust.subscriptionContracts.edges.some(({ node: n }) => {
-      const match = ['ACTIVE', 'PAUSED'].includes(n.status) &&
-        n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD));
-      if (match && n.nextBillingDate) nextBillingDate = n.nextBillingDate;
-      return match;
+    const hasSub = subs.some(s => {
+      const active = s.status === 'ACTIVE' || s.status === 'PAUSED';
+      if (active) nextBillingDate = s.next_billing_date ?? s.next_charge_at;
+      return active;
     });
     return { hasSub, nextBillingDate };
-  } catch { return { hasSub: false }; }
+  } catch (e) {
+    console.error('Seal check error:', e);
+    return { hasSub: false };
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -57,33 +61,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { token } = req.body as { token?: string };
   if (!token) return res.status(400).json({ valid: false, error: 'Token required' });
 
+  // ── Validate token + get customer info ────────────────────────────────────
   let custData: { data?: Record<string, unknown>; errors?: unknown[] } = {};
   try {
     const r = await fetch(CUST_API_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': token,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': token },
       body: JSON.stringify({
-        query: `
-          query {
-            customer {
-              firstName
-              emailAddress { emailAddress }
-              subscriptionContracts(first: 20) {
-                edges {
-                  node {
-                    status
-                    lines(first: 10) {
-                      edges { node { title } }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `,
+        query: `query { customer { firstName emailAddress { emailAddress } } }`,
       }),
     });
     custData = JSON.parse(await r.text());
@@ -92,43 +77,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ valid: false });
   }
 
-  type LineEdge = { node: { title: string } };
-  type SubNode  = { status: string; lines: { edges: LineEdge[] } };
-  type CustNode = {
-    firstName?: string;
-    emailAddress?: { emailAddress: string };
-    subscriptionContracts?: { edges: { node: SubNode }[] };
-  };
-
+  type CustNode = { firstName?: string; emailAddress?: { emailAddress: string } };
   const cust = (custData.data as { customer?: CustNode })?.customer;
   if (!cust) return res.status(200).json({ valid: false });
 
-  const subEdges = cust.subscriptionContracts?.edges ?? [];
-
-  const hasSub = subEdges.some(({ node: n }) =>
-    ['ACTIVE', 'PAUSED'].includes(n.status) &&
-    n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
-  );
-
   const email = cust.emailAddress?.emailAddress ?? '';
-  let finalHasSub = hasSub;
-  let subscriptionExpiresAt: string | undefined;
-  if (!finalHasSub) {
-    const adminResult = await adminCheckSubscription(email);
-    finalHasSub = adminResult.hasSub;
-    subscriptionExpiresAt = adminResult.nextBillingDate;
-  }
 
-  // Tester email override — grants access without a subscription
-  if (!finalHasSub && TESTER_EMAILS.has(email.toLowerCase())) {
-    finalHasSub = true;
-    subscriptionExpiresAt = undefined;
-  }
+  // ── Check subscription via Seal ───────────────────────────────────────────
+  const { hasSub, nextBillingDate } = await sealCheckSubscription(email);
+  const finalHasSub = hasSub || TESTER_EMAILS.has(email.toLowerCase());
+
+  console.log('Verify result:', { email, hasSub, finalHasSub });
 
   return res.status(200).json({
     valid:                true,
     hasSubscription:      finalHasSub,
-    subscriptionExpiresAt,
+    subscriptionExpiresAt: nextBillingDate,
     email,
     firstName:            cust.firstName ?? '',
   });

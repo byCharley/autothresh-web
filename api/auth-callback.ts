@@ -4,58 +4,56 @@ const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh.com/auth/callback';
 
-const PRODUCT_KEYWORD  = (process.env.SHOPIFY_PRODUCT_TITLE ?? 'autothresh').toLowerCase();
-const TESTER_EMAILS    = new Set(
+const TESTER_EMAILS = new Set(
   (process.env.TESTER_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
 );
-const STORE_DOMAIN     = process.env.SHOPIFY_STORE_DOMAIN!;
-const ADM_TOKEN        = process.env.shopify_private_access_token!;
-const ADM_URL          = `https://${STORE_DOMAIN}/admin/api/2024-10/graphql.json`;
 
-// Customer Account API — confirmed URL/auth from working Lovable project
+// Customer Account API
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
-async function adminCheckSubscription(email: string): Promise<{ hasSub: boolean; nextBillingDate?: string }> {
+// Seal Subscriptions API — token is unique per shop, found in Seal app > Settings > General > API
+// API_SECRET is for webhook HMAC verification only; not needed for read requests.
+const SEAL_TOKEN   = process.env.SEAL_API_TOKEN!;
+const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
+
+type SealSub = {
+  status: string;
+  next_billing_date?: string;
+  next_charge_at?: string;
+};
+
+type SealResponse = SealSub[] | { subscriptions?: SealSub[] } | { data?: SealSub[] };
+
+async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; nextBillingDate?: string }> {
   try {
-    const r = await fetch(ADM_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': ADM_TOKEN,
-      },
-      body: JSON.stringify({
-        query: `query($q: String!) {
-          customers(first: 1, query: $q) {
-            edges { node {
-              subscriptionContracts(first: 20) {
-                edges { node {
-                  status
-                  nextBillingDate
-                  lines(first: 10) { edges { node { title } } }
-                } }
-              }
-            } }
-          }
-        }`,
-        variables: { q: `email:${email}` },
-      }),
-    });
-    const body = await r.json() as { data?: { customers?: { edges: { node: { subscriptionContracts: { edges: { node: { status: string; nextBillingDate?: string; lines: { edges: { node: { title: string } }[] } } }[] } } }[] } } };
-    console.log('Admin API result:', JSON.stringify(body).slice(0, 600));
-    const cust = body?.data?.customers?.edges?.[0]?.node;
-    if (!cust) return { hasSub: false };
+    const r = await fetch(
+      `${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`,
+      { headers: { 'X-Seal-Token': SEAL_TOKEN } },
+    );
+    if (!r.ok) {
+      console.error('Seal API HTTP error:', r.status, (await r.text()).slice(0, 200));
+      return { hasSub: false };
+    }
+    const raw = await r.json() as SealResponse;
+
+    // Seal may return an array directly or wrap it
+    const subs: SealSub[] = Array.isArray(raw)
+      ? raw
+      : (raw as { subscriptions?: SealSub[] }).subscriptions
+        ?? (raw as { data?: SealSub[] }).data
+        ?? [];
+
+    console.log('Seal subs for', email, ':', JSON.stringify(subs.map(s => ({ status: s.status }))));
 
     let nextBillingDate: string | undefined;
-    const hasSub = cust.subscriptionContracts.edges.some(({ node: n }) => {
-      const match = ['ACTIVE', 'PAUSED'].includes(n.status) &&
-        n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD));
-      if (match && n.nextBillingDate) nextBillingDate = n.nextBillingDate;
-      return match;
+    const hasSub = subs.some(s => {
+      const active = s.status === 'ACTIVE' || s.status === 'PAUSED';
+      if (active) nextBillingDate = s.next_billing_date ?? s.next_charge_at;
+      return active;
     });
-    console.log('Admin API hasSub:', hasSub, 'nextBillingDate:', nextBillingDate);
     return { hasSub, nextBillingDate };
   } catch (e) {
-    console.error('Admin API check error:', e);
+    console.error('Seal check error:', e);
     return { hasSub: false };
   }
 }
@@ -77,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!code || !codeVerifier) return res.status(400).json({ error: 'code and codeVerifier required' });
 
   // ── 1. Exchange code for tokens ────────────────────────────────────────────
-  const tokenRes  = await fetch(
+  const tokenRes = await fetch(
     `https://shopify.com/authentication/${STORE_ID}/oauth/token`,
     {
       method: 'POST',
@@ -93,7 +91,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   );
 
   const tokenBody = await tokenRes.text();
-
   if (!tokenRes.ok) {
     console.error('Token exchange HTTP error:', tokenRes.status, tokenBody.slice(0, 300));
     return res.status(401).json({ error: 'Token exchange failed' });
@@ -107,14 +104,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Token exchange bad response' });
   }
 
-  console.log('Token exchange result:', JSON.stringify({
-    hasAccessToken: !!tokens.access_token,
-    hasIdToken:     !!tokens.id_token,
-    expiresIn:      tokens.expires_in,
-    error:          tokens.error,
-    accessTokenLen: tokens.access_token?.length,
-  }));
-
   if (tokens.error || !tokens.access_token || !tokens.id_token) {
     console.error('Token exchange error:', tokens.error, tokens.error_description);
     return res.status(401).json({ error: tokens.error ?? 'Token exchange missing fields' });
@@ -125,105 +114,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const email     = claims.email as string;
   const expiresAt = new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString();
 
-  // ── 3. Query Customer Account API ─────────────────────────────────────────
-  // URL: shopify.com/{store_id}/account/customer/api/2024-07/graphql
-  // Auth: raw access token, no "Bearer" prefix
-  let rawBody = '';
-  let custData: { data?: Record<string, unknown>; errors?: unknown[] } = {};
+  // ── 3. Get customer name from Customer Account API ─────────────────────────
+  let firstName = '';
+  let custEmail = email;
   try {
     const r = await fetch(CUST_API_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': tokens.access_token,
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': tokens.access_token },
       body: JSON.stringify({
-        query: `
-          query {
-            customer {
-              firstName
-              emailAddress { emailAddress }
-              subscriptionContracts(first: 20) {
-                edges {
-                  node {
-                    status
-                    lines(first: 10) {
-                      edges {
-                        node { title }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        `,
+        query: `query { customer { firstName emailAddress { emailAddress } } }`,
       }),
     });
-    rawBody = await r.text();
-    custData = JSON.parse(rawBody);
+    const body = await r.json() as { data?: { customer?: { firstName?: string; emailAddress?: { emailAddress: string } } } };
+    const cust = body.data?.customer;
+    if (cust) {
+      firstName = cust.firstName ?? '';
+      custEmail = cust.emailAddress?.emailAddress ?? email;
+    }
+    console.log('Customer API:', { firstName, custEmail });
   } catch (e) {
-    console.error('Customer API error:', String(e), 'raw:', rawBody.slice(0, 200));
+    console.error('Customer API error:', e);
   }
 
-  type LineEdge  = { node: { title: string } };
-  type SubNode   = { status: string; lines: { edges: LineEdge[] } };
-  type CustNode  = {
-    firstName?: string;
-    emailAddress?: { emailAddress: string };
-    subscriptionContracts?: { edges: { node: SubNode }[] };
-  };
-
-  const cust = (custData.data as { customer?: CustNode })?.customer;
-
-  console.log('CUST_API_RESULT:', JSON.stringify({
-    hasCustomer: !!cust,
-    errors:      custData.errors,
-    rawSlice:    rawBody.slice(0, 400),
-  }));
-
-  if (!cust) {
-    return res.status(200).json({
-      token: tokens.access_token, expiresAt,
-      email, firstName: '', hasSubscription: false,
-    });
-  }
-
-  const subEdges = cust.subscriptionContracts?.edges ?? [];
-
-  const hasSub = subEdges.some(({ node: n }) =>
-    ['ACTIVE', 'PAUSED'].includes(n.status) &&
-    n.lines.edges.some(({ node: l }) => l.title.toLowerCase().includes(PRODUCT_KEYWORD))
-  );
-
-  console.log('Access result:', JSON.stringify({
-    hasSub,
-    subs: subEdges.map(({ node: n }) => ({ status: n.status, lines: n.lines.edges.map(e => e.node.title) })),
-  }));
-
-  // If Customer Account API found no active subscription, try Admin API
-  const custEmail = cust.emailAddress?.emailAddress ?? email;
-  let finalHasSub = hasSub;
-  let subscriptionExpiresAt: string | undefined;
-  if (!finalHasSub) {
-    const adminResult = await adminCheckSubscription(custEmail);
-    finalHasSub = adminResult.hasSub;
-    subscriptionExpiresAt = adminResult.nextBillingDate;
-  }
+  // ── 4. Check subscription via Seal ────────────────────────────────────────
+  const { hasSub, nextBillingDate } = await sealCheckSubscription(custEmail);
 
   // Tester email override — grants access without a subscription
-  if (!finalHasSub && TESTER_EMAILS.has(custEmail.toLowerCase())) {
-    finalHasSub = true;
-    subscriptionExpiresAt = undefined;
-  }
+  const finalHasSub = hasSub || TESTER_EMAILS.has(custEmail.toLowerCase());
+
+  console.log('Auth result:', { custEmail, hasSub, finalHasSub, nextBillingDate });
 
   return res.status(200).json({
     token:                tokens.access_token,
     idToken:              tokens.id_token,
     expiresAt,
     email:                custEmail,
-    firstName:            cust.firstName ?? '',
+    firstName,
     hasSubscription:      finalHasSub,
-    subscriptionExpiresAt,
+    subscriptionExpiresAt: nextBillingDate,
   });
 }
