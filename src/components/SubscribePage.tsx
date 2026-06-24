@@ -8,10 +8,11 @@ const PRODUCT_URL = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefin
 
 interface Props {
   firstName?: string;
+  email?: string;
   onLogout: () => void;
 }
 
-export function SubscribePage({ firstName, onLogout }: Props) {
+export function SubscribePage({ firstName, email, onLogout }: Props) {
   const [showEula, setShowEula] = useState(false);
 
   return (
@@ -44,6 +45,18 @@ export function SubscribePage({ firstName, onLogout }: Props) {
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>
           {firstName ? `Hi ${firstName} —` : ''} Subscription Required
         </div>
+
+        {email && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            padding: '4px 10px', marginBottom: 16,
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />
+            {email}
+          </div>
+        )}
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
           AutoThresh Web requires an active subscription.

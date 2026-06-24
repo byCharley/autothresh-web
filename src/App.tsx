@@ -66,7 +66,7 @@ function App() {
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const {
     originalImage, layers, globalPattern, knockoutEnabled,
-    bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor,
+    bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor, showFabricBg,
     documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     separationMode, cmykLpi, cmykAngles, cmykParams, cmykQuality,
@@ -98,7 +98,7 @@ function App() {
   }
 
   if (status === 'no-subscription') {
-    return <SubscribePage firstName={session?.firstName} onLogout={logout} />;
+    return <SubscribePage firstName={session?.firstName} email={session?.email} onLogout={logout} />;
   }
 
   const handleExport = async ({ mode: _mode, format, fileName }: ExportConfig) => {
@@ -267,8 +267,8 @@ function App() {
       if (separationMode === 'cmyk') {
         dCtx.fillStyle = effectiveGarment;
         dCtx.fillRect(0, 0, docPxW, docPxH);
-      } else if (separationMode === 'palette') {
-        dCtx.fillStyle = '#ffffff';
+      } else if (separationMode === 'palette' && showFabricBg) {
+        dCtx.fillStyle = canvasColor;
         dCtx.fillRect(0, 0, docPxW, docPxH);
       }
       dCtx.drawImage(canvasFromImageData(artComposite), artOffX, artOffY);
