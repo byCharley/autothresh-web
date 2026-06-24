@@ -15,6 +15,8 @@ import { ExportModal } from './components/ExportModal';
 import type { ExportConfig } from './components/ExportModal';
 import { MockupPreview } from './components/MockupPreview';
 import { PresetsModal } from './components/PresetsModal';
+import { EulaModal } from './components/EulaModal';
+import { FaqModal } from './components/FaqModal';
 import { useStore } from './store/useStore';
 import { paletteSeparate, renderPaletteComposite } from './engine/colorSeparation';
 import {
@@ -60,6 +62,8 @@ function isMobileDevice(): boolean {
 function App() {
   const { status, session, initiateLogin, switchAccount, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
+  const [showEula, setShowEula]     = useState(false);
+  const [showFaq, setShowFaq]       = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();
@@ -568,7 +572,33 @@ function App() {
           </svg>
           @charleypangus
         </a>
+        <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
+        <a href="https://charleypangus.com/pages/support" target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', textDecoration: 'none' }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+        >
+          Support
+        </a>
+        <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
+        <button onClick={() => setShowFaq(true)}
+          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+        >
+          FAQ
+        </button>
+        <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
+        <button onClick={() => setShowEula(true)}
+          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+        >
+          EULA
+        </button>
       </footer>
+      {showFaq  && <FaqModal  onClose={() => setShowFaq(false)}  />}
+      {showEula && <EulaModal onClose={() => setShowEula(false)} />}
     </div>
   );
 }
