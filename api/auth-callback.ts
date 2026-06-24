@@ -30,14 +30,19 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
 
     const raw = JSON.parse(rawText) as unknown;
 
-    // Extract array — Seal may wrap in various keys or return a bare array
+    // Extract subscription array — Seal wraps in { payload: { subscriptions: [...] } }
     let subs: Array<Record<string, unknown>> = [];
     if (Array.isArray(raw)) {
       subs = raw as Array<Record<string, unknown>>;
     } else if (raw && typeof raw === 'object') {
       const obj = raw as Record<string, unknown>;
-      for (const key of ['subscriptions', 'data', 'result', 'subscription_contracts']) {
-        if (Array.isArray(obj[key])) { subs = obj[key] as Array<Record<string, unknown>>; break; }
+      const payload = obj.payload as Record<string, unknown> | undefined;
+      if (payload && Array.isArray(payload.subscriptions)) {
+        subs = payload.subscriptions as Array<Record<string, unknown>>;
+      } else {
+        for (const key of ['subscriptions', 'data', 'result', 'subscription_contracts']) {
+          if (Array.isArray(obj[key])) { subs = obj[key] as Array<Record<string, unknown>>; break; }
+        }
       }
     }
 
