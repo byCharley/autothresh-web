@@ -8,10 +8,9 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { id_token_hint } = req.query as { id_token_hint?: string };
-
+  // No id_token_hint — expired tokens cause Shopify to error.
+  // return_to must be registered in Shopify app Logout URIs.
   const params = new URLSearchParams({ return_to: APP_ORIGIN });
-  if (id_token_hint) params.set('id_token_hint', id_token_hint);
 
   const logoutUrl = `https://shopify.com/authentication/${STORE_ID}/logout?${params}`;
   return res.status(200).json({ logoutUrl });

@@ -181,23 +181,24 @@ export function useAuth() {
     window.location.href = redirectUrl;
   }, []);
 
-  // switchAccount: clears local session and goes to Shopify login.
-  // Shopify will show the email screen if the session has expired naturally.
-  // For forced account switching, add https://www.autothresh.com to Shopify
-  // app Logout URIs — once done, the logout endpoint will work properly.
+  // switchAccount: ends Shopify session via logout endpoint, then auto-starts
+  // a fresh login on return. Requires https://www.autothresh.com in Shopify
+  // app Logout URIs (already registered).
   const switchAccount = useCallback(async () => {
     clearSession();
     clearPausedAt();
-    const verifier  = await generateCodeVerifier();
-    const challenge = await generateCodeChallenge(verifier);
-    const state     = generateState();
-    const nonce     = generateState();
-    sessionStorage.setItem(VERIFIER_KEY, verifier);
-    sessionStorage.setItem(STATE_KEY, state);
-    sessionStorage.setItem(NONCE_KEY, nonce);
-    const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
-    const { redirectUrl } = await r.json() as { redirectUrl: string };
-    window.location.href = redirectUrl;
+    // Pre-generate PKCE and store in localStorage so it survives the
+    // cross-domain Shopify logout → autothresh.com redirect.
+    const verifier = await generateCodeVerifier();
+    const state    = generateState();
+    const nonce    = generateState();
+    localStorage.setItem(VERIFIER_KEY, verifier);
+    localStorage.setItem(STATE_KEY, state);
+    localStorage.setItem(NONCE_KEY, nonce);
+    localStorage.setItem('at_post_logout', '1');
+    const r = await fetch('/api/shopify-logout-url');
+    const { logoutUrl } = await r.json() as { logoutUrl: string };
+    window.location.href = logoutUrl;
   }, []);
 
   // logout: clears local session only — stays on AutoThresh login page.
