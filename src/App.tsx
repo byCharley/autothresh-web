@@ -58,7 +58,7 @@ function isMobileDevice(): boolean {
 }
 
 function App() {
-  const { status, session, initiateLogin, logout } = useAuth();
+  const { status, session, initiateLogin, switchAccount, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
@@ -94,7 +94,7 @@ function App() {
   }
 
   if (status === 'unauthenticated') {
-    return <LoginPage onLogin={initiateLogin} />;
+    return <LoginPage onLogin={initiateLogin} onSwitchAccount={switchAccount} />;
   }
 
   if (status === 'no-subscription') {

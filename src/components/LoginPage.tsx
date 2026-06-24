@@ -5,9 +5,10 @@ import { PageFooter } from './PageFooter';
 
 interface Props {
   onLogin: () => Promise<void>;
+  onSwitchAccount?: () => Promise<void>;
 }
 
-export function LoginPage({ onLogin }: Props) {
+export function LoginPage({ onLogin, onSwitchAccount }: Props) {
   const [loading, setLoading]     = useState(false);
   const [showEula, setShowEula]   = useState(false);
 
@@ -95,6 +96,28 @@ export function LoginPage({ onLogin }: Props) {
         <div style={{ marginTop: 16, fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
           Access requires an active AutoThresh subscription.
         </div>
+
+        {onSwitchAccount && (
+          <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+            <button
+              onClick={onSwitchAccount}
+              disabled={loading}
+              style={{
+                width: '100%', padding: '9px 20px',
+                background: 'none', border: '1px solid var(--border)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <polyline points="16 11 18 13 22 9"/>
+              </svg>
+              Sign in with a different account
+            </button>
+          </div>
+        )}
       </div>
 
       <PageFooter onEula={() => setShowEula(true)} />

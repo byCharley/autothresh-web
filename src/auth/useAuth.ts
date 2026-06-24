@@ -64,8 +64,8 @@ export function useAuth() {
     if (DEV_BYPASS) return;
 
     // Returning from Shopify logout (switch account flow) — auto-start fresh login
-    if (sessionStorage.getItem('at_post_logout')) {
-      sessionStorage.removeItem('at_post_logout');
+    if (localStorage.getItem('at_post_logout')) {
+      localStorage.removeItem('at_post_logout');
       (async () => {
         const verifier  = await generateCodeVerifier();
         const challenge = await generateCodeChallenge(verifier);
@@ -175,29 +175,27 @@ export function useAuth() {
     window.location.href = redirectUrl;
   }, []);
 
+  // switchAccount: ends Shopify session then auto-restarts login flow.
+  // Requires https://www.autothresh.com to be registered in Shopify app Logout URIs.
+  // Uses localStorage (not sessionStorage) so the flag survives the cross-domain redirect.
   const switchAccount = useCallback(async () => {
     const currentSession = loadSession();
     clearSession();
-    sessionStorage.setItem('at_post_logout', '1');
+    clearPausedAt();
+    localStorage.setItem('at_post_logout', '1');
     const idTokenHint = currentSession?.idToken ?? '';
     const r = await fetch(`/api/shopify-logout-url?id_token_hint=${encodeURIComponent(idTokenHint)}`);
     const { logoutUrl } = await r.json() as { logoutUrl: string };
     window.location.href = logoutUrl;
   }, []);
 
-  const logout = useCallback(async () => {
-    const stored = loadSession();
-    const idTokenHint = stored?.idToken ?? '';
+  // logout: clears local session only — stays on AutoThresh login page.
+  // Shopify session persists; use switchAccount to fully end the Shopify session.
+  const logout = useCallback(() => {
     clearSession();
+    clearPausedAt();
     setSession(null);
     setStatus('unauthenticated');
-    try {
-      const r = await fetch(`/api/shopify-logout-url?id_token_hint=${encodeURIComponent(idTokenHint)}`);
-      const { logoutUrl } = await r.json() as { logoutUrl: string };
-      window.location.href = logoutUrl;
-    } catch {
-      // network error — just show login screen, Shopify session may persist until natural expiry
-    }
   }, []);
 
   return { status, session, initiateLogin, switchAccount, logout };
