@@ -13,9 +13,10 @@ export interface Session {
   planTitle?:              string;
 }
 
-const SESSION_KEY      = 'at_session';
-const SHOPIFY_ID_TOKEN = 'shopify_id_token'; // saved at login, used as logout hint
-const SHOPIFY_STORE_ID = '52142571674';
+const SESSION_KEY          = 'at_session';
+const SHOPIFY_ID_TOKEN     = 'shopify_id_token';      // saved at login, used as logout hint
+const SHOPIFY_REFRESH_TOKEN = 'shopify_refresh_token'; // used to get a fresh id_token for logout
+const SHOPIFY_STORE_ID     = '52142571674';
 const VERIFIER_KEY     = 'at_pkce_verifier';
 const STATE_KEY        = 'at_pkce_state';
 const NONCE_KEY        = 'at_pkce_nonce';
@@ -47,8 +48,10 @@ function saveSession(s: Session) { localStorage.setItem(SESSION_KEY, JSON.string
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(SHOPIFY_ID_TOKEN);
+  localStorage.removeItem(SHOPIFY_REFRESH_TOKEN);
 }
 function saveIdToken(t: string) { localStorage.setItem(SHOPIFY_ID_TOKEN, t); }
+function saveRefreshToken(t: string) { localStorage.setItem(SHOPIFY_REFRESH_TOKEN, t); }
 
 // Shared helper: generate PKCE + state, store in sessionStorage, redirect to Shopify OAuth.
 async function startOAuth(prompt?: string) {
@@ -123,11 +126,12 @@ export function useAuth() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, codeVerifier }),
       })
-        .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; subscriptionStatus?: string; subscriptionExpiresAt?: string; planTitle?: string }>)
+        .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; refreshToken?: string; subscriptionStatus?: string; subscriptionExpiresAt?: string; planTitle?: string }>)
         .then((data) => {
           window.history.replaceState({}, '', '/');
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
           if (data.idToken) saveIdToken(data.idToken);
+          if (data.refreshToken) saveRefreshToken(data.refreshToken);
           const isPaused = data.subscriptionStatus === 'paused' || data.subscriptionStatus === 'cancelled' || data.subscriptionStatus === 'canceled';
           if (isPaused) recordPausedAt(); else clearPausedAt();
           const s: Session = {
@@ -183,20 +187,41 @@ export function useAuth() {
 
   const initiateLogin = useCallback(() => startOAuth(), []);
 
-  // switchAccount: hits Shopify's OIDC end-session endpoint with id_token_hint
-  // (required — Shopify errors without it). After logout, Shopify redirects to
-  // /auth/start which immediately fires a fresh OAuth with prompt=login so the
-  // email entry screen appears.
-  // Requires these exact URIs registered in Shopify Customer Account API →
-  // Logout URIs: https://autothresh.com/auth/start AND https://www.autothresh.com/auth/start
-  const switchAccount = useCallback(() => {
-    const idToken = localStorage.getItem(SHOPIFY_ID_TOKEN);
+  // switchAccount: refreshes tokens first to get a guaranteed-fresh id_token,
+  // then hits Shopify's OIDC end-session endpoint. A fresh id_token is required —
+  // Shopify rejects expired hints and silently re-uses the existing session.
+  // After logout, Shopify redirects to /auth/start which fires OAuth with
+  // prompt=login so the email entry screen appears.
+  // Requires in Shopify Customer Account API → Logout URIs:
+  //   https://autothresh.com/auth/start
+  //   https://www.autothresh.com/auth/start
+  const switchAccount = useCallback(async () => {
+    const storedRefreshToken = localStorage.getItem(SHOPIFY_REFRESH_TOKEN);
+    const storedIdToken      = localStorage.getItem(SHOPIFY_ID_TOKEN);
     clearSession();
     clearPausedAt();
 
+    let idToken = storedIdToken;
+
+    // Get a fresh id_token via refresh_token so the logout hint is never expired.
+    if (storedRefreshToken) {
+      try {
+        const r = await fetch('/api/auth-refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: storedRefreshToken }),
+        });
+        const data = await r.json() as { idToken?: string; refreshToken?: string };
+        if (data.idToken) idToken = data.idToken;
+        // Save the rotated refresh token for future use.
+        if (data.refreshToken) saveRefreshToken(data.refreshToken);
+      } catch {
+        // Fall back to stored id_token if refresh fails.
+      }
+    }
+
     if (!idToken) {
-      // No stored id_token (user never logged in via OAuth this session).
-      // Skip Shopify logout and go straight to fresh OAuth.
+      // No id_token available — go straight to fresh OAuth.
       startOAuth('login');
       return;
     }

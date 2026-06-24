@@ -107,7 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Token exchange failed' });
   }
 
-  let tokens: { access_token?: string; id_token?: string; expires_in?: number; error?: string; error_description?: string };
+  let tokens: { access_token?: string; id_token?: string; refresh_token?: string; expires_in?: number; error?: string; error_description?: string };
   try {
     tokens = JSON.parse(tokenBody);
   } catch {
@@ -158,6 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({
     token:                tokens.access_token,
     idToken:              tokens.id_token,
+    refreshToken:         tokens.refresh_token,
     expiresAt,
     email:                custEmail,
     firstName,
