@@ -4,6 +4,8 @@ export function MobileBlock() {
   return (
     <div style={{
       minHeight: '100vh', background: '#0d0d0d',
+      backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
+      backgroundSize: '28px 28px',
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       padding: '32px 24px', textAlign: 'center',
