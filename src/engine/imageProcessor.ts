@@ -1,6 +1,6 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SeparationMode = 'threshold' | 'cmyk' | 'palette' | 'vector';
+export type SeparationMode = 'threshold' | 'cmyk' | 'palette' | 'vector' | 'color-sep';
 
 export type PatternType =
   | 'none'
@@ -56,12 +56,24 @@ export type PatternType =
   | 'ascii'
   | 'grain-micro';
 
+import type { LevelsAdjustment, CurvePoint } from './adjustments';
+import { buildLevelsLUT, buildCurvesLUT, DEFAULT_LEVELS, DEFAULT_CURVES } from './adjustments';
+export type { LevelsAdjustment, CurvePoint };
+export { DEFAULT_LEVELS, DEFAULT_CURVES };
+
+export type AdjMode = 'basic' | 'levels' | 'curves';
+
 export interface ImageAdjustments {
-  exposure: number;    // -100 to 100  overall brightness (EV)
-  contrast: number;    // -100 to 100  midtone contrast
-  shadows: number;     // -100 to 100  +lifts shadows, -crushes
-  highlights: number;  // -100 to 100  +brightens, -recovers
-  blur: number;        // 0–15         pre-separation blur radius
+  // Basic sliders
+  exposure:   number;    // -100 to 100
+  contrast:   number;    // -100 to 100
+  shadows:    number;    // -100 to 100
+  highlights: number;    // -100 to 100
+  blur:       number;    // 0–15  pre-separation blur radius
+  // Levels / Curves
+  adjMode:    AdjMode;
+  levels:     LevelsAdjustment;
+  curves:     CurvePoint[];
 }
 
 export interface PatternConfig {
@@ -145,6 +157,61 @@ function pseudoRandom(x: number, y: number, seed: number): number {
   return ((n ^ (n >>> 16)) >>> 0) / 0xffffffff;
 }
 
+// Bilinear value noise — smooth interpolated random field, 0–1
+function valueNoise(x: number, y: number, seed: number): number {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx); // smoothstep
+  const uy = fy * fy * (3 - 2 * fy);
+  const a = pseudoRandom(ix,     iy,     seed);
+  const b = pseudoRandom(ix + 1, iy,     seed);
+  const c = pseudoRandom(ix,     iy + 1, seed);
+  const d = pseudoRandom(ix + 1, iy + 1, seed);
+  return (a + (b - a) * ux) * (1 - uy) + (c + (d - c) * ux) * uy;
+}
+
+// Voronoi F1/F2 ratio — 0 at each cell centre, 1 at the Voronoi boundary
+function voronoiRatio(cx: number, cy: number, seed: number): number {
+  const icx = Math.floor(cx), icy = Math.floor(cy);
+  let f1 = Infinity, f2 = Infinity;
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const ncx = icx + dx, ncy = icy + dy;
+      const fpx = ncx + pseudoRandom(ncx,        ncy,        seed);
+      const fpy = ncy + pseudoRandom(ncx + 9371, ncy + 4173, seed);
+      const dist = Math.sqrt((cx - fpx) ** 2 + (cy - fpy) ** 2);
+      if (dist < f1) { f2 = f1; f1 = dist; } else if (dist < f2) f2 = dist;
+    }
+  }
+  return Math.min(1, f1 / Math.max(f2, 1e-6));
+}
+
+// ─── Reticulation Texture Cache ───────────────────────────────────────────────
+
+const RET_SIZE = 1024;
+let _retPx: Uint8ClampedArray | null = null;
+
+export function preloadReticulationTexture(): Promise<void> {
+  if (_retPx) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = RET_SIZE; c.height = RET_SIZE;
+      const ctx = c.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, RET_SIZE, RET_SIZE);
+      _retPx = ctx.getImageData(0, 0, RET_SIZE, RET_SIZE).data;
+      resolve();
+    };
+    img.onerror = () => resolve(); // fall back to procedural on load failure
+    img.src = '/reticulation.png';
+  });
+}
+
+// Kick off the preload as soon as this module is imported
+if (typeof document !== 'undefined') {
+  preloadReticulationTexture();
+}
 
 
 // ─── Pattern Value Generators
@@ -296,26 +363,49 @@ function halftoneValues(
   return vals;
 }
 
+// Film reticulation: layered noise pipeline mimicking damaged film emulsion.
+//
+// Three passes are blended:
+//   1. Domain-warped Voronoi — large organic clumps (controlled by scale)
+//   2. Fine grain value noise — film grain texture on top of clumps
+//   3. Vertical streak noise  — subtle vertical burn/scratch marks
+//
+// Returns smooth 0–1 gradients so the threshold engine creates organic edges
+// that grow/shrink with image luminance (dark → filled blobs, light → dots).
 function reticulationValues(w: number, h: number, scale: number, density: number, seed: number): F32 {
-  const vals = new Float32Array(w * h) as F32;
-  const cellSize = Math.max(2, scale);
-  const thresh = (1 - density / 100) * 0.55;
+  const vals  = new Float32Array(w * h) as F32;
+  const cs    = Math.max(2, scale);                  // clump cell size in px
+
+  // At fine scale grain dominates (feels like film grain); at large scale
+  // Voronoi clumps dominate (organic blobs). Blend shifts continuously.
+  const grainW  = Math.max(0.22, 0.48 - cs * 0.018) + (density / 100) * 0.10;
+  // scale=2  → ~0.48   scale=4  → ~0.41   scale=12 → ~0.27   scale=20 → ~0.22
+
+  const streakW = 0.06;
+  const warp    = cs * 0.30;                         // tighter warp at fine scale
+  const grainSz = Math.max(1.0, cs * 0.20);          // grain always finer than clumps
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const cx = x / cellSize, cy = y / cellSize;
-      const icx = Math.floor(cx), icy = Math.floor(cy);
-      let d1 = Infinity, d2 = Infinity;
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
-          const ncx = icx + dx, ncy = icy + dy;
-          const fpx = ncx + pseudoRandom(ncx, ncy, seed);
-          const fpy = ncy + pseudoRandom(ncx + 9371, ncy + 4173, seed);
-          const dist = Math.sqrt((cx - fpx) ** 2 + (cy - fpy) ** 2);
-          if (dist < d1) { d2 = d1; d1 = dist; } else if (dist < d2) { d2 = dist; }
-        }
-      }
-      vals[y * w + x] = (d2 - d1) > thresh ? 1.0 : 0.0;
+      // ── 1. Domain warp: shift clump lookup by smooth low-freq noise ──────────
+      const wx = (valueNoise(x / cs * 0.8,        y / cs * 0.8,        seed + 771) - 0.5) * warp;
+      const wy = (valueNoise(x / cs * 0.8 + 43.7, y / cs * 0.8 + 91.3, seed + 881) - 0.5) * warp;
+
+      // ── 2. Voronoi clumps at warped position ─────────────────────────────────
+      const clump = voronoiRatio((x + wx) / cs, (y + wy) / cs, seed);
+
+      // ── 3. Fine grain: two-octave value noise ────────────────────────────────
+      const g1 = valueNoise(x / grainSz,         y / grainSz,         seed + 1234);
+      const g2 = valueNoise(x / grainSz * 2.1,   y / grainSz * 2.1,   seed + 5678) * 0.5;
+      const grain = (g1 * 0.67 + g2 * 0.33);
+
+      // ── 4. Vertical streak: coarse in X, fine in Y ───────────────────────────
+      const streak = valueNoise(x / (cs * 0.6), y / (cs * 3.5), seed + 3333);
+
+      // ── 5. Blend all layers ───────────────────────────────────────────────────
+      const clumpW = 1 - grainW - streakW;
+      const mixed  = clump * clumpW + grain * grainW + streak * streakW;
+      vals[y * w + x] = Math.min(1, Math.max(0, mixed));
     }
   }
   return vals;
@@ -351,16 +441,33 @@ function bayerValues(w: number, h: number, scale: number, order: 2 | 4 | 8): F32
 
 // ─── Global Image Adjustments ─────────────────────────────────────────────────
 
+// LUT cache — rebuilt only when adj reference changes (once per reprocess, not per pixel).
+let _adjRef: ImageAdjustments | null = null;
+let _adjLUT: Uint8Array | null = null;
+
+function getAdjLUT(adj: ImageAdjustments): Uint8Array | null {
+  if (adj.adjMode === 'basic') return null;
+  if (adj === _adjRef) return _adjLUT;
+  _adjRef = adj;
+  _adjLUT = adj.adjMode === 'levels'
+    ? buildLevelsLUT(adj.levels ?? DEFAULT_LEVELS)
+    : buildCurvesLUT(adj.curves ?? DEFAULT_CURVES);
+  return _adjLUT;
+}
+
 export function applyGlobalAdjustments(lum: number, adj: ImageAdjustments): number {
+  const lut = getAdjLUT(adj);
+  if (lut) return lut[Math.max(0, Math.min(255, lum | 0))];
+  // Basic sliders
   let l = lum;
   if (adj.exposure !== 0)    l = l * Math.pow(2, (adj.exposure / 100) * 3);
   if (adj.contrast !== 0)    l = (l - 128) * (1 + (adj.contrast / 100) * 1.5) + 128;
   if (adj.shadows !== 0) {
-    const t = Math.max(0, 1 - l / 128); // peaks at black, zero at mid
+    const t = Math.max(0, 1 - l / 128);
     l += adj.shadows * t * 50;
   }
   if (adj.highlights !== 0) {
-    const t = Math.max(0, (l - 128) / 128); // zero at mid, peaks at white
+    const t = Math.max(0, (l - 128) / 128);
     l += adj.highlights * t * 50;
   }
   return Math.max(0, Math.min(255, l));
@@ -386,7 +493,7 @@ export function autoImageAdjustments(
     count++;
   }
 
-  if (count < 100) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0 };
+  if (count < 100) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0, adjMode: 'basic', levels: DEFAULT_LEVELS, curves: DEFAULT_CURVES };
 
   const p2target  = count * 0.02;
   const p98target = count * 0.98;
@@ -398,7 +505,7 @@ export function autoImageAdjustments(
   }
 
   // Image already has good tonal range — no adjustment needed
-  if (p98 - p2 >= 220) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0 };
+  if (p98 - p2 >= 220) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0, adjMode: 'basic', levels: DEFAULT_LEVELS, curves: DEFAULT_CURVES };
 
   const mid = (p2 + p98) / 2;
 
@@ -413,10 +520,10 @@ export function autoImageAdjustments(
   const S             = 255 / adjustedRange;
   const contrast      = Math.max(-50, Math.min(60, ((S - 1) / 1.5) * 100));
 
-  return { exposure, contrast, shadows: 0, highlights: 0, blur: 0 };
+  return { exposure, contrast, shadows: 0, highlights: 0, blur: 0, adjMode: 'basic', levels: DEFAULT_LEVELS, curves: DEFAULT_CURVES };
 }
 
-function buildPatternValues(w: number, h: number, layer: LayerConfig, idx: number): F32 | null {
+export function buildPatternValues(w: number, h: number, layer: LayerConfig, idx: number): F32 | null {
   const { pattern, patternScale, patternAngle, patternDensity } = layer;
   const seed = idx + 1;
   switch (pattern) {

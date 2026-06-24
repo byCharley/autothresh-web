@@ -174,6 +174,7 @@ function PatternSelect({ value, onChange }: { value: PatternType; onChange: (v: 
 function PatternControls({
   pattern, scale, density, angle,
   onPattern, onScale, onDensity, onAngle,
+  scaleMaxOverride,
 }: {
   pattern: PatternType;
   scale: number; density: number; angle: number;
@@ -181,13 +182,14 @@ function PatternControls({
   onScale: (v: number) => void;
   onDensity: (v: number) => void;
   onAngle: (v: number) => void;
+  scaleMaxOverride?: number;
 }) {
   const isHalftone = pattern.startsWith('halftone-');
   const isGrain = pattern.startsWith('grain') || pattern.startsWith('noise');
   const isMicro = pattern === 'grain-micro';
   const hasPattern = pattern !== 'none';
   const scaleMin  = isGrain ? 0.5 : 1;
-  const scaleMax  = isGrain ? 6  : 40;
+  const scaleMax  = scaleMaxOverride ?? (isGrain ? 6 : 40);
   const scaleStep = isGrain ? 0.5 : 1;
   return (
     <>
@@ -247,7 +249,10 @@ function GlobalPatternSection() {
         scale={globalPattern.patternScale}
         density={globalPattern.patternDensity}
         angle={globalPattern.patternAngle}
-        onPattern={(v) => updateGlobalPattern({ pattern: v })}
+        onPattern={(v) => updateGlobalPattern({
+          pattern: v,
+          ...(v === 'reticulation' ? { patternScale: 4, patternDensity: 65 } : {}),
+        })}
         onScale={(v) => updateGlobalPattern({ patternScale: v })}
         onDensity={(v) => updateGlobalPattern({ patternDensity: v })}
         onAngle={(v) => updateGlobalPattern({ patternAngle: v })}
@@ -258,34 +263,22 @@ function GlobalPatternSection() {
 
 // ─── Image Adjustments Section ────────────────────────────────────────────────
 
-function ImageAdjustmentsSection() {
-  const { originalImage, imageAdjustments, setImageAdjustment, resetImageAdjustments } = useStore();
-  if (!originalImage) return null;
+import { ImageAdjustPanel } from './ImageAdjustPanel';
 
-  const adj = imageAdjustments;
-  const isDirty = adj.exposure !== 0 || adj.contrast !== 0 || adj.shadows !== 0 || adj.highlights !== 0 || adj.blur !== 0;
+function ImageAdjustmentsSection() {
+  const { originalImage, imageAdjustments, setImageAdjustment, setAdjMode, setLevels, setCurves, resetImageAdjustments } = useStore();
+  if (!originalImage) return null;
 
   return (
     <Section title="Image Adjustments" defaultOpen={false}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-          Applied before separation
-        </span>
-        {isDirty && (
-          <button className="btn btn-ghost" style={{ fontSize: 10, padding: '2px 8px', height: 22 }}
-            onClick={resetImageAdjustments}>Reset</button>
-        )}
-      </div>
-      <Slider label="Exposure" value={adj.exposure} min={-100} max={100}
-        onChange={(v) => setImageAdjustment('exposure', v)} />
-      <Slider label="Contrast" value={adj.contrast} min={-100} max={100}
-        onChange={(v) => setImageAdjustment('contrast', v)} />
-      <Slider label="Shadows" value={adj.shadows} min={-100} max={100}
-        onChange={(v) => setImageAdjustment('shadows', v)} />
-      <Slider label="Highlights" value={adj.highlights} min={-100} max={100}
-        onChange={(v) => setImageAdjustment('highlights', v)} />
-      <Slider label="Pre-blur" value={adj.blur} min={0} max={15}
-        onChange={(v) => setImageAdjustment('blur', v)} />
+      <ImageAdjustPanel
+        adj={imageAdjustments}
+        onAdjMode={setAdjMode}
+        onLevels={setLevels}
+        onCurves={setCurves}
+        onReset={resetImageAdjustments}
+        onBasic={(key, v) => setImageAdjustment(key as keyof typeof imageAdjustments, v)}
+      />
     </Section>
   );
 }
@@ -642,6 +635,40 @@ function PaletteSection() {
   );
 }
 
+// ─── Color Sep Section ────────────────────────────────────────────────────────
+
+function ColorSepSection() {
+  const {
+    separationMode,
+    colorSepPattern, setColorSepPattern,
+    colorSepPatternScale, setColorSepPatternScale,
+    colorSepPatternDensity, setColorSepPatternDensity,
+    colorSepPatternAngle, setColorSepPatternAngle,
+  } = useStore();
+  if (separationMode !== 'color-sep') return null;
+
+  return (
+    <Section title="Color Sep Pattern">
+      <PatternControls
+        pattern={colorSepPattern}
+        scale={colorSepPatternScale}
+        density={colorSepPatternDensity}
+        angle={colorSepPatternAngle}
+        onPattern={(v) => setColorSepPattern(v)}
+        onScale={(v) => setColorSepPatternScale(v)}
+        onDensity={(v) => setColorSepPatternDensity(v)}
+        onAngle={(v) => setColorSepPatternAngle(v)}
+        scaleMaxOverride={40}
+      />
+      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 6 }}>
+        {colorSepPattern === 'none'
+          ? 'None — solid separations with hard color edges.'
+          : 'Pattern blends the edges between color zones. Lower density = wider, more organic transitions. No holes.'}
+      </div>
+    </Section>
+  );
+}
+
 // ─── Vector Section ───────────────────────────────────────────────────────────
 
 function VectorSection() {
@@ -914,6 +941,8 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
           </>
         ) : separationMode === 'palette' ? (
           <PaletteSection />
+        ) : separationMode === 'color-sep' ? (
+          <ColorSepSection />
         ) : separationMode === 'vector' ? (
           <VectorSection />
         ) : (

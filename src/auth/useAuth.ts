@@ -9,6 +9,7 @@ export interface Session {
   firstName:               string;
   hasSubscription:         boolean;
   subscriptionExpiresAt?:  string;
+  planTitle?:              string;
 }
 
 const SESSION_KEY  = 'at_session';
@@ -88,7 +89,7 @@ export function useAuth() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, codeVerifier }),
       })
-        .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; subscriptionExpiresAt?: string }>)
+        .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; subscriptionExpiresAt?: string; planTitle?: string }>)
         .then((data) => {
           window.history.replaceState({}, '', '/');
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
@@ -100,6 +101,7 @@ export function useAuth() {
             firstName:               data.firstName!,
             hasSubscription:         data.hasSubscription!,
             subscriptionExpiresAt:   data.subscriptionExpiresAt,
+            planTitle:               data.planTitle,
           };
           saveSession(s);
           setSession(s);
@@ -119,10 +121,10 @@ export function useAuth() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: stored.token }),
     })
-      .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; email: string; firstName: string; subscriptionExpiresAt?: string }>)
+      .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string }>)
       .then((data) => {
         if (!data.valid) { clearSession(); setStatus('unauthenticated'); return; }
-        const updated: Session = { ...stored, hasSubscription: data.hasSubscription, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt };
+        const updated: Session = { ...stored, hasSubscription: data.hasSubscription, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle };
         saveSession(updated);
         setSession(updated);
         setStatus(data.hasSubscription ? 'authenticated' : 'no-subscription');
@@ -159,10 +161,19 @@ export function useAuth() {
     window.location.href = logoutUrl;
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const stored = loadSession();
+    const idTokenHint = stored?.idToken ?? '';
     clearSession();
     setSession(null);
     setStatus('unauthenticated');
+    try {
+      const r = await fetch(`/api/shopify-logout-url?id_token_hint=${encodeURIComponent(idTokenHint)}`);
+      const { logoutUrl } = await r.json() as { logoutUrl: string };
+      window.location.href = logoutUrl;
+    } catch {
+      // network error — just show login screen, Shopify session may persist until natural expiry
+    }
   }, []);
 
   return { status, session, initiateLogin, switchAccount, logout };

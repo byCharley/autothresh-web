@@ -9,9 +9,10 @@ interface TopBarProps {
   userEmail?: string;
   firstName?: string;
   subscriptionExpiresAt?: string;
+  planTitle?: string;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, firstName, subscriptionExpiresAt }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings } = useStore();
 
   const daysRemaining = subscriptionExpiresAt
@@ -112,12 +113,21 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
           }}>
             {displayName}
           </span>
+          {planTitle && (
+            <span style={{
+              fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)',
+              whiteSpace: 'nowrap', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis',
+              opacity: 0.85,
+            }} title={planTitle}>
+              {planTitle}
+            </span>
+          )}
           {daysRemaining !== null && daysRemaining > 0 && (
             <span style={{
               fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
               whiteSpace: 'nowrap', opacity: 0.7,
             }}>
-              {daysRemaining}d
+              {daysRemaining}d left
             </span>
           )}
           {onLogout && (

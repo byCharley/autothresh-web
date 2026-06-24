@@ -10,7 +10,7 @@ const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-
 const SEAL_TOKEN   = process.env.SEAL_API_TOKEN!;
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
 
-async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; nextBillingDate?: string }> {
+async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; nextBillingDate?: string; planTitle?: string }> {
   try {
     const url = `${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`;
     console.log('Seal request:', url, 'token present:', !!SEAL_TOKEN);
@@ -43,16 +43,17 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
     console.log('Seal parsed subs count:', subs.length, 'statuses:', subs.map(s => s.status));
 
     let nextBillingDate: string | undefined;
+    let planTitle: string | undefined;
     const hasSub = subs.some(s => {
       const st = String(s.status ?? '').toUpperCase();
-      // Grant access for any subscription that exists (active, paused, or cancelled)
       const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'CANCELLED' || st === 'CANCELED';
       if (valid) {
         nextBillingDate = (s.next_billing_date ?? s.next_charge_at ?? s.nextBillingDate) as string | undefined;
+        planTitle = (s.plan_title ?? s.product_title ?? s.title ?? s.name ?? s.plan_name) as string | undefined;
       }
       return valid;
     });
-    return { hasSub, nextBillingDate };
+    return { hasSub, nextBillingDate, planTitle };
   } catch (e) {
     console.error('Seal check error:', e);
     return { hasSub: false };
@@ -95,15 +96,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const email = cust.emailAddress?.emailAddress ?? '';
 
   // ── Check subscription via Seal ───────────────────────────────────────────
-  const { hasSub, nextBillingDate } = await sealCheckSubscription(email);
+  const { hasSub, nextBillingDate, planTitle } = await sealCheckSubscription(email);
   const finalHasSub = hasSub || TESTER_EMAILS.has(email.toLowerCase());
 
-  console.log('Verify result:', { email, hasSub, finalHasSub, nextBillingDate });
+  console.log('Verify result:', { email, hasSub, finalHasSub, nextBillingDate, planTitle });
 
   return res.status(200).json({
     valid:                 true,
     hasSubscription:       finalHasSub,
     subscriptionExpiresAt: nextBillingDate,
+    planTitle,
     email,
     firstName:             cust.firstName ?? '',
   });

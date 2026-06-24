@@ -54,6 +54,17 @@ export function LoginPage({ onLogin }: Props) {
           </span>
         </div>
 
+        <div style={{
+          fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.6,
+          background: 'var(--surface-2)', border: '1px solid var(--border)',
+          padding: '8px 12px', marginBottom: 20, textAlign: 'left',
+          fontFamily: 'var(--font-mono)',
+        }}>
+          <span style={{ color: 'var(--accent)', marginRight: 6 }}>!</span>
+          Use the email you subscribed with at{' '}
+          <span style={{ color: 'var(--text)' }}>charleypangus.com</span>
+        </div>
+
         <button
           onClick={handleSignIn}
           disabled={loading}
