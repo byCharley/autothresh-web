@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AppIcon } from './AppIcon';
 import { EulaModal } from './EulaModal';
+import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 export function LoginPage({ onLogin, onSwitchAccount }: Props) {
   const [loading, setLoading]     = useState(false);
   const [showEula, setShowEula]   = useState(false);
+  const [showFaq, setShowFaq]     = useState(false);
 
   const handleSignIn = () => {
     setLoading(true);
@@ -29,8 +31,14 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
     }}>
       {/* Logo */}
       <div style={{ marginBottom: 40, textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-          <AppIcon size={80} color="var(--accent)" />
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 20, marginBottom: 20 }}>
+          <AppIcon size={72} color="#f1f2f2" />
+          <span style={{ width: 1, height: 56, background: 'rgba(255,255,255,0.2)', display: 'block', flexShrink: 0 }} />
+          <img
+            src="/CharleyPangus_Favicon.svg"
+            alt="Charley Pangus"
+            style={{ height: 58, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.9 }}
+          />
         </div>
         <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
           AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
@@ -120,8 +128,9 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
         )}
       </div>
 
-      <PageFooter onEula={() => setShowEula(true)} />
+      <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} />
       {showEula && <EulaModal onClose={() => setShowEula(false)} />}
+      {showFaq && <FaqModal onClose={() => setShowFaq(false)} />}
     </div>
   );
 }

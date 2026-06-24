@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AppIcon } from './AppIcon';
 import { EulaModal } from './EulaModal';
+import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 
 const PRODUCT_URL = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefined
@@ -15,6 +16,7 @@ interface Props {
 
 export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: Props) {
   const [showEula, setShowEula] = useState(false);
+  const [showFaq, setShowFaq]   = useState(false);
 
   return (
     <div style={{
@@ -94,8 +96,9 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
         </div>
       </div>
 
-      <PageFooter onEula={() => setShowEula(true)} />
+      <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} />
       {showEula && <EulaModal onClose={() => setShowEula(false)} />}
+      {showFaq && <FaqModal onClose={() => setShowFaq(false)} />}
     </div>
   );
 }

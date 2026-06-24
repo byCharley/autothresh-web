@@ -1,5 +1,6 @@
 interface Props {
   onEula: () => void;
+  onFaq?: () => void;
 }
 
 const linkStyle: React.CSSProperties = {
@@ -8,7 +9,7 @@ const linkStyle: React.CSSProperties = {
   transition: 'opacity 0.15s',
 };
 
-export function PageFooter({ onEula }: Props) {
+export function PageFooter({ onEula, onFaq }: Props) {
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -27,15 +28,14 @@ export function PageFooter({ onEula }: Props) {
 
       <span style={{ width: 1, height: 10, background: 'var(--border)', opacity: 0.5 }} />
 
-      <a
-        href="https://charleypangus.com/pages/faq"
-        target="_blank" rel="noopener noreferrer"
-        style={linkStyle}
+      <button
+        onClick={onFaq}
+        style={{ ...linkStyle, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
         onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}
         onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.6')}
       >
         FAQ
-      </a>
+      </button>
 
       <span style={{ width: 1, height: 10, background: 'var(--border)', opacity: 0.5 }} />
 
