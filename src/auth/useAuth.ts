@@ -45,12 +45,11 @@ function loadSession(): Session | null {
 }
 
 function saveSession(s: Session) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
-function clearSession() {
-  localStorage.removeItem(SESSION_KEY);
-  localStorage.removeItem(SHOPIFY_ID_TOKEN);
-  localStorage.removeItem(SHOPIFY_REFRESH_TOKEN);
-}
-function saveIdToken(t: string) { localStorage.setItem(SHOPIFY_ID_TOKEN, t); }
+// clearSession removes the app session only. id_token + refresh_token are kept
+// intentionally so switchAccount still works after a regular logout — they're
+// overwritten at the next successful login.
+function clearSession() { localStorage.removeItem(SESSION_KEY); }
+function saveIdToken(t: string)     { localStorage.setItem(SHOPIFY_ID_TOKEN, t); }
 function saveRefreshToken(t: string) { localStorage.setItem(SHOPIFY_REFRESH_TOKEN, t); }
 
 // Shared helper: generate PKCE + state, store in sessionStorage, redirect to Shopify OAuth.
@@ -187,23 +186,29 @@ export function useAuth() {
 
   const initiateLogin = useCallback(() => startOAuth(), []);
 
-  // switchAccount: refreshes tokens first to get a guaranteed-fresh id_token,
-  // then hits Shopify's OIDC end-session endpoint. A fresh id_token is required —
-  // Shopify rejects expired hints and silently re-uses the existing session.
-  // After logout, Shopify redirects to /auth/start which fires OAuth with
-  // prompt=login so the email entry screen appears.
-  // Requires in Shopify Customer Account API → Logout URIs:
+  // switchAccount: reads shopify_id_token/refresh_token (kept across regular
+  // logouts), refreshes to get a non-expired hint, then hits Shopify's OIDC
+  // end-session endpoint. Shopify clears its session and redirects to /auth/start
+  // which fires a fresh OAuth with prompt=login so the email screen appears.
+  // Requires Shopify Customer Account API → Logout URIs:
   //   https://autothresh.com/auth/start
-  //   https://www.autothresh.com/auth/start
+  //   https://www.autothresh.com/auth/start  (no trailing slash)
   const switchAccount = useCallback(async () => {
-    const storedRefreshToken = localStorage.getItem(SHOPIFY_REFRESH_TOKEN);
     const storedIdToken      = localStorage.getItem(SHOPIFY_ID_TOKEN);
+    const storedRefreshToken = localStorage.getItem(SHOPIFY_REFRESH_TOKEN);
+
+    if (!storedIdToken && !storedRefreshToken) {
+      alert('Sign out and sign back in once to enable account switching.');
+      return;
+    }
+
+    // Clear the app session now (keep Shopify tokens for the logout hint).
     clearSession();
     clearPausedAt();
 
     let idToken = storedIdToken;
 
-    // Get a fresh id_token via refresh_token so the logout hint is never expired.
+    // Refresh to get a guaranteed non-expired id_token (Shopify rejects stale hints).
     if (storedRefreshToken) {
       try {
         const r = await fetch('/api/auth-refresh', {
@@ -212,17 +217,13 @@ export function useAuth() {
           body: JSON.stringify({ refresh_token: storedRefreshToken }),
         });
         const data = await r.json() as { idToken?: string; refreshToken?: string };
-        if (data.idToken) idToken = data.idToken;
-        // Save the rotated refresh token for future use.
+        if (data.idToken) { idToken = data.idToken; saveIdToken(data.idToken); }
         if (data.refreshToken) saveRefreshToken(data.refreshToken);
-      } catch {
-        // Fall back to stored id_token if refresh fails.
-      }
+      } catch { /* fall back to storedIdToken */ }
     }
 
     if (!idToken) {
-      // No id_token available — go straight to fresh OAuth.
-      startOAuth('login');
+      alert('Sign out and sign back in once to enable account switching.');
       return;
     }
 
@@ -232,8 +233,10 @@ export function useAuth() {
     window.location.href = logoutUrl.toString();
   }, []);
 
+  // logout: local-only sign-out. Keeps shopify_id_token + shopify_refresh_token
+  // so that switchAccount still works after the user signs out.
   const logout = useCallback(() => {
-    clearSession();
+    clearSession(); // only removes SESSION_KEY
     clearPausedAt();
     setSession(null);
     setStatus('unauthenticated');
