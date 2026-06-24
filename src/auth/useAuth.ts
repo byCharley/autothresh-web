@@ -13,12 +13,13 @@ export interface Session {
   planTitle?:              string;
 }
 
-const SESSION_KEY  = 'at_session';
-const VERIFIER_KEY = 'at_pkce_verifier';
-const STATE_KEY    = 'at_pkce_state';
-const NONCE_KEY    = 'at_pkce_nonce';
-const PAUSED_AT_KEY = 'at_paused_at';
-const GRACE_MS = 30 * 60 * 1000; // 30 minutes
+const SESSION_KEY       = 'at_session';
+const SHOPIFY_ID_TOKEN  = 'shopify_id_token';   // stable key, independent of session expiry
+const VERIFIER_KEY      = 'at_pkce_verifier';
+const STATE_KEY         = 'at_pkce_state';
+const NONCE_KEY         = 'at_pkce_nonce';
+const PAUSED_AT_KEY     = 'at_paused_at';
+const GRACE_MS          = 30 * 60 * 1000; // 30 minutes
 
 function recordPausedAt() {
   if (!localStorage.getItem(PAUSED_AT_KEY)) {
@@ -42,7 +43,16 @@ function loadSession(): Session | null {
 }
 
 function saveSession(s: Session) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
-function clearSession() { localStorage.removeItem(SESSION_KEY); }
+
+// clearSession also removes the Shopify id_token so logout is fully clean.
+function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(SHOPIFY_ID_TOKEN);
+}
+
+// id_token helpers — stored independently so it survives session expiry checks.
+function saveIdToken(t: string) { localStorage.setItem(SHOPIFY_ID_TOKEN, t); }
+function loadIdToken(): string | undefined { return localStorage.getItem(SHOPIFY_ID_TOKEN) ?? undefined; }
 
 export type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated';
 
@@ -63,27 +73,15 @@ export function useAuth() {
   useEffect(() => {
     if (DEV_BYPASS) return;
 
-    // Returning from Shopify logout (switch account flow) — use pre-stored PKCE and start login
+    // Returning from Shopify logout (switchAccount flow) — show login screen.
+    // Do NOT auto-start OAuth; user must click Sign In so Shopify presents the
+    // email entry form now that the session is cleared.
     if (localStorage.getItem('at_post_logout')) {
       localStorage.removeItem('at_post_logout');
-      const verifier = localStorage.getItem(VERIFIER_KEY) ?? '';
-      const state    = localStorage.getItem(STATE_KEY) ?? '';
-      // Move from localStorage to sessionStorage for the callback handler
-      if (verifier && state) {
-        sessionStorage.setItem(VERIFIER_KEY, verifier);
-        sessionStorage.setItem(STATE_KEY, state);
-        const nonce = localStorage.getItem(NONCE_KEY) ?? '';
-        if (nonce) sessionStorage.setItem(NONCE_KEY, nonce);
-        localStorage.removeItem(VERIFIER_KEY);
-        localStorage.removeItem(STATE_KEY);
-        localStorage.removeItem(NONCE_KEY);
-        (async () => {
-          const challenge = await generateCodeChallenge(verifier);
-          const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
-          const { redirectUrl } = await r.json() as { redirectUrl: string };
-          window.location.href = redirectUrl;
-        })();
-      }
+      localStorage.removeItem(VERIFIER_KEY);
+      localStorage.removeItem(STATE_KEY);
+      localStorage.removeItem(NONCE_KEY);
+      setStatus('unauthenticated');
       return;
     }
 
@@ -93,8 +91,8 @@ export function useAuth() {
 
     if (window.location.pathname === '/auth/callback' && code) {
       // ── OAuth callback ──────────────────────────────────────────────────────
-      const storedState    = sessionStorage.getItem(STATE_KEY);
-      const codeVerifier   = sessionStorage.getItem(VERIFIER_KEY);
+      const storedState  = sessionStorage.getItem(STATE_KEY);
+      const codeVerifier = sessionStorage.getItem(VERIFIER_KEY);
       sessionStorage.removeItem(STATE_KEY);
       sessionStorage.removeItem(VERIFIER_KEY);
 
@@ -113,23 +111,24 @@ export function useAuth() {
         .then((data) => {
           window.history.replaceState({}, '', '/');
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
+          // Persist id_token under its own stable key for Shopify logout hint.
+          if (data.idToken) saveIdToken(data.idToken);
           const isPaused = data.subscriptionStatus === 'paused' || data.subscriptionStatus === 'cancelled' || data.subscriptionStatus === 'canceled';
           if (isPaused) recordPausedAt(); else clearPausedAt();
           const s: Session = {
-            token:                   data.token!,
-            idToken:                 data.idToken,
-            expiresAt:               data.expiresAt!,
-            email:                   data.email!,
-            firstName:               data.firstName!,
-            hasSubscription:         data.hasSubscription!,
-            subscriptionStatus:      data.subscriptionStatus,
-            subscriptionExpiresAt:   data.subscriptionExpiresAt,
-            planTitle:               data.planTitle,
+            token:                  data.token!,
+            idToken:                data.idToken,
+            expiresAt:              data.expiresAt!,
+            email:                  data.email!,
+            firstName:              data.firstName!,
+            hasSubscription:        data.hasSubscription!,
+            subscriptionStatus:     data.subscriptionStatus,
+            subscriptionExpiresAt:  data.subscriptionExpiresAt,
+            planTitle:              data.planTitle,
           };
           saveSession(s);
           setSession(s);
           if (!s.hasSubscription) { setStatus('no-subscription'); return; }
-          // Paused — grant access within grace period, lock out after
           if (isPaused && !withinGracePeriod()) { setStatus('no-subscription'); return; }
           setStatus('authenticated');
         })
@@ -150,6 +149,9 @@ export function useAuth() {
       .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string }>)
       .then((data) => {
         if (!data.valid) { clearSession(); setStatus('unauthenticated'); return; }
+        // Guard: logout() clears localStorage synchronously; if it ran while
+        // verify was in-flight, don't restore the session.
+        if (!loadSession()) return;
         const isPaused = data.subscriptionStatus === 'paused' || data.subscriptionStatus === 'cancelled' || data.subscriptionStatus === 'canceled';
         if (isPaused) recordPausedAt(); else clearPausedAt();
         const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle };
@@ -160,49 +162,52 @@ export function useAuth() {
         setStatus('authenticated');
       })
       .catch(() => {
-        // Network error — trust cached session
         setSession(stored);
         setStatus(stored.hasSubscription ? 'authenticated' : 'no-subscription');
       });
   }, []);
 
   const initiateLogin = useCallback(async () => {
-    const verifier   = await generateCodeVerifier();
-    const challenge  = await generateCodeChallenge(verifier);
-    const state      = generateState();
-    const nonce      = generateState();
+    const verifier  = await generateCodeVerifier();
+    const challenge = await generateCodeChallenge(verifier);
+    const state     = generateState();
+    const nonce     = generateState();
 
     sessionStorage.setItem(VERIFIER_KEY, verifier);
     sessionStorage.setItem(STATE_KEY, state);
     sessionStorage.setItem(NONCE_KEY, nonce);
 
     const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
-    const { redirectUrl } = await r.json() as { redirectUrl: string; logoutUrl: string };
+    const { redirectUrl } = await r.json() as { redirectUrl: string };
     window.location.href = redirectUrl;
   }, []);
 
-  // switchAccount: ends Shopify session via logout endpoint, then auto-starts
-  // a fresh login on return. Requires https://www.autothresh.com in Shopify
-  // app Logout URIs (already registered).
+  // switchAccount: ends Shopify session then returns to this site so the user
+  // can sign in with a different email. Uses the stored shopify_id_token (required
+  // by Shopify's end-session endpoint) and window.location.origin so the redirect
+  // URI matches exactly whichever host (www vs apex) is registered in Shopify.
   const switchAccount = useCallback(async () => {
+    const idToken = loadIdToken();
     clearSession();
     clearPausedAt();
-    // Pre-generate PKCE and store in localStorage so it survives the
-    // cross-domain Shopify logout → autothresh.com redirect.
-    const verifier = await generateCodeVerifier();
-    const state    = generateState();
-    const nonce    = generateState();
-    localStorage.setItem(VERIFIER_KEY, verifier);
-    localStorage.setItem(STATE_KEY, state);
-    localStorage.setItem(NONCE_KEY, nonce);
     localStorage.setItem('at_post_logout', '1');
-    const r = await fetch('/api/shopify-logout-url');
-    const { logoutUrl } = await r.json() as { logoutUrl: string };
-    window.location.href = logoutUrl;
+
+    if (idToken) {
+      const origin = window.location.origin;
+      const r = await fetch(
+        `/api/shopify-logout-url?id_token=${encodeURIComponent(idToken)}&origin=${encodeURIComponent(origin)}`
+      );
+      const { logoutUrl } = await r.json() as { logoutUrl: string };
+      window.location.href = logoutUrl;
+    } else {
+      // No id_token stored (never logged in via OAuth, or was already cleared).
+      setSession(null);
+      setStatus('unauthenticated');
+    }
   }, []);
 
-  // logout: clears local session only — stays on AutoThresh login page.
-  // Shopify session persists; use switchAccount to fully end the Shopify session.
+  // logout: local-only — stays on AutoThresh login page.
+  // Use switchAccount if you need Shopify to present a fresh email screen.
   const logout = useCallback(() => {
     clearSession();
     clearPausedAt();
