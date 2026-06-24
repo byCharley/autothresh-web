@@ -11,13 +11,13 @@ export function MobileBlock() {
     }}>
       {/* App icon */}
       <div style={{ marginBottom: 24 }}>
-        <AppIcon size={72} color="#e8a530" />
+        <AppIcon size={72} color="var(--accent)" />
       </div>
 
       {/* Branding */}
       <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', color: '#fff', marginBottom: 4 }}>
         AutoThresh Web{' '}
-        <span style={{ color: '#e8a530' }}>Beta 1.0.0</span>
+        <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
       </div>
 
       {/* Divider */}
@@ -29,7 +29,7 @@ export function MobileBlock() {
       </div>
       <div style={{ fontSize: 13, color: '#888', lineHeight: 1.7, maxWidth: 280 }}>
         AutoThresh Web is designed for desktop and tablet use. Please visit{' '}
-        <span style={{ color: '#e8a530', fontWeight: 600 }}>www.autothresh.com</span>
+        <span style={{ color: 'var(--accent)', fontWeight: 600 }}>www.autothresh.com</span>
         {' '}on a desktop, laptop, or tablet.
       </div>
       <div style={{ fontSize: 11, color: '#555', marginTop: 16, maxWidth: 260, lineHeight: 1.6 }}>
