@@ -18,7 +18,7 @@ import { PresetsModal } from './components/PresetsModal';
 import { EulaModal } from './components/EulaModal';
 import { FaqModal } from './components/FaqModal';
 import { useStore } from './store/useStore';
-import { paletteSeparate, renderPaletteComposite } from './engine/colorSeparation';
+import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
 import {
   processImage, applyKnockout, renderComposite, renderCmykSmooth, garmentRgbFromParam,
   drawRegistrationMarks, computeBackgroundMask,
@@ -75,6 +75,7 @@ function App() {
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     separationMode, cmykLpi, cmykAngles, cmykParams, cmykQuality,
     paletteColors, paletteVisibility, palettePattern, palettePatternScale,
+    paletteDensity, paletteAngle, paletteSoftness,
     paintMasks,
     vectorSvg,
   } = useStore();
@@ -143,6 +144,14 @@ function App() {
 
     const artBgMask = bgRemovalEnabled ? computeBackgroundMask(artImageData, bgTolerance) : null;
 
+    // Palette tile size — same logic as CanvasView so export matches the preview exactly
+    const _palIsErrDiff = ['diffusion', 'atkinson', 'jarvis', 'stucki'].includes(palettePattern);
+    const _palBN = bayerOrder(palettePattern);
+    const _palCell = Math.max(1, Math.round(palettePatternScale * documentDpi / 300));
+    const paletteTileSize = _palIsErrDiff
+      ? Math.max(1, Math.round(palettePatternScale))
+      : _palBN > 0 ? _palBN * _palCell : Math.max(2, _palCell);
+
     let artLayers: ProcessedLayer[];
     if (separationMode === 'cmyk') {
       // Cell size derived from LPI: output DPI / LPI = pixels per halftone dot
@@ -150,7 +159,8 @@ function App() {
     } else if (separationMode === 'palette') {
       artLayers = paletteSeparate(
         artImageData, paletteColors, artBgMask,
-        palettePattern, palettePatternScale,
+        palettePattern, paletteTileSize, imageAdjustments,
+        paletteDensity, paletteAngle, paletteSoftness,
       ).filter(l => paletteVisibility[l.id] !== false);
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
@@ -263,7 +273,8 @@ function App() {
         : separationMode === 'palette'
           ? renderPaletteComposite(artImageData, paletteColors, artBgMask,
               Object.fromEntries(paletteColors.map((_, i) => [`palette-${i}`, true])),
-              palettePattern, palettePatternScale)
+              palettePattern, paletteTileSize, imageAdjustments,
+              paletteDensity, paletteAngle, paletteSoftness)
           : renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
       const docCanvas = document.createElement('canvas');
       docCanvas.width = docPxW; docCanvas.height = docPxH;

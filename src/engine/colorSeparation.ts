@@ -880,7 +880,11 @@ export function computeZones(
       } else { tx = x; ty = y; }
       const L = Math.max(0, Math.min(255, lum[i]));
       const tileVal = tile[(((ty % S) + S) % S) * S + (((tx % S) + S) % S)];
-      const offset = tileVal * step * dn;
+      // Offset spans ±step (full zone width) so the pattern is visible throughout
+      // ink areas, not just at zone boundaries. Previously was ±step/2 which made
+      // dithering invisible in solid areas — looked like an overlay rather than
+      // being baked into the separation.
+      const offset = tileVal * step * 2 * dn;
       zones[i] = Math.max(0, Math.min(k - 1, Math.floor((L + offset) / step)));
     }
   }
