@@ -61,8 +61,8 @@ export function LoginPage({ onLogin }: Props) {
           fontFamily: 'var(--font-mono)',
         }}>
           <span style={{ color: 'var(--accent)', marginRight: 6 }}>!</span>
-          Use the email you subscribed with at{' '}
-          <span style={{ color: 'var(--text)' }}>charleypangus.com</span>
+          Use the email you purchased your subscription with at{' '}
+          <a href="https://www.charleypangus.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>www.charleypangus.com</a>
         </div>
 
         <button
