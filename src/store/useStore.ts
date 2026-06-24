@@ -39,6 +39,9 @@ export interface PresetData {
 
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
   exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0,
+  adjMode: 'basic',
+  levels: { inBlack: 0, inGamma: 1.00, inWhite: 255, outBlack: 0, outWhite: 255 },
+  curves: [[0, 0], [255, 255]],
 };
 
 function redistributeThresholds(layers: LayerConfig[]): LayerConfig[] {
@@ -159,6 +162,17 @@ interface AppState {
   vectorSvg: string | null;
   vectorColors: string[];
 
+  // Color Separation mode
+  colorSepNumColors:    number;
+  colorSepColorPriority: number;  // 0–100 slider
+  colorSepPattern:      PatternType;
+  colorSepPatternScale: number;
+  colorSepPatternDensity: number;
+  colorSepPatternAngle: number;
+  colorSepColors:        RGB[];
+  colorSepLockedColors:  RGB[] | null;
+  colorSepVisibility:    Record<string, boolean>;
+
   processedLayers: ProcessedLayer[];
   processedLayerDims: { w: number; h: number } | null;
   ditherComposite: { data: ImageData; w: number; h: number } | null;
@@ -191,6 +205,9 @@ interface AppState {
   setDocumentWidth: (v: number) => void;
   setDocumentHeight: (v: number) => void;
   setImageAdjustment: (key: keyof ImageAdjustments, value: number) => void;
+  setAdjMode:    (mode: import('../engine/imageProcessor').AdjMode) => void;
+  setLevels:     (levels: import('../engine/imageProcessor').LevelsAdjustment) => void;
+  setCurves:     (curves: import('../engine/imageProcessor').CurvePoint[]) => void;
   resetImageAdjustments: () => void;
   resetAllSettings: () => void;
   setPalettePool: (palettes: string[][]) => void;
@@ -230,6 +247,16 @@ interface AppState {
   setVectorInkColor: (v: string) => void;
   setVectorSvg: (svg: string | null) => void;
   setVectorColors: (colors: string[]) => void;
+
+  setColorSepNumColors:     (v: number) => void;
+  setColorSepColorPriority: (v: number) => void;
+  setColorSepPattern:       (v: PatternType) => void;
+  setColorSepPatternScale:  (v: number) => void;
+  setColorSepPatternDensity:(v: number) => void;
+  setColorSepPatternAngle:  (v: number) => void;
+  setColorSepColors:        (v: RGB[]) => void;
+  setColorSepLockedColors:  (v: RGB[] | null) => void;
+  setColorSepVisibility:    (id: string, v: boolean) => void;
 
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
   setProcessedLayerDims: (dims: { w: number; h: number } | null) => void;
@@ -302,6 +329,16 @@ export const useStore = create<AppState>((set, get) => ({
   vectorSvg: null,
   vectorColors: [],
 
+  colorSepNumColors:     4,
+  colorSepColorPriority: 70,
+  colorSepPattern:       'none' as PatternType,
+  colorSepPatternScale:  12,
+  colorSepPatternDensity: 75,
+  colorSepPatternAngle:  45,
+  colorSepColors:        [],
+  colorSepLockedColors:  null,
+  colorSepVisibility:    {},
+
   processedLayers: [],
   processedLayerDims: null,
   ditherComposite: null,
@@ -340,8 +377,15 @@ export const useStore = create<AppState>((set, get) => ({
   setDocumentHeight: (documentHeightIn) => set({ documentHeightIn: Math.max(0.5, documentHeightIn) }),
   setImageAdjustment: (key, value) =>
     set((s) => ({ imageAdjustments: { ...s.imageAdjustments, [key]: value } })),
+  setAdjMode: (adjMode) =>
+    set((s) => ({ imageAdjustments: { ...s.imageAdjustments, adjMode } })),
+  setLevels: (levels) =>
+    set((s) => ({ imageAdjustments: { ...s.imageAdjustments, levels } })),
+  setCurves: (curves) =>
+    set((s) => ({ imageAdjustments: { ...s.imageAdjustments, curves } })),
   resetImageAdjustments: () => set({ imageAdjustments: { ...DEFAULT_IMAGE_ADJ } }),
   resetAllSettings: () => set((s) => ({
+    // Keeps: originalImage, previewImage, imageFileName, separationMode, canvasColor, showFabricBg, document dims, theme
     layers: DEFAULT_LAYERS,
     globalPattern: DEFAULT_GLOBAL_PATTERN,
     knockoutEnabled: true,
@@ -356,13 +400,13 @@ export const useStore = create<AppState>((set, get) => ({
     textureWidth: 2,
     textureSeed: 42,
     showRegistrationMarks: false,
-    canvasColor: '#000000',
-    separationMode: 'threshold' as const,
+    // separationMode intentionally NOT reset — stay in the user's current mode
     cmykParams: { ...DEFAULT_CMYK_PARAMS },
     cmykAngles: { ...DEFAULT_CMYK_ANGLES },
     cmykLpi: 65,
     cmykViewMode: 'composite' as const,
     cmykQuality: null,
+    cmykVisibility: { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true },
     paletteNumColors: 6,
     paletteColors: defaultPaletteColors(6) as RGB[],
     paletteVisibility: {},
@@ -373,6 +417,16 @@ export const useStore = create<AppState>((set, get) => ({
     paletteAngle: 0,
     paletteSoftness: 0,
     paletteAnalyzeKey: s.paletteAnalyzeKey + 1,
+    colorSepNumColors: 4,
+    colorSepColorPriority: 70,
+    colorSepPattern: 'none' as PatternType,
+    colorSepPatternScale: 12,
+    colorSepPatternDensity: 75,
+    colorSepPatternAngle: 45,
+    colorSepLockedColors: null,
+    vectorNumColors: 8,
+    vectorDetail: 3,
+    vectorInkColor: '#ffffff',
     paintMasks: {},
     soloLayerId: null,
     bgMask: null,
@@ -498,6 +552,16 @@ export const useStore = create<AppState>((set, get) => ({
   setVectorSvg: (vectorSvg) => set({ vectorSvg }),
   setVectorColors: (vectorColors) => set({ vectorColors }),
 
+  setColorSepNumColors:      (colorSepNumColors)      => set({ colorSepNumColors }),
+  setColorSepColorPriority:  (colorSepColorPriority)  => set({ colorSepColorPriority }),
+  setColorSepPattern:        (colorSepPattern)        => set({ colorSepPattern }),
+  setColorSepPatternScale:   (colorSepPatternScale)   => set({ colorSepPatternScale }),
+  setColorSepPatternDensity: (colorSepPatternDensity) => set({ colorSepPatternDensity }),
+  setColorSepPatternAngle:   (colorSepPatternAngle)   => set({ colorSepPatternAngle }),
+  setColorSepColors:         (colorSepColors)         => set({ colorSepColors }),
+  setColorSepLockedColors:   (colorSepLockedColors)   => set({ colorSepLockedColors }),
+  setColorSepVisibility: (id, v) => set((s) => ({ colorSepVisibility: { ...s.colorSepVisibility, [id]: v } })),
+
   setProcessedLayers: (processedLayers) => set({ processedLayers }),
   setProcessedLayerDims: (processedLayerDims) => set({ processedLayerDims }),
   setDitherComposite: (ditherComposite) => set({ ditherComposite }),
@@ -522,7 +586,7 @@ export const useStore = create<AppState>((set, get) => ({
       documentDpi:      data.documentDpi,
       documentWidthIn:  data.documentWidthIn,
       documentHeightIn: data.documentHeightIn,
-      imageAdjustments: data.imageAdjustments,
+      imageAdjustments: { ...DEFAULT_IMAGE_ADJ, ...(data.imageAdjustments ?? {}) },
       separationMode:   data.separationMode ?? data.mode ?? s.separationMode,
     };
     const dither = data.mode === 'palette' ? {

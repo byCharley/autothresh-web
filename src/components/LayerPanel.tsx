@@ -811,6 +811,258 @@ const CMYK_CARD_DEFS = [
   { id: 'cmyk-y', name: 'Y · Yellow',  color: '#fff200' },
 ];
 
+// ─── Color Sep Layer Panel ────────────────────────────────────────────────────
+
+import type { RGB } from '../engine/colorSeparation';
+
+const PRESET_STORAGE_KEY = 'autothresh_color_presets';
+
+interface SavedColorPreset {
+  name: string;
+  colors: RGB[];
+}
+
+function loadSavedPresets(): SavedColorPreset[] {
+  try { return JSON.parse(localStorage.getItem(PRESET_STORAGE_KEY) ?? '[]'); }
+  catch { return []; }
+}
+
+function ColorPresetsSection({
+  numColors, lockedColors, onLockedColors, currentColors,
+}: {
+  numColors: number;
+  lockedColors: RGB[] | null;
+  onLockedColors: (v: RGB[] | null) => void;
+  currentColors: RGB[];
+}) {
+  const [saving, setSaving] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [userPresets, setUserPresets] = useState<SavedColorPreset[]>(loadSavedPresets);
+
+  const applyBuiltin = (key: string) => {
+    onLockedColors(defaultPaletteColors(numColors, key));
+  };
+
+  const handleSave = () => {
+    const name = saveName.trim();
+    if (!name || currentColors.length === 0) return;
+    const updated = [...userPresets, { name, colors: currentColors }];
+    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(updated));
+    setUserPresets(updated);
+    setSaving(false);
+    setSaveName('');
+  };
+
+  const handleDelete = (i: number) => {
+    const updated = userPresets.filter((_, idx) => idx !== i);
+    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(updated));
+    setUserPresets(updated);
+  };
+
+  const btnBase: React.CSSProperties = {
+    fontSize: 9, padding: '2px 7px', height: 20, fontFamily: 'var(--font-mono)',
+    cursor: 'pointer', border: '1px solid var(--border)',
+  };
+
+  return (
+    <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid var(--border)' }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          Palettes
+        </span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button
+            onClick={() => onLockedColors(null)}
+            style={{ ...btnBase, background: lockedColors === null ? 'var(--accent)' : 'var(--surface-2)', color: lockedColors === null ? '#000' : 'var(--text-muted)' }}
+          >Auto</button>
+          <button
+            onClick={() => { setSaving(s => !s); setSaveName(''); }}
+            style={{ ...btnBase, background: saving ? 'var(--surface-3)' : 'var(--surface-2)', color: 'var(--text-muted)' }}
+            title="Save current palette as a preset"
+          >Save</button>
+        </div>
+      </div>
+
+      {/* Built-in palette buttons */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+        {Object.entries(COLOR_PRESETS).map(([key, { label }]) => {
+          const swatches = defaultPaletteColors(Math.min(4, numColors), key);
+          return (
+            <button
+              key={key}
+              onClick={() => applyBuiltin(key)}
+              title={label}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 3, padding: '2px 5px 2px 3px',
+                height: 22, cursor: 'pointer',
+                border: '1px solid var(--border)',
+                background: 'var(--surface-2)',
+              }}
+            >
+              <div style={{ display: 'flex', gap: 1 }}>
+                {swatches.map(([r, g, b], i) => (
+                  <div key={i} style={{ width: 8, height: 14, background: `rgb(${r},${g},${b})` }} />
+                ))}
+              </div>
+              <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Save input */}
+      {saving && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+          <input
+            autoFocus
+            value={saveName}
+            onChange={e => setSaveName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setSaving(false); }}
+            placeholder="Name this palette..."
+            style={{
+              flex: 1, fontSize: 10, height: 22, padding: '0 6px',
+              fontFamily: 'var(--font-mono)', background: 'var(--surface-2)',
+              border: '1px solid var(--accent)', color: 'var(--text)', outline: 'none',
+            }}
+          />
+          <button
+            onClick={handleSave}
+            style={{ ...btnBase, padding: '0 10px', height: 22, background: 'var(--accent)', color: '#000', border: '1px solid var(--accent)' }}
+          >Save</button>
+        </div>
+      )}
+
+      {/* User saved presets */}
+      {userPresets.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {userPresets.map(({ name, colors: pc }, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 4px', border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer' }}
+              onClick={() => onLockedColors(pc)}
+            >
+              <div style={{ display: 'flex', gap: 1 }}>
+                {pc.slice(0, 5).map(([r, g, b], j) => (
+                  <div key={j} style={{ width: 8, height: 14, background: `rgb(${r},${g},${b})` }} />
+                ))}
+              </div>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', flex: 1 }}>{name}</span>
+              <button
+                onClick={e => { e.stopPropagation(); handleDelete(i); }}
+                style={{ width: 16, height: 16, fontSize: 11, lineHeight: '14px', cursor: 'pointer', border: 'none', background: 'none', color: 'var(--text-dim)', padding: 0 }}
+              >×</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ColorSepLayerSection({
+  colors, visibility, onVisibilityChange,
+  numColors, onNumColors, colorPriority, onColorPriority,
+  lockedColors, onLockedColors,
+}: {
+  colors: RGB[];
+  visibility: Record<string, boolean>;
+  onVisibilityChange: (id: string, v: boolean) => void;
+  numColors: number;
+  onNumColors: (v: number) => void;
+  colorPriority: number;
+  onColorPriority: (v: number) => void;
+  lockedColors: RGB[] | null;
+  onLockedColors: (v: RGB[] | null) => void;
+}) {
+  return (
+    <div style={{ borderBottom: '1px solid var(--border)' }}>
+      {/* Controls */}
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            Colors
+          </span>
+          <div style={{ display: 'flex', gap: 3 }}>
+            {[2, 3, 4, 5, 6, 8].map(n => (
+              <button
+                key={n}
+                onClick={() => onNumColors(n)}
+                style={{
+                  width: 24, height: 22, fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 600,
+                  cursor: 'pointer', border: '1px solid var(--border)',
+                  background: numColors === n ? 'var(--accent)' : 'var(--surface-2)',
+                  color: numColors === n ? '#000' : 'var(--text-muted)',
+                }}
+              >{n}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Color Priority
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+              {colorPriority < 30 ? 'Tonal' : colorPriority < 70 ? 'Balanced' : 'Color'}
+            </span>
+          </div>
+          <input
+            type="range" min={0} max={100} value={colorPriority}
+            onChange={e => onColorPriority(Number(e.target.value))}
+            style={{ width: '100%', accentColor: 'var(--accent)' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Tone</span>
+            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Hue</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Presets */}
+      <ColorPresetsSection
+        numColors={numColors}
+        lockedColors={lockedColors}
+        onLockedColors={onLockedColors}
+        currentColors={colors}
+      />
+
+      {/* Color layer cards */}
+      <div style={{ padding: '8px 8px 4px' }}>
+        {colors.length === 0 ? (
+          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', padding: '8px 4px', lineHeight: 1.6 }}>
+            Upload an image to auto-detect colors.
+          </div>
+        ) : (
+          [...colors].reverse().map((color, ri) => {
+            const ci = colors.length - 1 - ri;
+            const id = `colorsep-${ci}`;
+            const visible = visibility[id] !== false;
+            const hex = '#' + color.map(v => v.toString(16).padStart(2, '0')).join('');
+            return (
+              <div key={id} className="layer-card" style={{ marginBottom: 4 }}>
+                <div className="layer-swatch">
+                  <div className="layer-swatch-inner" style={{ background: hex }} />
+                </div>
+                <div className="layer-card-info">
+                  <div className="layer-card-name">Color {ci + 1}</div>
+                  <div className="layer-card-sub" style={{ fontFamily: 'var(--font-mono)' }}>{hex.toUpperCase()}</div>
+                </div>
+                <div className="layer-card-actions">
+                  <button
+                    className={`vis-btn ${!visible ? 'hidden-layer' : ''}`}
+                    onClick={() => onVisibilityChange(id, !visible)}
+                  >
+                    <EyeIcon visible={visible} />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 const MODE_INFO = [
@@ -825,6 +1077,12 @@ const MODE_INFO = [
     label: 'Dither',
     title: 'Dither (Palette)',
     desc: 'Simulates a full range of colors using dithering patterns — fewer inks suggest more colors through optical mixing. Great for photo-realistic prints, gradients, and DTG.',
+  },
+  {
+    mode: 'color-sep',
+    label: 'Color',
+    title: 'Color Separation (OKLAB)',
+    desc: 'Groups pixels by actual color data using perceptual OKLAB clustering. Dark reds and light reds stay in the same layer. Separates by hue and chroma, not just luminance — ideal for color-accurate screen prints.',
   },
   {
     mode: 'vector',
@@ -853,6 +1111,10 @@ export function LayerPanel() {
     cmykVisibility, setCmykLayerVisible, cmykAngles,
     addLayer, removeLayer, duplicateLayer, paintMasks, paintMode,
     globalPattern, soloLayerId, setSoloLayerId,
+    colorSepNumColors, setColorSepNumColors,
+    colorSepColorPriority, setColorSepColorPriority,
+    colorSepColors, colorSepVisibility, setColorSepVisibility,
+    colorSepLockedColors, setColorSepLockedColors,
   } = useStore();
 
   const handleAutoPalette = () => {
@@ -887,20 +1149,20 @@ export function LayerPanel() {
         {/* Mode Switcher */}
         <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <div style={{ display: 'flex', padding: '6px 8px', gap: 4 }}>
-            {(['threshold', 'palette', 'vector'] as ('threshold' | 'palette' | 'vector')[]).map((mode) => (
+            {(['threshold', 'palette', 'color-sep', 'vector'] as const).map((mode) => (
               <button
                 key={mode}
                 onClick={() => setSeparationMode(mode)}
                 style={{
-                  flex: 1, height: 28, fontSize: 10, fontFamily: 'var(--font-mono)',
-                  fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase',
+                  flex: 1, height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
+                  fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
                   cursor: 'pointer', border: '1px solid var(--border)',
                   background: separationMode === mode ? 'var(--accent)' : 'var(--surface-2)',
                   color: separationMode === mode ? '#000' : 'var(--text-muted)',
                   transition: 'background 0.15s, color 0.15s',
                 }}
               >
-                {mode === 'threshold' ? 'Thresh' : mode === 'palette' ? 'Dither' : 'Vector'}
+                {mode === 'threshold' ? 'Thresh' : mode === 'palette' ? 'Dither' : mode === 'color-sep' ? 'Color' : 'Vector'}
               </button>
             ))}
             <button
@@ -934,7 +1196,7 @@ export function LayerPanel() {
                     border: `1px solid ${separationMode === mode ? 'var(--accent)' : 'var(--border)'}`,
                     cursor: 'pointer',
                   }}
-                  onClick={() => { setSeparationMode(mode as 'threshold' | 'palette' | 'vector'); setModeInfoOpen(false); }}
+                  onClick={() => { setSeparationMode(mode as 'threshold' | 'palette' | 'color-sep' | 'vector'); setModeInfoOpen(false); }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                     <span style={{
@@ -966,6 +1228,22 @@ export function LayerPanel() {
         ) : separationMode === 'palette' ? (
           <>
             <InksSection />
+            <FabricSection />
+            <ArtworkSection />
+          </>
+        ) : separationMode === 'color-sep' ? (
+          <>
+            <ColorSepLayerSection
+              colors={colorSepColors}
+              visibility={colorSepVisibility}
+              onVisibilityChange={setColorSepVisibility}
+              numColors={colorSepNumColors}
+              onNumColors={setColorSepNumColors}
+              colorPriority={colorSepColorPriority}
+              onColorPriority={setColorSepColorPriority}
+              lockedColors={colorSepLockedColors}
+              onLockedColors={setColorSepLockedColors}
+            />
             <FabricSection />
             <ArtworkSection />
           </>

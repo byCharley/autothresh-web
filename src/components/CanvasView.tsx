@@ -7,6 +7,7 @@ import {
   garmentRgbFromParam, contrastColor, autoImageAdjustments,
 } from '../engine/imageProcessor';
 import { kMeansColors, paletteSeparate, renderPaletteComposite, bayerOrder } from '../engine/colorSeparation';
+import { colorSeparate, renderColorSepComposite } from '../engine/colorSeparator';
 import type { LayerConfig, PatternConfig } from '../engine/imageProcessor';
 import { generateTextureMask } from '../engine/textureGenerator';
 import { loadAllTextures } from '../engine/textureLoader';
@@ -72,6 +73,9 @@ export function CanvasView() {
     setPaintMask, setPaintMode, setBrushSize, clearPaintMask,
     soloLayerId, setCmykQuality,
     vectorNumColors, vectorDetail, vectorInkColor, vectorSvg, setVectorSvg, setVectorColors,
+    colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
+    colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, setColorSepColors,
+    colorSepLockedColors,
   } = useStore();
 
   // Increments when real texture PNGs finish loading so the processing effect reruns.
@@ -366,6 +370,29 @@ export function CanvasView() {
             }
             artComposite = split;
           }
+        } else if (separationMode === 'color-sep') {
+          setDitherComposite(null);
+
+          const colorSepSettings = {
+            numColors:      colorSepNumColors,
+            colorPriority:  colorSepColorPriority / 100,
+            pattern:        colorSepPattern,
+            patternScale:   colorSepPatternScale,
+            patternDensity: colorSepPatternDensity,
+            patternAngle:   colorSepPatternAngle,
+          };
+          const { layers: csLayers, colors: csColors } = colorSeparate(
+            artScaled, colorSepSettings, localBgMask,
+            colorSepLockedColors ?? undefined,
+          );
+          setColorSepColors(csColors);
+          setProcessedLayers(csLayers.filter(l => colorSepVisibility[l.id] !== false));
+
+          artComposite = renderColorSepComposite(
+            artScaled, csColors, colorSepVisibility, colorSepSettings, localBgMask,
+          );
+          setProcessedLayerDims({ w: artPrevW, h: artPrevH });
+
         } else if (separationMode === 'vector') {
           setDitherComposite(null);
 
@@ -486,6 +513,8 @@ export function CanvasView() {
     paintMasks,
     soloLayerId,
     vectorNumColors, vectorDetail, vectorInkColor,
+    colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
+    colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, colorSepLockedColors,
     // renderDim intentionally excluded — zoom must never trigger a reprocess
   ]);
 
@@ -1017,7 +1046,7 @@ export function CanvasView() {
                 setOffset({ x: (cw - layout.docPrevW * fitZoom) / 2, y: (ch - layout.docPrevH * fitZoom) / 2 });
               }}
             >Fit</button>
-            {originalImage && separationMode === 'palette' && (
+            {originalImage && (
               <>
                 <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
                 <button
@@ -1028,7 +1057,7 @@ export function CanvasView() {
                     background: splitView ? 'var(--accent-dim)' : undefined,
                     border: splitView ? '1px solid var(--accent)' : '1px solid transparent',
                   }}
-                  title="Split view — original left, dithered right"
+                  title="Split view — original left, processed right"
                   onClick={() => setSplitView((v) => !v)}
                 >
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
@@ -1038,7 +1067,7 @@ export function CanvasView() {
                 </button>
               </>
             )}
-            {originalImage && (
+            {originalImage && separationMode === 'threshold' && (
               <>
                 <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
                 {/* Paint button */}
