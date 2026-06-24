@@ -8,6 +8,7 @@ export interface Session {
   email:                   string;
   firstName:               string;
   hasSubscription:         boolean;
+  subscriptionStatus?:     string;
   subscriptionExpiresAt?:  string;
   planTitle?:              string;
 }
@@ -16,6 +17,19 @@ const SESSION_KEY  = 'at_session';
 const VERIFIER_KEY = 'at_pkce_verifier';
 const STATE_KEY    = 'at_pkce_state';
 const NONCE_KEY    = 'at_pkce_nonce';
+const PAUSED_AT_KEY = 'at_paused_at';
+const GRACE_MS = 30 * 60 * 1000; // 30 minutes
+
+function recordPausedAt() {
+  if (!localStorage.getItem(PAUSED_AT_KEY)) {
+    localStorage.setItem(PAUSED_AT_KEY, String(Date.now()));
+  }
+}
+function clearPausedAt() { localStorage.removeItem(PAUSED_AT_KEY); }
+function withinGracePeriod(): boolean {
+  const ts = localStorage.getItem(PAUSED_AT_KEY);
+  return !!ts && Date.now() - parseInt(ts) < GRACE_MS;
+}
 
 function loadSession(): Session | null {
   try {
@@ -89,10 +103,12 @@ export function useAuth() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code, codeVerifier }),
       })
-        .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; subscriptionExpiresAt?: string; planTitle?: string }>)
+        .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; subscriptionStatus?: string; subscriptionExpiresAt?: string; planTitle?: string }>)
         .then((data) => {
           window.history.replaceState({}, '', '/');
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
+          const isPaused = data.subscriptionStatus === 'paused' || data.subscriptionStatus === 'cancelled' || data.subscriptionStatus === 'canceled';
+          if (isPaused) recordPausedAt(); else clearPausedAt();
           const s: Session = {
             token:                   data.token!,
             idToken:                 data.idToken,
@@ -100,12 +116,16 @@ export function useAuth() {
             email:                   data.email!,
             firstName:               data.firstName!,
             hasSubscription:         data.hasSubscription!,
+            subscriptionStatus:      data.subscriptionStatus,
             subscriptionExpiresAt:   data.subscriptionExpiresAt,
             planTitle:               data.planTitle,
           };
           saveSession(s);
           setSession(s);
-          setStatus(s.hasSubscription ? 'authenticated' : 'no-subscription');
+          if (!s.hasSubscription) { setStatus('no-subscription'); return; }
+          // Paused — grant access within grace period, lock out after
+          if (isPaused && !withinGracePeriod()) { setStatus('no-subscription'); return; }
+          setStatus('authenticated');
         })
         .catch(() => { window.history.replaceState({}, '', '/'); setStatus('unauthenticated'); });
 
@@ -121,13 +141,17 @@ export function useAuth() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: stored.token }),
     })
-      .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string }>)
+      .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string }>)
       .then((data) => {
         if (!data.valid) { clearSession(); setStatus('unauthenticated'); return; }
-        const updated: Session = { ...stored, hasSubscription: data.hasSubscription, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle };
+        const isPaused = data.subscriptionStatus === 'paused' || data.subscriptionStatus === 'cancelled' || data.subscriptionStatus === 'canceled';
+        if (isPaused) recordPausedAt(); else clearPausedAt();
+        const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle };
         saveSession(updated);
         setSession(updated);
-        setStatus(data.hasSubscription ? 'authenticated' : 'no-subscription');
+        if (!data.hasSubscription) { setStatus('no-subscription'); return; }
+        if (isPaused && !withinGracePeriod()) { setStatus('no-subscription'); return; }
+        setStatus('authenticated');
       })
       .catch(() => {
         // Network error — trust cached session

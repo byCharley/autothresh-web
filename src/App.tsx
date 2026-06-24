@@ -461,9 +461,34 @@ function App() {
     }
   };
 
+  const subStatus = session?.subscriptionStatus;
+  const isPaused = subStatus === 'paused' || subStatus === 'cancelled' || subStatus === 'canceled';
+
   return (
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} />
+
+      {isPaused && (
+        <div style={{
+          background: '#7c5a00', borderBottom: '1px solid #a87a00',
+          padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          fontSize: 12, fontFamily: 'var(--font-mono)', color: '#ffd966',
+          flexShrink: 0,
+        }}>
+          <span>
+            <span style={{ marginRight: 8 }}>⚠</span>
+            Your subscription is <strong>{subStatus}</strong>. You have 30 minutes of access remaining.{' '}
+            <a
+              href="https://www.charleypangus.com/collections/webapps"
+              target="_blank" rel="noopener noreferrer"
+              style={{ color: '#ffd966', textDecoration: 'underline' }}
+            >
+              Resubscribe to continue
+            </a>
+          </span>
+        </div>
+      )}
+
       <div className="workspace">
         <div className={`panel-wrap panel-wrap--left${leftOpen ? '' : ' panel-wrap--closed'}`}>
           <LayerPanel />

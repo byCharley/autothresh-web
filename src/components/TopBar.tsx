@@ -11,9 +11,10 @@ interface TopBarProps {
   firstName?: string;
   subscriptionExpiresAt?: string;
   planTitle?: string;
+  subscriptionStatus?: string;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -176,8 +177,17 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3ecf4f', boxShadow: '0 0 4px #3ecf4f88', flexShrink: 0 }} />
-                  <span style={{ fontSize: 11, color: '#3ecf4f', fontFamily: 'var(--font-mono)' }}>Active</span>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                    background: subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817' : '#3ecf4f',
+                    boxShadow: subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '0 0 4px #e6a81788' : '0 0 4px #3ecf4f88',
+                  }} />
+                  <span style={{
+                    fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'capitalize',
+                    color: subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817' : '#3ecf4f',
+                  }}>
+                    {subscriptionStatus ?? 'Active'}
+                  </span>
                 </div>
 
                 {planTitle && (
