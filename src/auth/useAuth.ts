@@ -175,16 +175,21 @@ export function useAuth() {
     window.location.href = redirectUrl;
   }, []);
 
-  // switchAccount: ends Shopify session then auto-restarts login flow.
-  // Requires https://www.autothresh.com to be registered in Shopify app Logout URIs.
-  // Uses localStorage (not sessionStorage) so the flag survives the cross-domain redirect.
+  // switchAccount: clears local session and goes straight to Shopify login.
+  // User can enter a different email on Shopify's login page.
   const switchAccount = useCallback(async () => {
     clearSession();
     clearPausedAt();
-    localStorage.setItem('at_post_logout', '1');
-    const r = await fetch('/api/shopify-logout-url');
-    const { logoutUrl } = await r.json() as { logoutUrl: string };
-    window.location.href = logoutUrl;
+    const verifier  = await generateCodeVerifier();
+    const challenge = await generateCodeChallenge(verifier);
+    const state     = generateState();
+    const nonce     = generateState();
+    sessionStorage.setItem(VERIFIER_KEY, verifier);
+    sessionStorage.setItem(STATE_KEY, state);
+    sessionStorage.setItem(NONCE_KEY, nonce);
+    const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
+    const { redirectUrl } = await r.json() as { redirectUrl: string };
+    window.location.href = redirectUrl;
   }, []);
 
   // logout: clears local session only — stays on AutoThresh login page.
