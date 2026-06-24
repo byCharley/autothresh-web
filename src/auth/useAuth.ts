@@ -50,9 +50,8 @@ function clearSession() {
   localStorage.removeItem(SHOPIFY_ID_TOKEN);
 }
 
-// id_token helpers — stored independently so it survives session expiry checks.
+// id_token helper — stored independently so it survives session expiry checks.
 function saveIdToken(t: string) { localStorage.setItem(SHOPIFY_ID_TOKEN, t); }
-function loadIdToken(): string | undefined { return localStorage.getItem(SHOPIFY_ID_TOKEN) ?? undefined; }
 
 export type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated';
 
