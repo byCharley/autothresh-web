@@ -182,28 +182,27 @@ export function useAuth() {
     window.location.href = redirectUrl;
   }, []);
 
-  // switchAccount: ends Shopify session then returns to this site so the user
-  // can sign in with a different email. Uses the stored shopify_id_token (required
-  // by Shopify's end-session endpoint) and window.location.origin so the redirect
-  // URI matches exactly whichever host (www vs apex) is registered in Shopify.
+  // switchAccount: Shopify's logout endpoint requires a browser-side session
+  // cookie on shopify.com, which headless PKCE flows never create (code exchange
+  // is server-to-server). So we skip it and go straight to a new OAuth flow with
+  // prompt=login. Shopify may still auto-authorize; if so, the user lands back in
+  // the app as the same account — they'll need to visit charleypangus.com/account
+  // to sign out of Shopify first, then click Sign In here.
   const switchAccount = useCallback(async () => {
-    const idToken = loadIdToken();
     clearSession();
     clearPausedAt();
-    localStorage.setItem('at_post_logout', '1');
-
-    if (idToken) {
-      const origin = window.location.origin;
-      const r = await fetch(
-        `/api/shopify-logout-url?id_token=${encodeURIComponent(idToken)}&origin=${encodeURIComponent(origin)}`
-      );
-      const { logoutUrl } = await r.json() as { logoutUrl: string };
-      window.location.href = logoutUrl;
-    } else {
-      // No id_token stored (never logged in via OAuth, or was already cleared).
-      setSession(null);
-      setStatus('unauthenticated');
-    }
+    const verifier  = await generateCodeVerifier();
+    const challenge = await generateCodeChallenge(verifier);
+    const state     = generateState();
+    const nonce     = generateState();
+    sessionStorage.setItem(VERIFIER_KEY, verifier);
+    sessionStorage.setItem(STATE_KEY, state);
+    sessionStorage.setItem(NONCE_KEY, nonce);
+    const r = await fetch(
+      `/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}&prompt=login`
+    );
+    const { redirectUrl } = await r.json() as { redirectUrl: string };
+    window.location.href = redirectUrl;
   }, []);
 
   // logout: local-only — stays on AutoThresh login page.
