@@ -63,21 +63,27 @@ export function useAuth() {
   useEffect(() => {
     if (DEV_BYPASS) return;
 
-    // Returning from Shopify logout (switch account flow) — auto-start fresh login
+    // Returning from Shopify logout (switch account flow) — use pre-stored PKCE and start login
     if (localStorage.getItem('at_post_logout')) {
       localStorage.removeItem('at_post_logout');
-      (async () => {
-        const verifier  = await generateCodeVerifier();
-        const challenge = await generateCodeChallenge(verifier);
-        const state     = generateState();
-        const nonce     = generateState();
+      const verifier = localStorage.getItem(VERIFIER_KEY) ?? '';
+      const state    = localStorage.getItem(STATE_KEY) ?? '';
+      // Move from localStorage to sessionStorage for the callback handler
+      if (verifier && state) {
         sessionStorage.setItem(VERIFIER_KEY, verifier);
         sessionStorage.setItem(STATE_KEY, state);
-        sessionStorage.setItem(NONCE_KEY, nonce);
-        const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
-        const { redirectUrl } = await r.json() as { redirectUrl: string };
-        window.location.href = redirectUrl;
-      })();
+        const nonce = localStorage.getItem(NONCE_KEY) ?? '';
+        if (nonce) sessionStorage.setItem(NONCE_KEY, nonce);
+        localStorage.removeItem(VERIFIER_KEY);
+        localStorage.removeItem(STATE_KEY);
+        localStorage.removeItem(NONCE_KEY);
+        (async () => {
+          const challenge = await generateCodeChallenge(verifier);
+          const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
+          const { redirectUrl } = await r.json() as { redirectUrl: string };
+          window.location.href = redirectUrl;
+        })();
+      }
       return;
     }
 
@@ -175,21 +181,22 @@ export function useAuth() {
     window.location.href = redirectUrl;
   }, []);
 
-  // switchAccount: clears local session and goes straight to Shopify login.
-  // User can enter a different email on Shopify's login page.
+  // switchAccount: ends Shopify session then auto-restarts login.
+  // Requires https://www.autothresh.com in Shopify app Logout URI list.
+  // PKCE stored in localStorage so it survives the cross-domain redirect.
   const switchAccount = useCallback(async () => {
     clearSession();
     clearPausedAt();
-    const verifier  = await generateCodeVerifier();
-    const challenge = await generateCodeChallenge(verifier);
-    const state     = generateState();
-    const nonce     = generateState();
-    sessionStorage.setItem(VERIFIER_KEY, verifier);
-    sessionStorage.setItem(STATE_KEY, state);
-    sessionStorage.setItem(NONCE_KEY, nonce);
-    const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}&prompt=login`);
-    const { redirectUrl } = await r.json() as { redirectUrl: string };
-    window.location.href = redirectUrl;
+    const verifier = await generateCodeVerifier();
+    const state    = generateState();
+    const nonce    = generateState();
+    localStorage.setItem(VERIFIER_KEY, verifier);
+    localStorage.setItem(STATE_KEY, state);
+    localStorage.setItem(NONCE_KEY, nonce);
+    localStorage.setItem('at_post_logout', '1');
+    const r = await fetch('/api/shopify-logout-url');
+    const { logoutUrl } = await r.json() as { logoutUrl: string };
+    window.location.href = logoutUrl;
   }, []);
 
   // logout: clears local session only — stays on AutoThresh login page.
