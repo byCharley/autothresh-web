@@ -11,7 +11,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { challenge, state, nonce } = req.query as { challenge?: string; state?: string; nonce?: string };
+  const { challenge, state, nonce, prompt } = req.query as { challenge?: string; state?: string; nonce?: string; prompt?: string };
   if (!challenge || !state) return res.status(400).json({ error: 'challenge and state required' });
 
   const params = new URLSearchParams({
@@ -25,6 +25,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
   });
 
   if (nonce) params.set('nonce', nonce);
+  if (prompt) params.set('prompt', prompt);
 
   const redirectUrl = `https://shopify.com/authentication/${STORE_ID}/oauth/authorize?${params}`;
   return res.status(200).json({ redirectUrl });
