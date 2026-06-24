@@ -25,13 +25,15 @@ export function MobileBlock() {
 
       {/* Message */}
       <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 12 }}>
-        Desktop Only
+        Desktop + Tablet Only
       </div>
       <div style={{ fontSize: 13, color: '#888', lineHeight: 1.7, maxWidth: 280 }}>
-        AutoThresh Web is a professional print-separation tool designed for
-        desktop use. Please visit{' '}
+        AutoThresh Web is designed for desktop and tablet use. Please visit{' '}
         <span style={{ color: '#e8a530', fontWeight: 600 }}>www.autothresh.com</span>
-        {' '}on a desktop or laptop computer.
+        {' '}on a desktop, laptop, or tablet.
+      </div>
+      <div style={{ fontSize: 11, color: '#555', marginTop: 16, maxWidth: 260, lineHeight: 1.6 }}>
+        Mobile support is coming in a future update.
       </div>
     </div>
   );
