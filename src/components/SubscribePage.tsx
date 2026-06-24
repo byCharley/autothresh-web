@@ -10,9 +10,10 @@ interface Props {
   firstName?: string;
   email?: string;
   onLogout: () => void;
+  onSwitchAccount?: () => void;
 }
 
-export function SubscribePage({ firstName, email, onLogout }: Props) {
+export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: Props) {
   const [showEula, setShowEula] = useState(false);
 
   return (
@@ -73,7 +74,16 @@ export function SubscribePage({ firstName, email, onLogout }: Props) {
           Subscribe Now
         </a>
 
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {onSwitchAccount && (
+            <button
+              className="btn btn-ghost"
+              onClick={onSwitchAccount}
+              style={{ fontSize: 11, color: 'var(--text-muted)' }}
+            >
+              Sign in with a different account
+            </button>
+          )}
           <button
             className="btn btn-ghost"
             onClick={onLogout}

@@ -98,7 +98,7 @@ function App() {
   }
 
   if (status === 'no-subscription') {
-    return <SubscribePage firstName={session?.firstName} email={session?.email} onLogout={logout} />;
+    return <SubscribePage firstName={session?.firstName} email={session?.email} onLogout={logout} onSwitchAccount={switchAccount} />;
   }
 
   const handleExport = async ({ mode: _mode, format, fileName }: ExportConfig) => {

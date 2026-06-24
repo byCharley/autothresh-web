@@ -194,9 +194,27 @@ export function useAuth() {
     localStorage.setItem(STATE_KEY, state);
     localStorage.setItem(NONCE_KEY, nonce);
     localStorage.setItem('at_post_logout', '1');
-    const r = await fetch('/api/shopify-logout-url');
-    const { logoutUrl } = await r.json() as { logoutUrl: string };
-    window.location.href = logoutUrl;
+    try {
+      const r = await fetch('/api/shopify-logout-url');
+      const data = await r.json() as { logoutUrl?: string };
+      if (data.logoutUrl) {
+        window.location.href = data.logoutUrl;
+        return;
+      }
+    } catch { /* fall through */ }
+    // If Shopify logout isn't reachable or not configured, skip it and
+    // go straight to the auth screen so the user can enter a different email.
+    localStorage.removeItem('at_post_logout');
+    const challenge = await generateCodeChallenge(localStorage.getItem(VERIFIER_KEY) ?? verifier);
+    sessionStorage.setItem(VERIFIER_KEY, verifier);
+    sessionStorage.setItem(STATE_KEY, state);
+    sessionStorage.setItem(NONCE_KEY, nonce);
+    localStorage.removeItem(VERIFIER_KEY);
+    localStorage.removeItem(STATE_KEY);
+    localStorage.removeItem(NONCE_KEY);
+    const authR = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}&prompt=login`);
+    const { redirectUrl } = await authR.json() as { redirectUrl: string };
+    window.location.href = redirectUrl;
   }, []);
 
   // logout: clears local session only — stays on AutoThresh login page.
