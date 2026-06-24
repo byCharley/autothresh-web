@@ -40,7 +40,8 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
       }
     }
 
-    console.log('Seal parsed subs count:', subs.length, 'statuses:', subs.map(s => s.status));
+    console.log('Seal parsed subs count:', subs.length);
+    if (subs[0]) console.log('Seal sub[0] keys:', JSON.stringify(subs[0]));
 
     let nextBillingDate: string | undefined;
     let planTitle: string | undefined;
@@ -48,7 +49,7 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
       const st = String(s.status ?? '').toUpperCase();
       const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'CANCELLED' || st === 'CANCELED';
       if (valid) {
-        nextBillingDate = (s.next_billing_date ?? s.next_charge_at ?? s.nextBillingDate) as string | undefined;
+        nextBillingDate = (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
         planTitle = (s.plan_title ?? s.product_title ?? s.title ?? s.name ?? s.plan_name) as string | undefined;
       }
       return valid;
