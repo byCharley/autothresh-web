@@ -4,17 +4,17 @@ import { EulaModal } from './EulaModal';
 import { PageFooter } from './PageFooter';
 
 interface Props {
-  onLogin: () => Promise<void>;
-  onSwitchAccount?: () => Promise<void>;
+  onLogin: () => void;
+  onSwitchAccount?: () => void;
 }
 
 export function LoginPage({ onLogin, onSwitchAccount }: Props) {
   const [loading, setLoading]     = useState(false);
   const [showEula, setShowEula]   = useState(false);
 
-  const handleSignIn = async () => {
+  const handleSignIn = () => {
     setLoading(true);
-    await onLogin();
+    onLogin();
   };
 
   return (

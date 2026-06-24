@@ -13,13 +13,14 @@ export interface Session {
   planTitle?:              string;
 }
 
-const SESSION_KEY       = 'at_session';
-const SHOPIFY_ID_TOKEN  = 'shopify_id_token';   // stable key, independent of session expiry
-const VERIFIER_KEY      = 'at_pkce_verifier';
-const STATE_KEY         = 'at_pkce_state';
-const NONCE_KEY         = 'at_pkce_nonce';
-const PAUSED_AT_KEY     = 'at_paused_at';
-const GRACE_MS          = 30 * 60 * 1000; // 30 minutes
+const SESSION_KEY      = 'at_session';
+const SHOPIFY_ID_TOKEN = 'shopify_id_token'; // saved at login, used as logout hint
+const SHOPIFY_STORE_ID = '52142571674';
+const VERIFIER_KEY     = 'at_pkce_verifier';
+const STATE_KEY        = 'at_pkce_state';
+const NONCE_KEY        = 'at_pkce_nonce';
+const PAUSED_AT_KEY    = 'at_paused_at';
+const GRACE_MS         = 30 * 60 * 1000;
 
 function recordPausedAt() {
   if (!localStorage.getItem(PAUSED_AT_KEY)) {
@@ -43,15 +44,27 @@ function loadSession(): Session | null {
 }
 
 function saveSession(s: Session) { localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
-
-// clearSession also removes the Shopify id_token so logout is fully clean.
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(SHOPIFY_ID_TOKEN);
 }
-
-// id_token helper — stored independently so it survives session expiry checks.
 function saveIdToken(t: string) { localStorage.setItem(SHOPIFY_ID_TOKEN, t); }
+
+// Shared helper: generate PKCE + state, store in sessionStorage, redirect to Shopify OAuth.
+async function startOAuth(prompt?: string) {
+  const verifier  = await generateCodeVerifier();
+  const challenge = await generateCodeChallenge(verifier);
+  const state     = generateState();
+  const nonce     = generateState();
+  sessionStorage.setItem(VERIFIER_KEY, verifier);
+  sessionStorage.setItem(STATE_KEY, state);
+  sessionStorage.setItem(NONCE_KEY, nonce);
+  const qs = new URLSearchParams({ challenge, state, nonce });
+  if (prompt) qs.set('prompt', prompt);
+  const r = await fetch(`/api/auth-init?${qs}`);
+  const { redirectUrl } = await r.json() as { redirectUrl: string };
+  window.location.href = redirectUrl;
+}
 
 export type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated';
 
@@ -72,14 +85,18 @@ export function useAuth() {
   useEffect(() => {
     if (DEV_BYPASS) return;
 
-    // Returning from Shopify logout (switchAccount flow) — show login screen.
-    // Do NOT auto-start OAuth; user must click Sign In so Shopify presents the
-    // email entry form now that the session is cleared.
+    // /auth/start — landing page after Shopify logout; immediately starts a fresh
+    // OAuth flow with prompt=login so Shopify shows the email entry screen.
+    if (window.location.pathname === '/auth/start') {
+      window.history.replaceState({}, '', '/');
+      startOAuth('login');
+      return;
+    }
+
+    // Legacy at_post_logout flag — keep as a fallback in case it was set by an
+    // older session. Just clean up and show the login screen.
     if (localStorage.getItem('at_post_logout')) {
       localStorage.removeItem('at_post_logout');
-      localStorage.removeItem(VERIFIER_KEY);
-      localStorage.removeItem(STATE_KEY);
-      localStorage.removeItem(NONCE_KEY);
       setStatus('unauthenticated');
       return;
     }
@@ -89,7 +106,7 @@ export function useAuth() {
     const retState = params.get('state');
 
     if (window.location.pathname === '/auth/callback' && code) {
-      // ── OAuth callback ──────────────────────────────────────────────────────
+      // ── OAuth callback ────────────────────────────────────────────────────
       const storedState  = sessionStorage.getItem(STATE_KEY);
       const codeVerifier = sessionStorage.getItem(VERIFIER_KEY);
       sessionStorage.removeItem(STATE_KEY);
@@ -110,7 +127,6 @@ export function useAuth() {
         .then((data) => {
           window.history.replaceState({}, '', '/');
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
-          // Persist id_token under its own stable key for Shopify logout hint.
           if (data.idToken) saveIdToken(data.idToken);
           const isPaused = data.subscriptionStatus === 'paused' || data.subscriptionStatus === 'cancelled' || data.subscriptionStatus === 'canceled';
           if (isPaused) recordPausedAt(); else clearPausedAt();
@@ -136,7 +152,7 @@ export function useAuth() {
       return;
     }
 
-    // ── Verify stored session ───────────────────────────────────────────────
+    // ── Verify stored session ─────────────────────────────────────────────
     const stored = loadSession();
     if (!stored) { setStatus('unauthenticated'); return; }
 
@@ -148,8 +164,7 @@ export function useAuth() {
       .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string }>)
       .then((data) => {
         if (!data.valid) { clearSession(); setStatus('unauthenticated'); return; }
-        // Guard: logout() clears localStorage synchronously; if it ran while
-        // verify was in-flight, don't restore the session.
+        // Guard: if logout() ran while verify was in-flight, don't restore.
         if (!loadSession()) return;
         const isPaused = data.subscriptionStatus === 'paused' || data.subscriptionStatus === 'cancelled' || data.subscriptionStatus === 'canceled';
         if (isPaused) recordPausedAt(); else clearPausedAt();
@@ -166,46 +181,32 @@ export function useAuth() {
       });
   }, []);
 
-  const initiateLogin = useCallback(async () => {
-    const verifier  = await generateCodeVerifier();
-    const challenge = await generateCodeChallenge(verifier);
-    const state     = generateState();
-    const nonce     = generateState();
+  const initiateLogin = useCallback(() => startOAuth(), []);
 
-    sessionStorage.setItem(VERIFIER_KEY, verifier);
-    sessionStorage.setItem(STATE_KEY, state);
-    sessionStorage.setItem(NONCE_KEY, nonce);
-
-    const r = await fetch(`/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}`);
-    const { redirectUrl } = await r.json() as { redirectUrl: string };
-    window.location.href = redirectUrl;
-  }, []);
-
-  // switchAccount: Shopify's logout endpoint requires a browser-side session
-  // cookie on shopify.com, which headless PKCE flows never create (code exchange
-  // is server-to-server). So we skip it and go straight to a new OAuth flow with
-  // prompt=login. Shopify may still auto-authorize; if so, the user lands back in
-  // the app as the same account — they'll need to visit charleypangus.com/account
-  // to sign out of Shopify first, then click Sign In here.
-  const switchAccount = useCallback(async () => {
+  // switchAccount: hits Shopify's OIDC end-session endpoint with id_token_hint
+  // (required — Shopify errors without it). After logout, Shopify redirects to
+  // /auth/start which immediately fires a fresh OAuth with prompt=login so the
+  // email entry screen appears.
+  // Requires these exact URIs registered in Shopify Customer Account API →
+  // Logout URIs: https://autothresh.com/auth/start AND https://www.autothresh.com/auth/start
+  const switchAccount = useCallback(() => {
+    const idToken = localStorage.getItem(SHOPIFY_ID_TOKEN);
     clearSession();
     clearPausedAt();
-    const verifier  = await generateCodeVerifier();
-    const challenge = await generateCodeChallenge(verifier);
-    const state     = generateState();
-    const nonce     = generateState();
-    sessionStorage.setItem(VERIFIER_KEY, verifier);
-    sessionStorage.setItem(STATE_KEY, state);
-    sessionStorage.setItem(NONCE_KEY, nonce);
-    const r = await fetch(
-      `/api/auth-init?challenge=${encodeURIComponent(challenge)}&state=${encodeURIComponent(state)}&nonce=${encodeURIComponent(nonce)}&prompt=select_account`
-    );
-    const { redirectUrl } = await r.json() as { redirectUrl: string };
-    window.location.href = redirectUrl;
+
+    if (!idToken) {
+      // No stored id_token (user never logged in via OAuth this session).
+      // Skip Shopify logout and go straight to fresh OAuth.
+      startOAuth('login');
+      return;
+    }
+
+    const logoutUrl = new URL(`https://shopify.com/authentication/${SHOPIFY_STORE_ID}/logout`);
+    logoutUrl.searchParams.set('id_token_hint', idToken);
+    logoutUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/auth/start`);
+    window.location.href = logoutUrl.toString();
   }, []);
 
-  // logout: local-only — stays on AutoThresh login page.
-  // Use switchAccount if you need Shopify to present a fresh email screen.
   const logout = useCallback(() => {
     clearSession();
     clearPausedAt();
