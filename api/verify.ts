@@ -39,13 +39,13 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
 
     let nextBillingDate: string | undefined;
     const hasSub = subs.some(s => {
-      // Accept any capitalisation: ACTIVE, Active, active
       const st = String(s.status ?? '').toUpperCase();
-      const active = st === 'ACTIVE' || st === 'PAUSED';
-      if (active) {
+      // Grant access for any subscription that exists (active, paused, or cancelled)
+      const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'CANCELLED' || st === 'CANCELED';
+      if (valid) {
         nextBillingDate = (s.next_billing_date ?? s.next_charge_at ?? s.nextBillingDate) as string | undefined;
       }
-      return active;
+      return valid;
     });
     return { hasSub, nextBillingDate };
   } catch (e) {
