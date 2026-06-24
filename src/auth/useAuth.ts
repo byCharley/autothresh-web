@@ -179,12 +179,10 @@ export function useAuth() {
   // Requires https://www.autothresh.com to be registered in Shopify app Logout URIs.
   // Uses localStorage (not sessionStorage) so the flag survives the cross-domain redirect.
   const switchAccount = useCallback(async () => {
-    const currentSession = loadSession();
     clearSession();
     clearPausedAt();
     localStorage.setItem('at_post_logout', '1');
-    const idTokenHint = currentSession?.idToken ?? '';
-    const r = await fetch(`/api/shopify-logout-url?id_token_hint=${encodeURIComponent(idTokenHint)}`);
+    const r = await fetch('/api/shopify-logout-url');
     const { logoutUrl } = await r.json() as { logoutUrl: string };
     window.location.href = logoutUrl;
   }, []);
