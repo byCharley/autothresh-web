@@ -18,6 +18,7 @@ import { PresetsModal } from './components/PresetsModal';
 import { EulaModal } from './components/EulaModal';
 import { FaqModal } from './components/FaqModal';
 import { useStore } from './store/useStore';
+import { useHistorySync } from './hooks/useHistorySync';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
 import {
   processImage, applyKnockout, renderComposite, renderCmykSmooth, garmentRgbFromParam,
@@ -60,6 +61,7 @@ function isMobileDevice(): boolean {
 }
 
 function App() {
+  useHistorySync();
   const { status, session, initiateLogin, switchAccount, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [showEula, setShowEula]     = useState(false);

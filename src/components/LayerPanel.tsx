@@ -961,7 +961,7 @@ function ColorPresetsSection({
 function ColorSepLayerSection({
   colors, visibility, onVisibilityChange,
   numColors, onNumColors, colorPriority, onColorPriority,
-  lockedColors, onLockedColors,
+  lockedColors, onLockedColors, onColorChange,
 }: {
   colors: RGB[];
   visibility: Record<string, boolean>;
@@ -972,6 +972,7 @@ function ColorSepLayerSection({
   onColorPriority: (v: number) => void;
   lockedColors: RGB[] | null;
   onLockedColors: (v: RGB[] | null) => void;
+  onColorChange: (ci: number, hex: string) => void;
 }) {
   return (
     <div style={{ borderBottom: '1px solid var(--border)' }}>
@@ -1039,8 +1040,17 @@ function ColorSepLayerSection({
             const hex = '#' + color.map(v => v.toString(16).padStart(2, '0')).join('');
             return (
               <div key={id} className="layer-card" style={{ marginBottom: 4 }}>
-                <div className="layer-swatch">
+                <div className="layer-swatch" style={{ position: 'relative', cursor: 'pointer' }} title="Click to change color">
                   <div className="layer-swatch-inner" style={{ background: hex }} />
+                  <input
+                    type="color"
+                    value={hex}
+                    onChange={(e) => onColorChange(ci, e.target.value)}
+                    style={{
+                      position: 'absolute', inset: 0, opacity: 0,
+                      cursor: 'pointer', width: '100%', height: '100%',
+                    }}
+                  />
                 </div>
                 <div className="layer-card-info">
                   <div className="layer-card-name">Color {ci + 1}</div>
@@ -1106,7 +1116,7 @@ export function LayerPanel() {
   const {
     layers, selectedLayerId, selectLayer, updateLayer,
     previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
-    paletteNumColors,
+    paletteNumColors, setPaletteColors,
     separationMode, setSeparationMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
     addLayer, removeLayer, duplicateLayer, paintMasks, paintMode,
@@ -1117,6 +1127,12 @@ export function LayerPanel() {
     colorSepLockedColors, setColorSepLockedColors,
   } = useStore();
 
+  const handleColorSepColorChange = (ci: number, hex: string) => {
+    const base = colorSepLockedColors ?? colorSepColors;
+    const updated: RGB[] = base.map((c, i) => i === ci ? hexToRgb(hex) : c);
+    setColorSepLockedColors(updated);
+  };
+
   const handleAutoPalette = () => {
     if (!previewImage) return;
     const k = paletteNumColors;
@@ -1126,11 +1142,18 @@ export function LayerPanel() {
     // Pool: raw extracted colors first, then 7 harmonic variants
     setPalettePool([rawPalette, ...harmonics]);
     applyPalette(0);
+    // In dither mode, paletteColors drives the engine — update it directly
+    if (separationMode === 'palette') setPaletteColors(baseColors);
   };
 
   const handleShuffle = () => {
     if (palettePool.length === 0) return;
-    applyPalette((activePaletteIdx + 1) % palettePool.length);
+    const nextIdx = (activePaletteIdx + 1) % palettePool.length;
+    applyPalette(nextIdx);
+    if (separationMode === 'palette') {
+      const nextPalette = palettePool[nextIdx];
+      if (nextPalette) setPaletteColors(nextPalette.map(hexToRgb));
+    }
   };
 
   return (
@@ -1243,6 +1266,7 @@ export function LayerPanel() {
               onColorPriority={setColorSepColorPriority}
               lockedColors={colorSepLockedColors}
               onLockedColors={setColorSepLockedColors}
+              onColorChange={handleColorSepColorChange}
             />
             <FabricSection />
             <ArtworkSection />
@@ -1356,6 +1380,7 @@ export function LayerPanel() {
                         type="color"
                         value={layer.color}
                         onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
                         onChange={(e) => { e.stopPropagation(); updateLayer(layer.id, { color: e.target.value }); }}
                       />
                     </div>
@@ -1462,16 +1487,6 @@ export function LayerPanel() {
               })}
             </div>
 
-            {/* Add layer button */}
-            {layers.length < 6 && (
-              <button
-                className="btn btn-ghost"
-                style={{ width: '100%', height: 28, fontSize: 10, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', marginTop: 2 }}
-                onClick={() => addLayer()}
-              >
-                + Add Layer
-              </button>
-            )}
 
             {/* Auto Palette */}
             {previewImage && (

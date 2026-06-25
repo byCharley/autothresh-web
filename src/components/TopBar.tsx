@@ -15,7 +15,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
-  const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings } = useStore();
+  const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -75,6 +75,21 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
             </svg>
             New
           </button>
+          {historyStack.length > 0 && (
+            <button
+              className="btn btn-ghost"
+              onClick={undo}
+              title={`Undo (${historyStack.length} step${historyStack.length !== 1 ? 's' : ''} available)`}
+              style={{ fontSize: 11, fontFamily: 'var(--font-mono)', opacity: 0.6 }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.6')}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: 4 }}>
+                <path d="M9 14L4 9l5-5"/><path d="M4 9h10a7 7 0 0 1 0 14h-1"/>
+              </svg>
+              Undo
+            </button>
+          )}
           <button
             className="btn btn-ghost"
             onClick={resetAllSettings}

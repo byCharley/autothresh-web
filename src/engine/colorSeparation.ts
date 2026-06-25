@@ -145,64 +145,41 @@ function hslToRgb(h: number, s: number, l: number): RGB {
   return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
 }
 
-// Build k colors from anchor hues, spreading lightness across each hue group
-function buildHarmonyPalette(anchorHues: number[], s: number, baseLightness: number, k: number): string[] {
-  const out: string[] = [];
-  const n = anchorHues.length;
-  for (let hi = 0; hi < n && out.length < k; hi++) {
-    const hue = anchorHues[hi];
-    const huesLeft = n - hi;
-    const slotsLeft = k - out.length;
-    const slots = Math.ceil(slotsLeft / huesLeft);
-    for (let j = 0; j < slots && out.length < k; j++) {
-      // Spread L from 0.22 up to baseLightness within each hue group
-      const l = slots === 1 ? baseLightness : 0.22 + ((baseLightness - 0.22) / (slots - 1)) * j;
-      out.push(rgbToHex(hslToRgb(hue, s, Math.max(0.12, Math.min(0.82, l)))));
-    }
-  }
-  return out;
-}
-
-function mostVibrant(colors: RGB[]): RGB {
-  let best = colors[0];
-  let bestS = 0;
-  for (const c of colors) {
-    const [, s] = rgbToHsl(c);
-    if (s > bestS) { bestS = s; best = c; }
-  }
-  return best;
-}
-
-// Returns 7 harmonious palette variants derived from image's dominant color.
-// Each palette is k hex strings. The caller prepends the raw extracted palette
-// as variant 0, making this a cycle of 8 total options for shuffle.
+// Returns 7 palette variants derived from the actual image colors (k-means base).
+// All variants keep the same hues/tones as the real image, just stylistically adjusted.
+// This is much better than pure color-theory harmonics which ignore image content.
 export function generateHarmonicPalettes(baseColors: RGB[], k: number): string[][] {
-  const anchor = mostVibrant(baseColors.length > 0 ? baseColors : [[120, 80, 40]]);
-  const [h, s, l] = rgbToHsl(anchor);
-  const ps = Math.max(0.45, Math.min(1.0, s));
-  const pl = Math.max(0.28, Math.min(0.62, l));
+  if (baseColors.length === 0) return [];
 
-  const analogousHues = (centerH: number) =>
-    Array.from({ length: k }, (_, i) => centerH - 25 + (50 / Math.max(k - 1, 1)) * i);
+  const shiftHue = (colors: RGB[], delta: number): string[] =>
+    colors.map(c => {
+      const [h, s, l] = rgbToHsl(c);
+      return rgbToHex(hslToRgb(h + delta, s, l));
+    });
+
+  const adjustSat = (colors: RGB[], factor: number): string[] =>
+    colors.map(c => {
+      const [h, s, l] = rgbToHsl(c);
+      return rgbToHex(hslToRgb(h, Math.max(0, Math.min(1, s * factor)), l));
+    });
+
+  const adjustContrast = (colors: RGB[], factor: number): string[] => {
+    const ls = colors.map(c => rgbToHsl(c)[2]);
+    const mid = ls.reduce((a, b) => a + b, 0) / ls.length;
+    return colors.map(c => {
+      const [h, s, l] = rgbToHsl(c);
+      return rgbToHex(hslToRgb(h, s, Math.max(0.05, Math.min(0.92, mid + (l - mid) * factor))));
+    });
+  };
 
   return [
-    // Analogous — colors adjacent on the wheel, naturally harmonious
-    buildHarmonyPalette(analogousHues(h), ps, pl, k),
-    // Complementary — two opposing hues, high contrast
-    buildHarmonyPalette([h, h + 180], ps, pl, k),
-    // Triadic — three evenly spaced hues
-    buildHarmonyPalette([h, h + 120, h + 240], ps, pl, k),
-    // Split-complementary — base + two neighbors of the complement
-    buildHarmonyPalette([h, h + 150, h + 210], ps, pl, k),
-    // Tetradic / Square — four evenly spaced hues
-    buildHarmonyPalette([h, h + 90, h + 180, h + 270], ps, pl, k),
-    // Monochromatic — same hue, lightness from dark to bright
-    Array.from({ length: k }, (_, i) => {
-      const li = 0.15 + (0.68 / Math.max(k - 1, 1)) * i;
-      return rgbToHex(hslToRgb(h, ps, li));
-    }),
-    // Warm-shifted analogous — nudge the whole scheme toward warm tones
-    buildHarmonyPalette(analogousHues(h + 22), ps, pl, k),
+    adjustSat(baseColors, 1.6),           // Vivid — same image colors, full saturation
+    adjustSat(baseColors, 0.45),          // Muted / earthy
+    shiftHue(baseColors, 18),             // Warm shift
+    shiftHue(baseColors, -18),            // Cool shift
+    adjustContrast(baseColors, 1.7),      // High contrast — wider lightness range
+    adjustContrast(baseColors, 0.4),      // Low contrast — closer tonal values
+    adjustSat(baseColors, 0.08),          // Near-monochrome / desaturated
   ];
 }
 

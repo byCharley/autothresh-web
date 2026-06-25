@@ -91,6 +91,110 @@ const DEFAULT_LAYERS: LayerConfig[] = [
   },
 ];
 
+export interface HistorySnapshot {
+  layers: LayerConfig[];
+  globalPattern: PatternConfig;
+  knockoutEnabled: boolean;
+  bgRemovalEnabled: boolean;
+  bgTolerance: number;
+  imageAdjustments: ImageAdjustments;
+  imageAdjustmentsPerMode: Record<string, ImageAdjustments>;
+  textureEnabled: boolean;
+  textureType: TextureType;
+  textureIntensity: number;
+  textureScale: number;
+  textureWidth: number;
+  textureSeed: number;
+  showRegistrationMarks: boolean;
+  regMarkPadding: number;
+  canvasColor: string;
+  showFabricBg: boolean;
+  separationMode: SeparationMode;
+  cmykParams: CmykParams;
+  cmykAngles: Record<string, number>;
+  cmykLpi: number;
+  cmykViewMode: 'composite' | 'plates';
+  cmykQuality: number | null;
+  cmykVisibility: Record<string, boolean>;
+  paletteNumColors: number;
+  paletteColors: RGB[];
+  paletteVisibility: Record<string, boolean>;
+  paletteLpi: number;
+  palettePattern: PatternType;
+  palettePatternScale: number;
+  paletteColorMode: boolean;
+  paletteDensity: number;
+  paletteAngle: number;
+  paletteSoftness: number;
+  colorSepNumColors: number;
+  colorSepColorPriority: number;
+  colorSepPattern: PatternType;
+  colorSepPatternScale: number;
+  colorSepPatternDensity: number;
+  colorSepPatternAngle: number;
+  colorSepLockedColors: RGB[] | null;
+  colorSepVisibility: Record<string, boolean>;
+  vectorNumColors: number;
+  vectorDetail: number;
+  vectorSmooth: number;
+  vectorInkColor: string;
+  vectorPathMode: 'spline' | 'polygon';
+  vectorMinSpeckle: number;
+}
+
+export function captureSnapshot(s: AppState): HistorySnapshot {
+  return {
+    layers: s.layers.map(l => ({ ...l })),
+    globalPattern: { ...s.globalPattern },
+    knockoutEnabled: s.knockoutEnabled,
+    bgRemovalEnabled: s.bgRemovalEnabled,
+    bgTolerance: s.bgTolerance,
+    imageAdjustments: { ...s.imageAdjustments },
+    imageAdjustmentsPerMode: { ...s.imageAdjustmentsPerMode },
+    textureEnabled: s.textureEnabled,
+    textureType: s.textureType,
+    textureIntensity: s.textureIntensity,
+    textureScale: s.textureScale,
+    textureWidth: s.textureWidth,
+    textureSeed: s.textureSeed,
+    showRegistrationMarks: s.showRegistrationMarks,
+    regMarkPadding: s.regMarkPadding,
+    canvasColor: s.canvasColor,
+    showFabricBg: s.showFabricBg,
+    separationMode: s.separationMode,
+    cmykParams: { ...s.cmykParams },
+    cmykAngles: { ...s.cmykAngles },
+    cmykLpi: s.cmykLpi,
+    cmykViewMode: s.cmykViewMode,
+    cmykQuality: s.cmykQuality,
+    cmykVisibility: { ...s.cmykVisibility },
+    paletteNumColors: s.paletteNumColors,
+    paletteColors: s.paletteColors.map(c => [...c] as RGB),
+    paletteVisibility: { ...s.paletteVisibility },
+    paletteLpi: s.paletteLpi,
+    palettePattern: s.palettePattern,
+    palettePatternScale: s.palettePatternScale,
+    paletteColorMode: s.paletteColorMode,
+    paletteDensity: s.paletteDensity,
+    paletteAngle: s.paletteAngle,
+    paletteSoftness: s.paletteSoftness,
+    colorSepNumColors: s.colorSepNumColors,
+    colorSepColorPriority: s.colorSepColorPriority,
+    colorSepPattern: s.colorSepPattern,
+    colorSepPatternScale: s.colorSepPatternScale,
+    colorSepPatternDensity: s.colorSepPatternDensity,
+    colorSepPatternAngle: s.colorSepPatternAngle,
+    colorSepLockedColors: s.colorSepLockedColors ? s.colorSepLockedColors.map(c => [...c] as RGB) : null,
+    colorSepVisibility: { ...s.colorSepVisibility },
+    vectorNumColors: s.vectorNumColors,
+    vectorDetail: s.vectorDetail,
+    vectorSmooth: s.vectorSmooth,
+    vectorInkColor: s.vectorInkColor,
+    vectorPathMode: s.vectorPathMode,
+    vectorMinSpeckle: s.vectorMinSpeckle,
+  };
+}
+
 interface AppState {
   theme: 'dark' | 'light';
 
@@ -158,7 +262,10 @@ interface AppState {
   // Vector mode
   vectorNumColors: number;
   vectorDetail: number;
+  vectorSmooth: number;
   vectorInkColor: string;
+  vectorPathMode: 'spline' | 'polygon';
+  vectorMinSpeckle: number;
   vectorSvg: string | null;
   vectorColors: string[];
 
@@ -179,6 +286,11 @@ interface AppState {
   isProcessing: boolean;
   soloLayerId: string | null;
   mockupOpen: boolean;
+
+  historyStack: HistorySnapshot[];
+  pushHistory: () => void;
+  pushHistorySnapshot: (snapshot: HistorySnapshot) => void;
+  undo: () => void;
 
   setTheme: (theme: 'dark' | 'light') => void;
   setOriginalImage: (img: ImageData, preview: ImageData, name: string) => void;
@@ -244,7 +356,10 @@ interface AppState {
 
   setVectorNumColors: (v: number) => void;
   setVectorDetail: (v: number) => void;
+  setVectorSmooth: (v: number) => void;
   setVectorInkColor: (v: string) => void;
+  setVectorPathMode: (v: 'spline' | 'polygon') => void;
+  setVectorMinSpeckle: (v: number) => void;
   setVectorSvg: (svg: string | null) => void;
   setVectorColors: (colors: string[]) => void;
 
@@ -325,7 +440,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   vectorNumColors: 8,
   vectorDetail: 3,
+  vectorSmooth: 5,
   vectorInkColor: '#ffffff',
+  vectorPathMode: 'spline' as 'spline' | 'polygon',
+  vectorMinSpeckle: 0,
   vectorSvg: null,
   vectorColors: [],
 
@@ -346,6 +464,19 @@ export const useStore = create<AppState>((set, get) => ({
   soloLayerId: null,
   mockupOpen: false,
   presetsOpen: false,
+
+  historyStack: [],
+  pushHistory: () => set((s) => ({
+    historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20),
+  })),
+  pushHistorySnapshot: (snapshot) => set((s) => ({
+    historyStack: [snapshot, ...s.historyStack].slice(0, 20),
+  })),
+  undo: () => set((s) => {
+    if (s.historyStack.length === 0) return s;
+    const [prev, ...rest] = s.historyStack;
+    return { ...prev, historyStack: rest };
+  }),
 
   setTheme: (theme) => { localStorage.setItem('at-theme', theme); set({ theme }); },
   setOriginalImage: (originalImage, previewImage, imageFileName) =>
@@ -385,6 +516,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({ imageAdjustments: { ...s.imageAdjustments, curves } })),
   resetImageAdjustments: () => set({ imageAdjustments: { ...DEFAULT_IMAGE_ADJ } }),
   resetAllSettings: () => set((s) => ({
+    historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20),
     // Keeps: originalImage, previewImage, imageFileName, separationMode, canvasColor, showFabricBg, document dims, theme
     layers: DEFAULT_LAYERS,
     globalPattern: DEFAULT_GLOBAL_PATTERN,
@@ -426,6 +558,7 @@ export const useStore = create<AppState>((set, get) => ({
     colorSepLockedColors: null,
     vectorNumColors: 8,
     vectorDetail: 3,
+    vectorSmooth: 5,
     vectorInkColor: '#ffffff',
     paintMasks: {},
     soloLayerId: null,
@@ -439,7 +572,7 @@ export const useStore = create<AppState>((set, get) => ({
       ...l,
       color: i < palette.length ? palette[i] : l.color,
     }));
-    return { layers: updatedLayers, activePaletteIdx: idx };
+    return { historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20), layers: updatedLayers, activePaletteIdx: idx };
   }),
   addLayer: () => set((s) => {
     if (s.layers.length >= 6) return s;
@@ -473,6 +606,7 @@ export const useStore = create<AppState>((set, get) => ({
     const newLayers = s.layers.filter((l) => l.id !== id);
     const { [id]: _removed, ...remainingMasks } = s.paintMasks;
     return {
+      historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20),
       layers: redistributeThresholds(newLayers),
       paintMasks: remainingMasks,
       selectedLayerId: s.selectedLayerId === id
@@ -506,6 +640,7 @@ export const useStore = create<AppState>((set, get) => ({
   setPaintMode: (paintMode) => set({ paintMode }),
   setBrushSize: (brushSize) => set({ brushSize: Math.max(2, Math.min(120, brushSize)) }),
   setSeparationMode: (separationMode) => { localStorage.setItem('at-mode', separationMode); return set((s) => ({
+    historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20),
     separationMode,
     // Swap image adjustments: save current mode's settings, restore new mode's
     imageAdjustments: s.imageAdjustmentsPerMode[separationMode] ?? { ...DEFAULT_IMAGE_ADJ },
@@ -529,7 +664,7 @@ export const useStore = create<AppState>((set, get) => ({
   setPaletteColors: (paletteColors) => set((s) => {
     const vis: Record<string, boolean> = {};
     paletteColors.forEach((_, i) => { vis[`palette-${i}`] = s.paletteVisibility[`palette-${i}`] ?? true; });
-    return { paletteColors, paletteVisibility: vis };
+    return { historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20), paletteColors, paletteVisibility: vis };
   }),
   setPaletteColor: (idx, color) => set((s) => {
     const next = [...s.paletteColors];
@@ -548,11 +683,14 @@ export const useStore = create<AppState>((set, get) => ({
 
   setVectorNumColors: (vectorNumColors) => set({ vectorNumColors }),
   setVectorDetail: (vectorDetail) => set({ vectorDetail }),
+  setVectorSmooth: (vectorSmooth) => set({ vectorSmooth }),
   setVectorInkColor: (vectorInkColor) => set({ vectorInkColor }),
+  setVectorPathMode: (vectorPathMode) => set({ vectorPathMode }),
+  setVectorMinSpeckle: (vectorMinSpeckle) => set({ vectorMinSpeckle }),
   setVectorSvg: (vectorSvg) => set({ vectorSvg }),
   setVectorColors: (vectorColors) => set({ vectorColors }),
 
-  setColorSepNumColors:      (colorSepNumColors)      => set({ colorSepNumColors }),
+  setColorSepNumColors:      (colorSepNumColors)      => set((s) => ({ historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20), colorSepNumColors })),
   setColorSepColorPriority:  (colorSepColorPriority)  => set({ colorSepColorPriority }),
   setColorSepPattern:        (colorSepPattern)        => set({ colorSepPattern }),
   setColorSepPatternScale:   (colorSepPatternScale)   => set({ colorSepPatternScale }),

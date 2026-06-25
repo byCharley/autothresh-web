@@ -4,11 +4,11 @@ import {
   processImage, applyKnockout, renderComposite, scaleImageData, scaleImageDataExact,
   computeBackgroundMask, detectBackgroundColor, hexToRgb, registerPatternTexture,
   cmykSeparate, renderCmykComposite, renderCmykSmooth, computeCmykQuality,
-  garmentRgbFromParam, contrastColor, autoImageAdjustments,
+  garmentRgbFromParam, contrastColor, autoImageAdjustments, applyGlobalAdjustments,
 } from '../engine/imageProcessor';
 import { kMeansColors, paletteSeparate, renderPaletteComposite, bayerOrder } from '../engine/colorSeparation';
 import { colorSeparate, renderColorSepComposite } from '../engine/colorSeparator';
-import type { LayerConfig, PatternConfig } from '../engine/imageProcessor';
+import type { LayerConfig, PatternConfig, ImageAdjustments } from '../engine/imageProcessor';
 import { generateTextureMask } from '../engine/textureGenerator';
 import { loadAllTextures } from '../engine/textureLoader';
 import { traceImageToSVG } from '../engine/vectorTracer';
@@ -72,7 +72,7 @@ export function CanvasView() {
     isProcessing, setOriginalImage, setProcessedLayers, setProcessedLayerDims, setDitherComposite, setIsProcessing, setCanvasColor, setImageAdjustment,
     setPaintMask, setPaintMode, setBrushSize, clearPaintMask,
     soloLayerId, setCmykQuality,
-    vectorNumColors, vectorDetail, vectorInkColor, vectorSvg, setVectorSvg, setVectorColors,
+    vectorNumColors, vectorDetail, vectorSmooth, vectorInkColor, vectorPathMode, vectorMinSpeckle, vectorSvg, setVectorSvg, setVectorColors,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, setColorSepColors,
     colorSepLockedColors,
@@ -186,6 +186,35 @@ export function CanvasView() {
     return () => clearTimeout(dimTimerRef.current);
   }, [zoom]);
 
+  // Apply image adjustments to a full RGB ImageData (used by color-sep mode).
+  // Adjusts each pixel's luminance proportionally, preserving hue/saturation.
+  function applyAdjToImage(img: ImageData, adj: ImageAdjustments): ImageData {
+    const isNoop = adj.adjMode === 'basic' &&
+      adj.exposure === 0 && adj.contrast === 0 &&
+      adj.shadows === 0 && adj.highlights === 0 && adj.blur === 0;
+    if (isNoop) return img;
+    const { data, width, height } = img;
+    const result = new ImageData(new Uint8ClampedArray(data), width, height);
+    const rd = result.data;
+    const n = width * height;
+    for (let i = 0; i < n; i++) {
+      if (rd[i * 4 + 3] < 128) continue;
+      const r = rd[i * 4], g = rd[i * 4 + 1], b = rd[i * 4 + 2];
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      const adjLum = applyGlobalAdjustments(lum, adj);
+      if (lum < 1) {
+        const v = adjLum | 0;
+        rd[i * 4] = v; rd[i * 4 + 1] = v; rd[i * 4 + 2] = v;
+      } else {
+        const scale = adjLum / lum;
+        rd[i * 4]     = Math.min(255, (r * scale + 0.5)) | 0;
+        rd[i * 4 + 1] = Math.min(255, (g * scale + 0.5)) | 0;
+        rd[i * 4 + 2] = Math.min(255, (b * scale + 0.5)) | 0;
+      }
+    }
+    return result;
+  }
+
   // Main processing effect.
   // Runs only when settings change — never on zoom. Zoom is a pure CSS transform.
   // Always processes at MAX_PREVIEW_DIM so the rendered canvas is stable across
@@ -193,6 +222,8 @@ export function CanvasView() {
   // not a re-render at higher resolution).
   useEffect(() => {
     if (!originalImage) return;
+    let cancelled = false;
+    let vectorTraceRunning = false;
     let rafId: number | undefined;
     const tid = setTimeout(() => {
       setIsProcessing(true);
@@ -343,6 +374,7 @@ export function CanvasView() {
         } else if (separationMode === 'color-sep') {
           setDitherComposite(null);
 
+          const adjScaled = applyAdjToImage(artScaled, imageAdjustments);
           const colorSepSettings = {
             numColors:      colorSepNumColors,
             colorPriority:  colorSepColorPriority / 100,
@@ -352,14 +384,14 @@ export function CanvasView() {
             patternAngle:   colorSepPatternAngle,
           };
           const { layers: csLayers, colors: csColors } = colorSeparate(
-            artScaled, colorSepSettings, localBgMask,
+            adjScaled, colorSepSettings, localBgMask,
             colorSepLockedColors ?? undefined,
           );
           setColorSepColors(csColors);
           setProcessedLayers(csLayers.filter(l => colorSepVisibility[l.id] !== false));
 
           artComposite = renderColorSepComposite(
-            artScaled, csColors, colorSepVisibility, colorSepSettings, localBgMask,
+            adjScaled, csColors, colorSepVisibility, colorSepSettings, localBgMask,
           );
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
@@ -376,16 +408,30 @@ export function CanvasView() {
             }
           }
 
-          const result = traceImageToSVG(traceData, {
+          // Keep the processing spinner up until VTracer finishes.
+          // setIsProcessing(false) is skipped at the end of the RAF for this mode.
+          vectorTraceRunning = true;
+          traceImageToSVG(traceData, {
             numColors: vectorNumColors,
             detail: vectorDetail,
+            smooth: vectorSmooth,
             inkColor: vectorInkColor,
+            pathMode: vectorPathMode,
+            minSpeckle: vectorMinSpeckle,
+          }).then(result => {
+            if (!cancelled) {
+              setVectorSvg(result.svgString);
+              setVectorColors(result.colors);
+              setIsProcessing(false);
+            }
+          }).catch(err => {
+            console.error('[VTracer] trace failed:', err);
+            if (!cancelled) setIsProcessing(false);
           });
-          setVectorSvg(result.svgString);
-          setVectorColors(result.colors);
 
-          // Canvas shows only the fabric background — SVG is overlaid in JSX
-          artComposite = new ImageData(artPrevW, artPrevH);
+          // Show the original image while tracing so the canvas is never blank.
+          // The SVG overlay renders on top once VTracer finishes.
+          artComposite = traceData;
 
         } else {
           if (vectorSvg !== null) { setVectorSvg(null); setVectorColors([]); }
@@ -495,10 +541,10 @@ export function CanvasView() {
           setRenderedAtDim(MAX_PREVIEW_DIM);
           setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
         }
-        setIsProcessing(false);
+        if (!vectorTraceRunning) setIsProcessing(false);
       });
     }, 40);
-    return () => { clearTimeout(tid); if (rafId !== undefined) cancelAnimationFrame(rafId); };
+    return () => { cancelled = true; clearTimeout(tid); if (rafId !== undefined) cancelAnimationFrame(rafId); };
   }, [
     originalImage, layers, knockoutEnabled, globalPattern,
     bgRemovalEnabled, bgTolerance, canvasColor, showFabricBg, imageAdjustments,
@@ -512,7 +558,7 @@ export function CanvasView() {
     splitView,
     paintMasks,
     soloLayerId,
-    vectorNumColors, vectorDetail, vectorInkColor,
+    vectorNumColors, vectorDetail, vectorSmooth, vectorInkColor, vectorPathMode, vectorMinSpeckle,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, colorSepLockedColors,
     // renderDim intentionally excluded — zoom must never trigger a reprocess
@@ -788,7 +834,10 @@ export function CanvasView() {
   //   renderedAtDim = MAX_PREVIEW_DIM * zoom → cssScale = 1  (1:1, sharp)
   //   renderedAtDim = MAX_RENDER_DIM (cap hit) → cssScale > 1  (nearest-neighbor)
   const cssScale    = zoom * MAX_PREVIEW_DIM / renderedAtDim;
-  const isPixelated = cssScale > 1.02;
+  // Palette/dither mode always uses nearest-neighbor: bilinear interpolation blends adjacent
+  // ink dots (e.g. red + blue → purple), which makes fine dither patterns look blurry.
+  // Physical ink dots are either on or off — nearest-neighbor preserves that at any zoom.
+  const isPixelated = cssScale > 1.02 || separationMode === 'palette';
 
   // Artboard box style for empty state.
   const artboardBoxStyle: React.CSSProperties = artboardSize.w > 0

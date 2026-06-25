@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import type { LevelsAdjustment, CurvePoint, AdjMode } from '../engine/imageProcessor';
 import { buildCurvesLUT } from '../engine/adjustments';
+import { useStore } from '../store/useStore';
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
 
@@ -75,14 +76,16 @@ function LevelsBar({ lv, onChange }: LevelsBarProps) {
     const color = id === 'inBlack' || id === 'outBlack' ? '#e0e0e0'
                 : id === 'inWhite' || id === 'outWhite' ? '#ffffff'
                 : 'var(--accent)';
+    const isWhiteHandle = id === 'inWhite' || id === 'outWhite';
+    const stroke = isWhiteHandle ? '#777' : 'none';
     const s: React.CSSProperties = {
       position: 'absolute', left, transform: 'translateX(-50%)',
       cursor: 'ew-resize', userSelect: 'none', touchAction: 'none',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
     };
     const marker =
-      shape === 'down'    ? <svg width="10" height="9"><polygon points="5,9 0,0 10,0" fill={color} /></svg>
-      : shape === 'up'    ? <svg width="10" height="9"><polygon points="5,0 0,9 10,9" fill={color} /></svg>
+      shape === 'down'    ? <svg width="10" height="9"><polygon points="5,8 1,1 9,1" fill={color} stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" /></svg>
+      : shape === 'up'    ? <svg width="10" height="9"><polygon points="5,1 1,8 9,8" fill={color} stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" /></svg>
       : /* diamond */       <svg width="10" height="10"><polygon points="5,0 10,5 5,10 0,5" fill={color} /></svg>;
     return (
       <div key={id} style={s} onPointerDown={(e) => { e.preventDefault(); dragging.current = id; e.currentTarget.setPointerCapture(e.pointerId); }}>

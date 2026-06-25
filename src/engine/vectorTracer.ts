@@ -1,9 +1,13 @@
-import ImageTracer from 'imagetracerjs';
+import vtracerInit, { to_svg } from 'vtracer-wasm';
+import { kMeansColors, type RGB } from './colorSeparation';
 
 export interface VectorTraceOptions {
   numColors: number;
-  detail: number; // 1 (smooth) – 10 (tight)
+  detail: number;    // 1 (smooth/loose) – 10 (tight/detailed)
+  smooth?: number;   // 1 (max smooth) – 10 (sharpest), default 5
   inkColor?: string; // used when numColors === 1
+  pathMode?: 'spline' | 'polygon';
+  minSpeckle?: number; // 0–20, extra speckle suppression on top of auto-calculated filterSpeckle
 }
 
 export interface VectorTraceResult {
@@ -11,117 +15,324 @@ export interface VectorTraceResult {
   colors: string[];
 }
 
-// detail 1..10 → path error tolerance. High = fewer nodes = smoother curves.
-const DETAIL_TO_LTRES = [25, 15, 9, 5.5, 3.5, 2, 1.2, 0.75, 0.4, 0.1];
-
-export function traceImageToSVG(
-  imageData: ImageData,
-  options: VectorTraceOptions,
-): VectorTraceResult {
-  const { numColors, detail, inkColor = '#000000' } = options;
-  const ltres = DETAIL_TO_LTRES[Math.max(0, Math.min(9, detail - 1))];
-
-  if (numColors === 1) {
-    return traceSingleColor(imageData, ltres, inkColor);
+// WASM served from /public/vtracer.wasm. Pass the fetch Response directly to
+// vtracerInit so it uses WebAssembly.instantiateStreaming (async, no size limit).
+// initSync is avoided because Chrome blocks synchronous compilation > 4KB.
+let _vtracerReady: Promise<void> | null = null;
+function ensureVTracer(): Promise<void> {
+  if (!_vtracerReady) {
+    _vtracerReady = fetch('/vtracer.wasm')
+      .then(r => {
+        if (!r.ok) throw new Error(`WASM fetch failed ${r.status}`);
+        return vtracerInit({ module_or_path: r });
+      })
+      .then(() => console.log('[VTracer] ready'))
+      .catch(err => {
+        console.error('[VTracer] init failed:', err);
+        _vtracerReady = null;
+        throw err;
+      });
   }
-
-  const svgString = ImageTracer.imagedataToSVG(imageData, {
-    numberofcolors: numColors,
-    ltres,
-    qtres: ltres,
-    pathomit: 16,
-    strokewidth: 0,
-    linefilter: false,
-    rightangleenhance: false,
-    colorquantcycles: 3,
-    blurradius: 1,
-    blurdelta: 20,
-    layering: 0,
-    desc: false,
-    viewbox: true,
-    colorsampling: 2,
-    roundcoords: 1,
-  });
-
-  return { svgString, colors: extractColorsFromSVG(svgString) };
+  return _vtracerReady;
 }
 
-// ─── 1-color path ─────────────────────────────────────────────────────────────
-// NOTE: imagetracerjs outputs fill="rgb(r,g,b)" with a separate opacity="a/255"
-// attribute — NOT hex. String-replacing "#000000" never matches. Instead, we
-// bake the ink color directly into the binary pixels so the SVG is already
-// colored correctly from the trace step.
+// ─── Auto color-count detection ───────────────────────────────────────────────
 
-function traceSingleColor(
-  src: ImageData,
-  ltres: number,
-  inkColor: string,
-): VectorTraceResult {
-  const { width, height } = src;
+export function detectOptimalColorCount(
+  imageData: ImageData,
+  bgMask: Uint8Array | null,
+  maxK = 12,
+): number {
+  const colors = kMeansColors(imageData, maxK, 12345, bgMask);
+  const { data, width, height } = imageData;
   const n = width * height;
-  const [ir, ig, ib] = hexToRgbArr(inkColor);
+  const step = Math.max(1, Math.floor(n / 3000));
+  const pops = new Array(maxK).fill(0);
 
-  // Decide binarization strategy based on ink luminance.
-  // For near-white inks: trace only light pixels (so black badge bodies don't fill).
-  // For near-black inks: trace only dark pixels (so white backgrounds don't fill).
-  // For mid-tone inks: alpha-only (rely on bg removal to strip the background).
-  const inkLum = (0.299 * ir + 0.587 * ig + 0.114 * ib) / 255;
-  const traceLightPixels = inkLum > 0.75;   // white/cream inks → trace light areas
-  const traceDarkPixels  = inkLum < 0.25;   // black/dark inks  → trace dark areas
-
-  // Blur the alpha channel with radius=2 to feather staircase pixel edges
-  const smoothAlpha = blurAlpha(src, 2);
-
-  const binary = new ImageData(width, height);
-  for (let i = 0; i < n; i++) {
-    if (smoothAlpha[i] < 128) {
-      // Transparent/bg-removed → always skip
-      binary.data[i * 4] = 255; binary.data[i * 4 + 1] = 255;
-      binary.data[i * 4 + 2] = 255; binary.data[i * 4 + 3] = 0;
-      continue;
+  for (let i = 0; i < n; i += step) {
+    if (data[i * 4 + 3] < 128) continue;
+    if (bgMask && bgMask[i] === 255) continue;
+    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+    let minD = Infinity, best = 0;
+    for (let c = 0; c < colors.length; c++) {
+      const dr = r - colors[c][0], dg = g - colors[c][1], db = b - colors[c][2];
+      const d = dr * dr + dg * dg + db * db;
+      if (d < minD) { minD = d; best = c; }
     }
+    pops[best]++;
+  }
 
-    // For extreme-luminance inks, filter by pixel luminance so that opaque
-    // pixels of the "wrong" brightness (e.g. the black badge body behind a
-    // white logo) don't flood the silhouette with the ink color.
-    if (traceLightPixels || traceDarkPixels) {
-      const r = src.data[i * 4], g = src.data[i * 4 + 1], b = src.data[i * 4 + 2];
-      const pixLum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      const isInk = traceLightPixels ? pixLum > 0.5 : pixLum <= 0.5;
-      if (!isInk) {
-        binary.data[i * 4] = 255; binary.data[i * 4 + 1] = 255;
-        binary.data[i * 4 + 2] = 255; binary.data[i * 4 + 3] = 0;
-        continue;
+  const total = pops.reduce((a, b) => a + b, 0);
+  if (total === 0) return 4;
+
+  const sorted = pops.map((p, i) => ({ i, p })).sort((a, b) => b.p - a.p);
+  const kept: number[] = [];
+
+  for (const { i, p } of sorted) {
+    if (p / total < 0.008) continue;
+    let isDuplicate = false;
+    for (const j of kept) {
+      const [r1, g1, b1] = colors[i];
+      const [r2, g2, b2] = colors[j];
+      const dist = Math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2);
+      if (dist < 28) { isDuplicate = true; break; }
+    }
+    if (!isDuplicate) kept.push(i);
+  }
+
+  return Math.max(2, Math.min(maxK, kept.length));
+}
+
+// ─── Main trace function (async — WASM init required) ─────────────────────────
+
+export async function traceImageToSVG(
+  imageData: ImageData,
+  options: VectorTraceOptions,
+): Promise<VectorTraceResult> {
+  console.log('[VTracer] starting trace', options);
+  await ensureVTracer();
+  console.log('[VTracer] WASM ready');
+
+  const { numColors, detail, smooth = 5, inkColor = '#000000', pathMode = 'spline', minSpeckle = 0 } = options;
+
+  // smooth=1 → max smooth curves; smooth=10 → sharpest / most angular
+  const cornerThreshold = Math.round(90 - (smooth - 1) * 3);        // sm=1:90, sm=10:63
+  const filterSpeckle   = Math.max(4, 4 + (11 - smooth) * 2) + minSpeckle * 2; // sm=1:24, sm=10:4 + extra
+  const spliceThreshold = Math.round(15 + smooth * 3);               // sm=1:18, sm=10:45
+  // detail=1 → loose/smooth paths; detail=10 → tight/detailed paths
+  const lengthThreshold = Math.max(1.0, 8.0 - (detail - 1) * 0.7);  // d=1:8.0, d=10:1.7
+  const cleanPasses     = 1 + Math.floor((10 - smooth) * 0.4);       // sm=1:4, sm=5:3, sm=10:1
+
+  const vtBase = {
+    // Field names: 'binary' matches GitHub source, 'binarymode' matches compiled WASM strings.
+    // Passing both is safe — serde ignores unknown fields (no deny_unknown_fields).
+    binary: false,
+    binarymode: false,
+    // 'mode' is a required Config field in the source: polygon | spline | pixel
+    mode: pathMode,
+    hierarchical: 'cutout',
+    cornerThreshold,
+    lengthThreshold,
+    spliceThreshold,
+    filterSpeckle,
+    maxIterations: 10,
+    colorPrecision: 6,
+    layerDifference: 16,
+    pathPrecision: 3,
+  };
+
+  if (numColors === 1) {
+    return traceSingleColor(imageData, inkColor, vtBase);
+  }
+
+  // Per-layer binary tracing: trace each color as a separate black-on-white
+  // binary image and combine the paths. This bypasses VTracer's multi-color
+  // code path (binarymode: false) which panics on complex images regardless
+  // of hierarchical mode setting.
+  const colors      = kMeansColors(imageData, numColors, 12345, null);
+  const assignments = posterizeAndClean(imageData, colors, cleanPasses);
+
+  const { width, height } = imageData;
+  const n = width * height;
+  const svgInner: string[] = [];
+
+  for (let c = 0; c < colors.length; c++) {
+    const binary = new ImageData(width, height);
+    for (let i = 0; i < n; i++) {
+      if (assignments[i] === c) {
+        // Ink pixel → black
+        binary.data[i * 4 + 3] = 255;
+      } else {
+        // Everything else → white background
+        binary.data[i * 4]     = 255;
+        binary.data[i * 4 + 1] = 255;
+        binary.data[i * 4 + 2] = 255;
+        binary.data[i * 4 + 3] = 255;
       }
     }
 
-    binary.data[i * 4]     = ir;
-    binary.data[i * 4 + 1] = ig;
-    binary.data[i * 4 + 2] = ib;
+    console.log('[VTracer] tracing layer', c + 1, '/', colors.length);
+    let layerSvg: string;
+    try {
+      layerSvg = to_svg(
+        new Uint8Array(binary.data.buffer),
+        width,
+        height,
+        { ...vtBase, binary: true, binarymode: true },
+      );
+    } catch (err) {
+      console.error('[VTracer] layer', c, 'failed, skipping:', err);
+      continue;
+    }
+
+    const hex = '#' + colors[c].map(v => v.toString(16).padStart(2, '0')).join('');
+    const paths = extractSvgPaths(layerSvg, hex);
+    if (paths) svgInner.push(paths);
+  }
+
+  const svgString = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    ...svgInner,
+    `</svg>`,
+  ].join('\n');
+
+  console.log('[VTracer] SVG length:', svgString.length);
+
+  const hexColors = colors.map(([r, g, b]) =>
+    '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')
+  );
+
+  return { svgString, colors: hexColors };
+}
+
+// ─── SVG path extractor ───────────────────────────────────────────────────────
+
+function extractSvgPaths(svgString: string, fillColor: string): string {
+  // Strip outer <svg> wrapper
+  const inner = svgString
+    .replace(/^[\s\S]*?<svg[^>]*>\s*/, '')
+    .replace(/\s*<\/svg>[\s\S]*$/, '');
+
+  // Remove white background paths/rects that VTracer emits as a backdrop
+  const noWhiteBg = inner
+    .replace(/<path[^>]*fill="#[Ff]{6}"[^>]*\/>/g, '')
+    .replace(/<path[^>]*fill="white"[^>]*\/>/g, '')
+    .replace(/<rect[^>]*\/>/g, '');
+
+  // Recolor black → actual ink color
+  return noWhiteBg
+    .replace(/fill="#000000"/gi, `fill="${fillColor}"`)
+    .replace(/fill="black"/gi, `fill="${fillColor}"`)
+    .trim();
+}
+
+// ─── Single-color binary trace ────────────────────────────────────────────────
+
+async function traceSingleColor(
+  imageData: ImageData,
+  inkColor: string,
+  vtBase: object,
+): Promise<VectorTraceResult> {
+  const { width, height } = imageData;
+  const n = width * height;
+  const [ir, ig, ib] = hexToRgbArr(inkColor);
+  const inkLum = (0.299 * ir + 0.587 * ig + 0.114 * ib) / 255;
+
+  // Build black-on-white binary image: ink pixels → black, rest → white
+  const binary = new ImageData(width, height);
+  for (let i = 0; i < n; i++) {
+    if (imageData.data[i * 4 + 3] < 32) {
+      binary.data[i * 4]     = 255;
+      binary.data[i * 4 + 1] = 255;
+      binary.data[i * 4 + 2] = 255;
+      binary.data[i * 4 + 3] = 255;
+      continue;
+    }
+    const r = imageData.data[i * 4], g = imageData.data[i * 4 + 1], b = imageData.data[i * 4 + 2];
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    // Dark ink → trace dark pixels; light ink → trace light pixels
+    const isInk = inkLum < 0.5 ? lum < 0.5 : lum > 0.5;
+    binary.data[i * 4]     = isInk ? 0 : 255;
+    binary.data[i * 4 + 1] = isInk ? 0 : 255;
+    binary.data[i * 4 + 2] = isInk ? 0 : 255;
     binary.data[i * 4 + 3] = 255;
   }
 
-  const svgString = ImageTracer.imagedataToSVG(binary, {
-    numberofcolors: 2,
-    pal: [
-      { r: ir,  g: ig,  b: ib,  a: 255 },
-      { r: 255, g: 255, b: 255, a: 0   },
-    ],
-    ltres,
-    qtres: ltres,
-    pathomit: 32,
-    strokewidth: 0,
-    linefilter: false,
-    rightangleenhance: false,
-    colorquantcycles: 1,
-    blurradius: 0,
-    layering: 0,
-    desc: false,
-    viewbox: true,
-    roundcoords: 1,
-  });
+  const rawSvg = to_svg(
+    new Uint8Array(binary.data.buffer),
+    width,
+    height,
+    { ...vtBase, binary: true, binarymode: true },
+  );
 
-  return { svgString, colors: [toHex6(inkColor)] };
+  const hex = '#' + [ir, ig, ib].map(v => v.toString(16).padStart(2, '0')).join('');
+  // Binary mode traces black; recolor with actual ink color
+  const svgString = rawSvg
+    .replace(/fill="#000000"/g, `fill="${hex}"`)
+    .replace(/fill="rgb\(0,0,0\)"/g, `fill="${hex}"`);
+
+  return { svgString, colors: [hex] };
+}
+
+// ─── Posterize + mode filter ──────────────────────────────────────────────────
+
+function posterizeAndClean(
+  imageData: ImageData,
+  colors: RGB[],
+  passes: number,
+): Uint8Array {
+  const { data, width, height } = imageData;
+  const n = width * height;
+  const k = colors.length;
+
+  const assignments = new Uint8Array(n);
+  assignments.fill(255); // 255 = transparent
+
+  for (let i = 0; i < n; i++) {
+    if (data[i * 4 + 3] < 32) continue;
+    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+    let minD = Infinity, best = 0;
+    for (let c = 0; c < k; c++) {
+      const dr = r - colors[c][0], dg = g - colors[c][1], db = b - colors[c][2];
+      const d = dr * dr + dg * dg + db * db;
+      if (d < minD) { minD = d; best = c; }
+    }
+    assignments[i] = best;
+  }
+
+  const tmp    = new Uint8Array(n);
+  const counts = new Uint16Array(k);
+
+  for (let p = 0; p < passes; p++) {
+    tmp.set(assignments);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        if (assignments[idx] === 255) continue;
+        counts.fill(0);
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const a = assignments[(y + dy) * width + (x + dx)];
+            if (a < 255) counts[a]++;
+          }
+        }
+        let max = 0, mode = assignments[idx];
+        for (let c = 0; c < k; c++) {
+          if (counts[c] > max) { max = counts[c]; mode = c; }
+        }
+        tmp[idx] = mode;
+      }
+    }
+    assignments.set(tmp);
+  }
+
+  // Gap-fill: transparent seams between color regions → majority neighbor color
+  tmp.set(assignments);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const idx = y * width + x;
+      if (assignments[idx] !== 255) continue;
+      counts.fill(0);
+      let colored = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dy && !dx) continue;
+          const a = assignments[(y + dy) * width + (x + dx)];
+          if (a < 255) { counts[a]++; colored++; }
+        }
+      }
+      if (colored >= 5) {
+        let max = 0, mode = 255;
+        for (let c = 0; c < k; c++) {
+          if (counts[c] > max) { max = counts[c]; mode = c; }
+        }
+        if (mode < 255) tmp[idx] = mode;
+      }
+    }
+  }
+  assignments.set(tmp);
+
+  return assignments;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -131,51 +342,3 @@ function hexToRgbArr(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-// Separable box blur on the alpha channel. O(n × 2r+1) per axis.
-function blurAlpha(imageData: ImageData, radius: number): Uint8ClampedArray {
-  const { data, width, height } = imageData;
-  const src = new Uint8ClampedArray(width * height);
-  for (let i = 0; i < src.length; i++) src[i] = data[i * 4 + 3];
-
-  const tmp = new Uint8ClampedArray(src.length);
-  const out = new Uint8ClampedArray(src.length);
-  const d   = radius * 2 + 1;
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      let sum = 0;
-      for (let kx = -radius; kx <= radius; kx++) {
-        sum += src[y * width + Math.max(0, Math.min(width - 1, x + kx))];
-      }
-      tmp[y * width + x] = Math.round(sum / d);
-    }
-  }
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      let sum = 0;
-      for (let ky = -radius; ky <= radius; ky++) {
-        sum += tmp[Math.max(0, Math.min(height - 1, y + ky)) * width + x];
-      }
-      out[y * width + x] = Math.round(sum / d);
-    }
-  }
-  return out;
-}
-
-function toHex6(color: string): string {
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : '#000000';
-}
-
-function extractColorsFromSVG(svg: string): string[] {
-  // imagetracerjs outputs fill="rgb(r,g,b)" with a separate opacity="X" attribute.
-  // We pair them to exclude fully-transparent background paths.
-  const seen = new Set<string>();
-  const re = /fill="rgb\((\d+),(\d+),(\d+)\)"[^>]*opacity="([\d.]+)"/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(svg)) !== null) {
-    if (parseFloat(m[4]) < 0.01) continue; // skip transparent (background)
-    const hex = '#' + [m[1], m[2], m[3]].map(v => parseInt(v).toString(16).padStart(2, '0')).join('');
-    seen.add(hex);
-  }
-  return Array.from(seen);
-}

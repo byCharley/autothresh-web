@@ -19,11 +19,15 @@
     "@supabase/supabase-js": "^2.108.2",
     "ag-psd": "^30.2.0",
     "file-saver": "^2.0.5",
+    "fit-curve": "^0.2.0",
     "imagetracerjs": "^1.2.6",
     "jszip": "^3.10.1",
     "pdf-lib": "^1.17.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "simplify-js": "^1.2.4",
+    "vite-plugin-wasm": "^3.6.0",
+    "vtracer-wasm": "^0.1.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

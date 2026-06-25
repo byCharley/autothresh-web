@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import type { PatternType } from '../engine/imageProcessor';
 import { autoDetectPatternSettings } from '../engine/imageProcessor';
 import { getBayer } from '../engine/colorSeparation';
+import { detectOptimalColorCount } from '../engine/vectorTracer';
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -676,19 +677,69 @@ function VectorSection() {
     separationMode,
     vectorNumColors, setVectorNumColors,
     vectorDetail, setVectorDetail,
+    vectorSmooth, setVectorSmooth,
     vectorInkColor, setVectorInkColor,
+    vectorPathMode, setVectorPathMode,
+    vectorMinSpeckle, setVectorMinSpeckle,
     vectorSvg, vectorColors,
+    previewImage, bgMask,
   } = useStore();
+
+  const [detecting, setDetecting] = useState(false);
+
   if (separationMode !== 'vector') return null;
 
   const fileSizeKb = vectorSvg ? Math.round(vectorSvg.length / 1024) : null;
 
+  const handleAutoDetect = () => {
+    if (!previewImage || detecting) return;
+    setDetecting(true);
+    setTimeout(() => {
+      const count = detectOptimalColorCount(previewImage, bgMask);
+      setVectorNumColors(count);
+      setDetecting(false);
+    }, 10);
+  };
+
   return (
     <Section title="Vector Settings">
-      <Slider label="Colors" value={vectorNumColors} min={1} max={16} step={1}
-        onChange={setVectorNumColors} />
+      <div style={{
+        background: 'rgba(250, 173, 20, 0.08)',
+        border: '1px solid rgba(250, 173, 20, 0.25)',
+        borderRadius: 4,
+        padding: '6px 9px',
+        fontSize: 10,
+        color: 'var(--text-muted)',
+        lineHeight: 1.5,
+      }}>
+        <span style={{ color: '#faad14', fontWeight: 600, marginRight: 5 }}>⚠</span>
+        Vector tracing is a work in progress. Results may vary.
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Slider label="Colors" value={vectorNumColors} min={1} max={16} step={1}
+            onChange={setVectorNumColors} />
+        </div>
+        <button
+          onClick={handleAutoDetect}
+          disabled={!previewImage || detecting}
+          title="Auto-detect color count from image"
+          style={{
+            flexShrink: 0, fontSize: 9, padding: '3px 7px', marginTop: 2,
+            background: detecting ? 'var(--surface-2)' : 'var(--accent)',
+            color: detecting ? 'var(--text-muted)' : '#000',
+            border: '1px solid transparent', cursor: previewImage && !detecting ? 'pointer' : 'default',
+            fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.05em',
+            opacity: previewImage ? 1 : 0.4,
+          }}
+        >
+          {detecting ? '…' : 'AUTO'}
+        </button>
+      </div>
       <Slider label="Detail" value={vectorDetail} min={1} max={10} step={1}
         onChange={setVectorDetail} />
+      <Slider label="Smooth" value={vectorSmooth} min={1} max={10} step={1}
+        onChange={setVectorSmooth} />
 
       {vectorNumColors === 1 && (
         <div className="field" style={{ marginTop: 6 }}>
@@ -704,6 +755,43 @@ function VectorSection() {
                 if (/^#[0-9a-fA-F]{6}$/.test(v)) setVectorInkColor(v);
               }} />
           </div>
+        </div>
+      )}
+
+      <div className="field" style={{ marginTop: 6 }}>
+        <span className="field-label">Path Style</span>
+        <div style={{ display: 'flex', gap: 2, flex: 1 }}>
+          {(['spline', 'polygon'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setVectorPathMode(mode)}
+              style={{
+                flex: 1, height: 24, fontSize: 10, fontFamily: 'var(--font-mono)',
+                border: '1px solid var(--border-2)', borderRadius: 3, cursor: 'pointer',
+                background: vectorPathMode === mode ? 'var(--accent)' : 'var(--bg-3)',
+                color: vectorPathMode === mode ? '#fff' : 'var(--text-dim)',
+                fontWeight: vectorPathMode === mode ? 700 : 400,
+                textTransform: 'capitalize',
+              }}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Slider label="Min Shape Size" value={vectorMinSpeckle} min={0} max={20} step={1}
+        onChange={setVectorMinSpeckle} />
+
+      {vectorColors.length > 1 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+          {vectorColors.map((c) => (
+            <div key={c} title={c} style={{
+              width: 16, height: 16, borderRadius: 2,
+              background: c, border: '1px solid rgba(255,255,255,0.15)',
+              flexShrink: 0,
+            }} />
+          ))}
         </div>
       )}
 
@@ -948,7 +1036,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         ) : (
           <GlobalPatternSection />
         )}
-        <ImageAdjustmentsSection />
+        {separationMode !== 'vector' && <ImageAdjustmentsSection />}
 
         {/* Per-layer controls — threshold mode only */}
         {separationMode === 'threshold' && layer ? (
