@@ -1,7 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import type { LevelsAdjustment, CurvePoint, AdjMode } from '../engine/imageProcessor';
 import { buildCurvesLUT } from '../engine/adjustments';
-import { useStore } from '../store/useStore';
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
 

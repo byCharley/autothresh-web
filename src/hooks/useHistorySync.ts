@@ -15,7 +15,7 @@ import type { HistorySnapshot } from '../store/useStore';
  */
 export function useHistorySync() {
   const pendingSnapshot = useRef<HistorySnapshot | null>(null);
-  const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     const unsubscribe = useStore.subscribe((state, prevState) => {

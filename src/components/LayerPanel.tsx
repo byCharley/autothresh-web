@@ -1119,7 +1119,7 @@ export function LayerPanel() {
     paletteNumColors, setPaletteColors,
     separationMode, setSeparationMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
-    addLayer, removeLayer, duplicateLayer, paintMasks, paintMode,
+    removeLayer, duplicateLayer, paintMasks, paintMode,
     globalPattern, soloLayerId, setSoloLayerId,
     colorSepNumColors, setColorSepNumColors,
     colorSepColorPriority, setColorSepColorPriority,

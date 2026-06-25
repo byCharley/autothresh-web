@@ -148,7 +148,7 @@ function hslToRgb(h: number, s: number, l: number): RGB {
 // Returns 7 palette variants derived from the actual image colors (k-means base).
 // All variants keep the same hues/tones as the real image, just stylistically adjusted.
 // This is much better than pure color-theory harmonics which ignore image content.
-export function generateHarmonicPalettes(baseColors: RGB[], k: number): string[][] {
+export function generateHarmonicPalettes(baseColors: RGB[], _k: number): string[][] {
   if (baseColors.length === 0) return [];
 
   const shiftHue = (colors: RGB[], delta: number): string[] =>
