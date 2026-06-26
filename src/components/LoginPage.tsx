@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { AppIcon } from './AppIcon';
 import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
@@ -31,8 +30,10 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
     }}>
       {/* Logo */}
       <div style={{ marginBottom: 40, textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 20, marginBottom: 20 }}>
-          <AppIcon size={72} color="#f1f2f2" />
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 20, marginBottom: 16 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: '#f1f2f2', lineHeight: 1 }}>
+            SepForge<span style={{ fontSize: 16, verticalAlign: 'super', lineHeight: 0 }}>™</span>
+          </div>
           <span style={{ width: 1, height: 56, background: 'rgba(255,255,255,0.2)', display: 'block', flexShrink: 0 }} />
           <img
             src="/CharleyPangus_Favicon.svg"
@@ -40,11 +41,8 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
             style={{ height: 58, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.9 }}
           />
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-          SepForge™ <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-          Professional Tonal Separation Tool
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+          Professional Screen Print Separation Tool
         </div>
       </div>
 
