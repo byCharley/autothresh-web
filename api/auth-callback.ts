@@ -168,11 +168,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── 4. Check subscription via Seal ────────────────────────────────────────
   const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = await sealCheckSubscription(custEmail);
+  const isTester = TESTER_EMAILS.has(custEmail.toLowerCase());
+  const finalHasSub = hasSub || isTester;
 
-  // Tester email override — grants access without a subscription
-  const finalHasSub = hasSub || TESTER_EMAILS.has(custEmail.toLowerCase());
-
-  console.log('Auth result:', { custEmail, hasSub, finalHasSub, nextBillingDate });
+  console.log('Auth result:', { custEmail, hasSub, isTester, finalHasSub, nextBillingDate });
 
   return res.status(200).json({
     token:                tokens.access_token,
@@ -182,8 +181,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     email:                custEmail,
     firstName,
     hasSubscription:      finalHasSub,
-    subscriptionStatus,
-    subscriptionExpiresAt: nextBillingDate,
-    planTitle,
+    subscriptionStatus:    isTester ? 'tester' : subscriptionStatus,
+    subscriptionExpiresAt: isTester ? undefined : nextBillingDate,
+    planTitle:             isTester ? 'Tester Access' : planTitle,
   });
 }

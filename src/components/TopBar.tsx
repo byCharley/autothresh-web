@@ -194,20 +194,25 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <span style={{
                     width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                    background: subscriptionStatus === 'trial' ? '#a78bfa'
+                    background: subscriptionStatus === 'tester' ? '#38bdf8'
+                      : subscriptionStatus === 'trial' ? '#a78bfa'
                       : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
                       : '#3ecf4f',
-                    boxShadow: subscriptionStatus === 'trial' ? '0 0 4px #a78bfa88'
+                    boxShadow: subscriptionStatus === 'tester' ? '0 0 4px #38bdf888'
+                      : subscriptionStatus === 'trial' ? '0 0 4px #a78bfa88'
                       : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '0 0 4px #e6a81788'
                       : '0 0 4px #3ecf4f88',
                   }} />
                   <span style={{
                     fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'capitalize',
-                    color: subscriptionStatus === 'trial' ? '#a78bfa'
+                    color: subscriptionStatus === 'tester' ? '#38bdf8'
+                      : subscriptionStatus === 'trial' ? '#a78bfa'
                       : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
                       : '#3ecf4f',
                   }}>
-                    {subscriptionStatus === 'trial' ? 'Free Trial' : (subscriptionStatus ?? 'Active')}
+                    {subscriptionStatus === 'tester' ? 'Tester'
+                      : subscriptionStatus === 'trial' ? 'Free Trial'
+                      : (subscriptionStatus ?? 'Active')}
                   </span>
                 </div>
 

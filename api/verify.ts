@@ -116,19 +116,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!cust) return res.status(200).json({ valid: false });
 
   const email = cust.emailAddress?.emailAddress ?? '';
+  const isTester = TESTER_EMAILS.has(email.toLowerCase());
 
   // ── Check subscription via Seal ───────────────────────────────────────────
   const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = await sealCheckSubscription(email);
-  const finalHasSub = hasSub || TESTER_EMAILS.has(email.toLowerCase());
+  const finalHasSub = hasSub || isTester;
 
-  console.log('Verify result:', { email, hasSub, finalHasSub, subscriptionStatus, nextBillingDate, planTitle });
+  console.log('Verify result:', { email, hasSub, isTester, finalHasSub, subscriptionStatus, nextBillingDate, planTitle });
 
   return res.status(200).json({
     valid:                 true,
     hasSubscription:       finalHasSub,
-    subscriptionStatus,
-    subscriptionExpiresAt: nextBillingDate,
-    planTitle,
+    subscriptionStatus:    isTester ? 'tester' : subscriptionStatus,
+    subscriptionExpiresAt: isTester ? undefined : nextBillingDate,
+    planTitle:             isTester ? 'Tester Access' : planTitle,
     email,
     firstName:             cust.firstName ?? '',
   });
