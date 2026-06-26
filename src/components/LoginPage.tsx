@@ -13,6 +13,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
   const [loading, setLoading]     = useState(false);
   const [showEula, setShowEula]   = useState(false);
   const [showFaq, setShowFaq]     = useState(false);
+  const [showInfo, setShowInfo]   = useState(false);
 
   const handleSignIn = () => {
     setLoading(true);
@@ -124,6 +125,54 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
               </svg>
               Sign in with a different account
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* About info toggle */}
+      <div style={{ marginTop: 20, textAlign: 'center', width: 360, maxWidth: '90vw' }}>
+        <button
+          onClick={() => setShowInfo(v => !v)}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
+            opacity: 0.7, transition: 'opacity 0.15s',
+          }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.7')}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          About AutoThresh™ Web
+          <svg
+            width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            style={{ opacity: 0.5, transform: showInfo ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+          >
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+
+        {showInfo && (
+          <div style={{
+            marginTop: 12, padding: '16px 18px',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            textAlign: 'left',
+          }}>
+            <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
+              Part of the Growing AutoThresh™ Lineup
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.75, margin: '0 0 12px', fontFamily: 'var(--font-sans)' }}>
+              AutoThresh™ Web is the next step in the AutoThresh ecosystem. Built on the same trusted AutoThresh® Engine,
+              it expands the lineup beyond Photoshop, giving you the freedom to create professional color separations directly in your browser.
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.75, margin: 0, fontFamily: 'var(--font-sans)' }}>
+              Whether you prefer the speed of the desktop plugin or the flexibility of a web app, every AutoThresh product
+              is designed to deliver the same high-quality results while continuing to add new tools, workflows, and separation technologies.
+            </p>
           </div>
         )}
       </div>

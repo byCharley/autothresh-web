@@ -5,7 +5,7 @@ import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 
 const PRODUCT_URL = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefined
-  ?? 'https://charleypangus.com/collections/webapps';
+  ?? 'https://charleypangus.com/products/autothresh-web';
 
 interface Props {
   firstName?: string;

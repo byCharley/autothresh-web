@@ -44,6 +44,15 @@ export function FaqModal({ onClose }: Props) {
             complexity of traditional workflows. Designed by Charley Pangus, it brings
             professional-grade halftone and threshold processing directly to your browser —
             no downloads, no plugins, and no Photoshop required.
+            <br /><br />
+            <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>
+              Part of the Growing AutoThresh™ Lineup
+            </span>
+            <br />
+            AutoThresh™ Web is the next step in the AutoThresh ecosystem. Built on the same trusted AutoThresh® Engine,
+            it expands the lineup beyond Photoshop, giving you the freedom to create professional color separations directly in your browser.
+            Whether you prefer the speed of the desktop plugin or the flexibility of a web app, every AutoThresh product
+            is designed to deliver the same high-quality results while continuing to add new tools, workflows, and separation technologies.
           </Item>
 
           <Item n={2} q="Is AutoThresh Web the same as AutoThresh Pro?">
