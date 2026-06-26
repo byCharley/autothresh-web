@@ -395,7 +395,12 @@ function DocumentSection() {
 }
 
 function RegistrationSection() {
-  const { showRegistrationMarks, setShowRegistrationMarks, regMarkPadding, setRegMarkPadding, separationMode } = useStore();
+  const {
+    showRegistrationMarks, setShowRegistrationMarks,
+    regMarkPadding, setRegMarkPadding,
+    documentBleed, setDocumentBleed,
+    separationMode,
+  } = useStore();
   if (separationMode === 'vector') return null;
   return (
     <Section title="Registration Marks" defaultOpen={false}>
@@ -405,9 +410,16 @@ function RegistrationSection() {
         onChange={setShowRegistrationMarks}
         hint={showRegistrationMarks ? 'Shown at document corners — visible in preview and baked into export' : undefined}
       />
+      <Slider
+        label="Bleed"
+        value={documentBleed}
+        min={0} max={2.0} step={0.25}
+        onChange={setDocumentBleed}
+        unit='"'
+      />
       {showRegistrationMarks && (
         <Slider
-          label="Padding"
+          label="Mark Offset"
           value={regMarkPadding}
           min={0.1} max={2.0} step={0.1}
           onChange={setRegMarkPadding}

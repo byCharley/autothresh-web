@@ -222,6 +222,19 @@ function makeLayerStub(pattern: PatternType, scale: number, angle: number, densi
   };
 }
 
+// Run K-means on an image without the full separation pipeline.
+// Used to pre-detect colors on the unadjusted image so adjustments can shift
+// the cluster centers without rerunning K-means.
+export function detectColorSepColors(
+  imageData: ImageData,
+  numColors: number,
+  colorPriority: number,
+  bgMask: Uint8Array | null,
+  importanceMap?: Float32Array | null,
+): RGB[] {
+  return kMeansOklab(imageData, numColors, colorPriority, bgMask, 12345, importanceMap);
+}
+
 export function colorSeparate(
   imageData: ImageData,
   settings: ColorSepSettings,
@@ -306,10 +319,19 @@ export function renderColorSepComposite(
 ): ImageData {
   // Pass colors as lockedColors so assignment is consistent with the displayed palette
   const { layers } = colorSeparate(imageData, { ...settings, numColors: colors.length }, bgMask, colors, importanceMap);
-  const { width: w, height: h } = imageData;
-  const n = w * h;
-  const out = new ImageData(w, h);
+  return renderColorSepCompositeFromLayers(layers, colors, visibility, imageData.width, imageData.height);
+}
 
+// Fast composite from pre-computed layer masks — avoids a second colorSeparate call.
+export function renderColorSepCompositeFromLayers(
+  layers: ProcessedLayer[],
+  colors: RGB[],
+  visibility: Record<string, boolean>,
+  width: number,
+  height: number,
+): ImageData {
+  const n = width * height;
+  const out = new ImageData(width, height);
   for (let ci = 0; ci < layers.length; ci++) {
     if (visibility[`colorsep-${ci}`] === false) continue;
     const [cr, cg, cb] = colors[ci];
@@ -320,6 +342,5 @@ export function renderColorSepComposite(
       out.data[pi] = cr; out.data[pi + 1] = cg; out.data[pi + 2] = cb; out.data[pi + 3] = 255;
     }
   }
-
   return out;
 }

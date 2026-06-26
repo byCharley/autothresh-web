@@ -214,6 +214,7 @@ interface AppState {
 
   showRegistrationMarks: boolean;
   regMarkPadding: number;  // inches from document corner to mark center
+  documentBleed: number;   // inches of canvas expansion beyond artwork area
 
   textureEnabled: boolean;
   textureType: TextureType;
@@ -304,6 +305,7 @@ interface AppState {
   setBgMask: (mask: Uint8Array | null) => void;
   setShowRegistrationMarks: (v: boolean) => void;
   setRegMarkPadding: (v: number) => void;
+  setDocumentBleed: (v: number) => void;
   setTextureEnabled: (v: boolean) => void;
   setTextureType: (v: TextureType) => void;
   setTextureIntensity: (v: number) => void;
@@ -399,6 +401,7 @@ export const useStore = create<AppState>((set, get) => ({
   bgMask: null,
   showRegistrationMarks: false,
   regMarkPadding: 0.5,
+  documentBleed: 0,
   textureEnabled: false,
   textureType: 'plastisol-crack' as TextureType,
   textureIntensity: 40,
@@ -504,6 +507,7 @@ export const useStore = create<AppState>((set, get) => ({
   setBgMask: (bgMask) => set({ bgMask }),
   setShowRegistrationMarks: (showRegistrationMarks) => set({ showRegistrationMarks }),
   setRegMarkPadding: (regMarkPadding) => set({ regMarkPadding: Math.max(0.1, Math.min(3, regMarkPadding)) }),
+  setDocumentBleed: (documentBleed) => set({ documentBleed: Math.max(0, Math.min(4, documentBleed)) }),
   setTextureEnabled:   (textureEnabled)   => set({ textureEnabled }),
   setTextureType:      (textureType)      => set({ textureType }),
   setTextureIntensity: (textureIntensity) => set({ textureIntensity }),

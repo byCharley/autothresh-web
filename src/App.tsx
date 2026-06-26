@@ -77,7 +77,7 @@ function App() {
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const {
     originalImage, layers, globalPattern, knockoutEnabled,
-    bgRemovalEnabled, bgTolerance, regMarkPadding, imageAdjustments, canvasColor, showFabricBg,
+    bgRemovalEnabled, bgTolerance, regMarkPadding, documentBleed, imageAdjustments, canvasColor, showFabricBg,
     documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     separationMode, cmykLpi, cmykAngles, cmykParams, cmykQuality,
@@ -159,14 +159,17 @@ function App() {
     const mode = _mode;
 
     // ── Document geometry ────────────────────────────────────────────────────
-    const docPxW    = Math.round(documentWidthIn * documentDpi);
-    const docPxH    = Math.round(documentHeightIn * documentDpi);
+    const bleedPx     = Math.round(documentBleed * documentDpi);
+    const innerDocPxW = Math.round(documentWidthIn  * documentDpi);
+    const innerDocPxH = Math.round(documentHeightIn * documentDpi);
+    const docPxW      = innerDocPxW + 2 * bleedPx;
+    const docPxH      = innerDocPxH + 2 * bleedPx;
     const ow = originalImage.width, oh = originalImage.height;
-    const sf = Math.min(docPxW / ow, docPxH / oh);
+    const sf = Math.min(innerDocPxW / ow, innerDocPxH / oh);
     const artScaleW = Math.round(ow * sf);
     const artScaleH = Math.round(oh * sf);
-    const artOffX   = Math.round((docPxW - artScaleW) / 2);
-    const artOffY   = Math.round((docPxH - artScaleH) / 2);
+    const artOffX   = bleedPx + Math.round((innerDocPxW - artScaleW) / 2);
+    const artOffY   = bleedPx + Math.round((innerDocPxH - artScaleH) / 2);
 
     // ── Scale the artwork to export resolution ───────────────────────────────
     // exportScaleFactor maps preview pattern density → export resolution so
@@ -429,6 +432,9 @@ function App() {
     // Helper: get display name for a processed layer (works for both threshold and CMYK)
     const layerName = (pl: ProcessedLayer) =>
       pl.name ?? layers.find((l) => l.id === pl.id)?.name ?? pl.id;
+    const toHex = ([r, g, b]: [number, number, number]) =>
+      '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+    const layerNameHex = (pl: ProcessedLayer) => `${layerName(pl)} · ${toHex(pl.color)}`;
 
     // ── PNG ──────────────────────────────────────────────────────────────────
     if (format === 'png') {
@@ -535,13 +541,22 @@ function App() {
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-color-match.psd`);
       } else {
         const psdLayers = visibleLayers.map((pl) => ({
-          name:      layerName(pl),
+          name:      layerNameHex(pl),
           canvas:    buildLayerCanvas(pl, true),
           top:       0, left:      0,
           blendMode: 'normal' as const,
           opacity:   1,
         }));
-        const buffer = writePsd({ width: docPxW, height: docPxH, children: [bgLayer, ...psdLayers] });
+        const refColors: RGB[] = separationMode === 'color-sep' ? csExportColors
+          : artLayers.map(l => l.color as RGB);
+        const colorRefLayer = (includeColorInfo && refColors.length > 0) ? [{
+          name: 'Color Reference',
+          canvas: buildColorRefCanvas(refColors),
+          top: 0, left: 0,
+          blendMode: 'normal' as const,
+          opacity: 1,
+        }] : [];
+        const buffer = writePsd({ width: docPxW, height: docPxH, children: [bgLayer, ...psdLayers, ...colorRefLayer] });
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-screen.psd`);
       }
       return;
@@ -549,9 +564,9 @@ function App() {
 
     // ── PDF ──────────────────────────────────────────────────────────────────
     if (format === 'pdf') {
-      // PDF dimensions in points (72 pt = 1 inch)
-      const ptW = documentWidthIn  * 72;
-      const ptH = documentHeightIn * 72;
+      // PDF dimensions in points (72 pt = 1 inch), expanded by bleed
+      const ptW = (documentWidthIn  + 2 * documentBleed) * 72;
+      const ptH = (documentHeightIn + 2 * documentBleed) * 72;
 
       const pdfDoc = await PDFDocument.create();
 

@@ -7,7 +7,7 @@ import {
   garmentRgbFromParam, contrastColor, autoImageAdjustments, applyGlobalAdjustments,
 } from '../engine/imageProcessor';
 import { kMeansColors, paletteSeparate, renderPaletteComposite, bayerOrder } from '../engine/colorSeparation';
-import { colorSeparate, renderColorSepComposite } from '../engine/colorSeparator';
+import { colorSeparate, detectColorSepColors, renderColorSepCompositeFromLayers } from '../engine/colorSeparator';
 import type { LayerConfig, PatternConfig, ImageAdjustments } from '../engine/imageProcessor';
 import { generateTextureMask } from '../engine/textureGenerator';
 import { buildImportanceMap } from '../engine/analysisPass';
@@ -54,12 +54,20 @@ export function CanvasView() {
   const isPaintingRef    = useRef(false);
   const spaceHeldRef     = useRef(false);
   const undoStackRef     = useRef<Record<string, Array<Uint8Array | null>>>({});
+  // Cache K-means base colors (from unadjusted image) for color-sep.
+  // K-means only reruns when image / numColors / colorPriority / bg settings change.
+  // Image adjustments are applied mathematically to the cached base colors — no K-means rerun.
+  const csKmeansCacheRef = useRef<{
+    originalImage: ImageData; numColors: number; colorPriority: number;
+    bgRemovalEnabled: boolean; bgTolerance: number;
+    baseColors: import('../engine/colorSeparation').RGB[];
+  } | null>(null);
 
   const {
     originalImage, previewImage, layers, knockoutEnabled,
     globalPattern,
     bgRemovalEnabled, bgTolerance,
-    showRegistrationMarks, regMarkPadding,
+    showRegistrationMarks, regMarkPadding, documentBleed,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     canvasColor, showFabricBg,
     imageAdjustments,
@@ -124,13 +132,16 @@ export function CanvasView() {
     if (!originalImage) return null;
     const ow = originalImage.width, oh = originalImage.height;
     const effectiveDpi = dpiOverride ?? documentDpi;
-    const docPxW = Math.round(documentWidthIn * effectiveDpi);
-    const docPxH = Math.round(documentHeightIn * effectiveDpi);
-    const sf     = Math.min(docPxW / ow, docPxH / oh);
+    const bleedPx    = Math.round(documentBleed * effectiveDpi);
+    const innerDocPxW = Math.round(documentWidthIn  * effectiveDpi);
+    const innerDocPxH = Math.round(documentHeightIn * effectiveDpi);
+    const docPxW = innerDocPxW + 2 * bleedPx;
+    const docPxH = innerDocPxH + 2 * bleedPx;
+    const sf      = Math.min(innerDocPxW / ow, innerDocPxH / oh);
     const artInDocW = Math.round(ow * sf);
     const artInDocH = Math.round(oh * sf);
-    const artOffX   = Math.round((docPxW - artInDocW) / 2);
-    const artOffY   = Math.round((docPxH - artInDocH) / 2);
+    const artOffX   = bleedPx + Math.round((innerDocPxW - artInDocW) / 2);
+    const artOffY   = bleedPx + Math.round((innerDocPxH - artInDocH) / 2);
     // pds: scale from full-resolution document pixels → preview pixels (≤ 1.0)
     const pds = Math.min(dim / Math.max(docPxW, docPxH), 1.0);
     return {
@@ -186,6 +197,21 @@ export function CanvasView() {
     }, 200);
     return () => clearTimeout(dimTimerRef.current);
   }, [zoom]);
+
+  // Apply the same luminance adjustment that applyAdjToImage uses, but to a single RGB triple.
+  // Used to shift cached K-means cluster centers when image adjustments change.
+  type RGB3 = [number, number, number];
+  function applyAdjToColor([r, g, b]: RGB3, adj: ImageAdjustments): RGB3 {
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    const adjLum = applyGlobalAdjustments(lum, adj);
+    if (lum < 1) { const v = Math.max(0, Math.min(255, adjLum)) | 0; return [v, v, v]; }
+    const scale = adjLum / lum;
+    return [
+      Math.max(0, Math.min(255, (r * scale + 0.5))) | 0,
+      Math.max(0, Math.min(255, (g * scale + 0.5))) | 0,
+      Math.max(0, Math.min(255, (b * scale + 0.5))) | 0,
+    ];
+  }
 
   // Apply image adjustments to a full RGB ImageData (used by color-sep mode).
   // Adjusts each pixel's luminance proportionally, preserving hue/saturation.
@@ -395,16 +421,45 @@ export function CanvasView() {
             patternDensity: colorSepPatternDensity,
             patternAngle:   colorSepPatternAngle,
           };
+
+          // K-means strategy: run once on the UNADJUSTED image, cache the base colors.
+          // Image adjustments are then applied mathematically to the cached colors —
+          // no K-means rerun. K-means only reruns when image/numColors/colorPriority/bg change.
+          const kCache = csKmeansCacheRef.current;
+          const cacheValid = !colorSepLockedColors && kCache !== null &&
+            kCache.originalImage === originalImage &&
+            kCache.numColors === colorSepNumColors &&
+            kCache.colorPriority === colorSepColorPriority &&
+            kCache.bgRemovalEnabled === bgRemovalEnabled &&
+            kCache.bgTolerance === bgTolerance;
+
+          let lockedForSep: typeof colorSepLockedColors;
+          if (colorSepLockedColors) {
+            lockedForSep = colorSepLockedColors;
+          } else {
+            if (!cacheValid) {
+              // Run K-means once on unadjusted artScaled so it's adj-independent.
+              const baseColors = detectColorSepColors(artScaled, colorSepNumColors, colorSepColorPriority / 100, localBgMask, importanceMap);
+              csKmeansCacheRef.current = { originalImage, numColors: colorSepNumColors,
+                colorPriority: colorSepColorPriority, bgRemovalEnabled, bgTolerance, baseColors };
+            }
+            // Shift base colors by current adjustments (fast, no K-means).
+            const isAdjNoop = imageAdjustments.adjMode === 'basic' &&
+              imageAdjustments.exposure === 0 && imageAdjustments.contrast === 0 &&
+              imageAdjustments.shadows === 0 && imageAdjustments.highlights === 0 && imageAdjustments.blur === 0;
+            lockedForSep = isAdjNoop
+              ? csKmeansCacheRef.current!.baseColors
+              : (csKmeansCacheRef.current!.baseColors.map(c => applyAdjToColor(c as [number,number,number], imageAdjustments)) as [number,number,number][]);
+          }
+
           const { layers: csLayers, colors: csColors } = colorSeparate(
-            adjScaled, colorSepSettings, localBgMask,
-            colorSepLockedColors ?? undefined, importanceMap,
+            adjScaled, colorSepSettings, localBgMask, lockedForSep!, importanceMap,
           );
           setColorSepColors(csColors);
           setProcessedLayers(csLayers.filter(l => colorSepVisibility[l.id] !== false));
 
-          artComposite = renderColorSepComposite(
-            adjScaled, csColors, colorSepVisibility, colorSepSettings, localBgMask, importanceMap,
-          );
+          // Use pre-computed layer masks — avoids a second colorSeparate call.
+          artComposite = renderColorSepCompositeFromLayers(csLayers, csColors, colorSepVisibility, artPrevW, artPrevH);
 
           if (textureEnabled) {
             const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
@@ -574,7 +629,7 @@ export function CanvasView() {
     bgRemovalEnabled, bgTolerance, canvasColor, showFabricBg, imageAdjustments,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     textureVersion,
-    documentWidthIn, documentHeightIn, documentDpi,
+    documentWidthIn, documentHeightIn, documentDpi, documentBleed,
     separationMode, cmykLpi, cmykVisibility, cmykAngles, cmykParams, cmykViewMode,
     paletteNumColors, paletteColors, paletteVisibility, palettePattern, palettePatternScale, paletteColorMode,
     paletteDensity, paletteAngle, paletteSoftness,
@@ -836,8 +891,10 @@ export function CanvasView() {
   // Registration marks in document-canvas coordinates.
   const regMarkData = (() => {
     if (canvasDims.w === 0) return { positions: [] as { x: number; y: number }[], markSize: 16 };
-    const padH = regMarkPadding * (canvasDims.w / documentWidthIn);
-    const padV = regMarkPadding * (canvasDims.h / documentHeightIn);
+    const totalDocW = documentWidthIn + 2 * documentBleed;
+    const totalDocH = documentHeightIn + 2 * documentBleed;
+    const padH = regMarkPadding * (canvasDims.w / totalDocW);
+    const padV = regMarkPadding * (canvasDims.h / totalDocH);
     return {
       markSize: Math.max(10, Math.min(36, padH * 0.65)),
       positions: [
