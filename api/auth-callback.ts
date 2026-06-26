@@ -52,20 +52,32 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
     let nextBillingDate: string | undefined;
     let planTitle: string | undefined;
     let subscriptionStatus: string | undefined;
+    const TRIAL_DAYS = parseInt(process.env.SEAL_TRIAL_DAYS ?? '3');
+
     const hasSub = subs.some(s => {
       const st = String(s.status ?? '').toUpperCase();
       const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'CANCELLED' || st === 'CANCELED' || st === 'TRIAL';
 
-      // Detect trial period — Seal may use explicit TRIAL status or an ACTIVE sub with a future trial end date
-      const trialEndRaw = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
+      // Seal uses subscription_type=2 for trials; infer end date from order_placed + TRIAL_DAYS
+      const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
+      const isTrialType = Number(s.subscription_type) === 2;
+      const orderPlaced = s.order_placed as string | undefined;
+      const trialEndInferred = isTrialType && orderPlaced
+        ? new Date(new Date(orderPlaced).getTime() + TRIAL_DAYS * 86_400_000).toISOString()
+        : undefined;
+      const trialEndRaw = trialEndExplicit ?? trialEndInferred;
       const isInTrial = st === 'TRIAL' || (!!trialEndRaw && new Date(trialEndRaw) > new Date());
+
+      // Seal nests plan name inside items array
+      const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
+      const itemPlanName = items[0]?.selling_plan_name ?? items[0]?.title;
 
       if (valid) {
         subscriptionStatus = isInTrial ? 'trial' : st.toLowerCase();
         nextBillingDate = isInTrial
           ? trialEndRaw
           : (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
-        planTitle = (s.plan_title ?? s.product_title ?? s.title ?? s.name ?? s.plan_name) as string | undefined;
+        planTitle = (s.plan_title ?? s.product_title ?? s.plan_name ?? itemPlanName) as string | undefined;
       }
       return valid;
     });
