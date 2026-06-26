@@ -42,7 +42,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
           />
         </div>
         <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-          AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
+          AutoThresh™ Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
           Professional Tonal Separation Tool
