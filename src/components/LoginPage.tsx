@@ -42,7 +42,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
           />
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-          Professional Screen Print Separation Tool
+          Professional Separation Tool For Merch Designers
         </div>
       </div>
 
