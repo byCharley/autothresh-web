@@ -367,6 +367,18 @@ export function CanvasView() {
             artComposite = tmpCtx.getImageData(0, 0, artPrevW, artPrevH);
           }
 
+          if (textureEnabled) {
+            const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+            for (const layer of plateLayers) {
+              for (let i = 0; i < layer.mask.length; i++) {
+                if (texMask[i] === 0) layer.mask[i] = 0;
+              }
+            }
+            for (let i = 0; i < texMask.length; i++) {
+              if (texMask[i] === 0) artComposite.data[i * 4 + 3] = 0;
+            }
+          }
+
           // Store final composite for mockup (before split view alters it)
           setDitherComposite({ data: artComposite, w: artPrevW, h: artPrevH });
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
@@ -393,6 +405,19 @@ export function CanvasView() {
           artComposite = renderColorSepComposite(
             adjScaled, csColors, colorSepVisibility, colorSepSettings, localBgMask,
           );
+
+          if (textureEnabled) {
+            const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+            for (const layer of csLayers) {
+              for (let i = 0; i < layer.mask.length; i++) {
+                if (texMask[i] === 0) layer.mask[i] = 0;
+              }
+            }
+            for (let i = 0; i < texMask.length; i++) {
+              if (texMask[i] === 0) artComposite.data[i * 4 + 3] = 0;
+            }
+          }
+
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
         } else if (separationMode === 'vector') {

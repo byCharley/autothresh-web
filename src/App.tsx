@@ -20,12 +20,14 @@ import { FaqModal } from './components/FaqModal';
 import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
+import { colorSeparate, renderColorSepComposite } from './engine/colorSeparator';
+import type { RGB } from './engine/colorSeparation';
 import {
   processImage, applyKnockout, renderComposite, renderCmykSmooth, garmentRgbFromParam,
   drawRegistrationMarks, computeBackgroundMask,
-  cmykSeparate, contrastColor, hexToRgb,
+  cmykSeparate, contrastColor, hexToRgb, applyGlobalAdjustments,
 } from './engine/imageProcessor';
-import type { LayerConfig, PatternConfig, ProcessedLayer } from './engine/imageProcessor';
+import type { LayerConfig, PatternConfig, ProcessedLayer, PatternType } from './engine/imageProcessor';
 import { generateTextureMask } from './engine/textureGenerator';
 import { encodeTiff } from './engine/exportFormats';
 
@@ -78,6 +80,8 @@ function App() {
     separationMode, cmykLpi, cmykAngles, cmykParams, cmykQuality,
     paletteColors, paletteVisibility, palettePattern, palettePatternScale,
     paletteDensity, paletteAngle, paletteSoftness,
+    colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
+    colorSepPatternDensity, colorSepPatternAngle, colorSepLockedColors, colorSepVisibility,
     paintMasks,
     vectorSvg,
   } = useStore();
@@ -154,6 +158,39 @@ function App() {
       ? Math.max(1, Math.round(palettePatternScale))
       : _palBN > 0 ? _palBN * _palCell : Math.max(2, _palCell);
 
+    // Helper: apply image adjustments to a full-res ImageData (mirrors CanvasView's applyAdjToImage)
+    function applyAdjToImageData(img: ImageData): ImageData {
+      const adj = imageAdjustments;
+      const isNoop = adj.adjMode === 'basic' &&
+        adj.exposure === 0 && adj.contrast === 0 &&
+        adj.shadows === 0 && adj.highlights === 0 && adj.blur === 0;
+      if (isNoop) return img;
+      const result = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
+      const rd = result.data;
+      const n = img.width * img.height;
+      for (let i = 0; i < n; i++) {
+        if (rd[i * 4 + 3] < 128) continue;
+        const r = rd[i * 4], g = rd[i * 4 + 1], b = rd[i * 4 + 2];
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        const adjLum = applyGlobalAdjustments(lum, adj);
+        if (lum < 1) {
+          const v = adjLum | 0;
+          rd[i * 4] = v; rd[i * 4 + 1] = v; rd[i * 4 + 2] = v;
+        } else {
+          const scale = adjLum / lum;
+          rd[i * 4]     = Math.min(255, (r * scale + 0.5)) | 0;
+          rd[i * 4 + 1] = Math.min(255, (g * scale + 0.5)) | 0;
+          rd[i * 4 + 2] = Math.min(255, (b * scale + 0.5)) | 0;
+        }
+      }
+      return result;
+    }
+
+    // color-sep composite data — populated in the color-sep branch, used by buildCompositeCanvas
+    let csExportImageData: ImageData | null = null;
+    let csExportColors: RGB[] = [];
+    let csExportSettings: { numColors: number; colorPriority: number; pattern: PatternType; patternScale: number; patternDensity: number; patternAngle: number } | null = null;
+
     let artLayers: ProcessedLayer[];
     if (separationMode === 'cmyk') {
       // Cell size derived from LPI: output DPI / LPI = pixels per halftone dot
@@ -164,6 +201,36 @@ function App() {
         palettePattern, paletteTileSize, imageAdjustments,
         paletteDensity, paletteAngle, paletteSoftness,
       ).filter(l => paletteVisibility[l.id] !== false);
+      if (textureEnabled) {
+        const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
+        for (const layer of artLayers) {
+          for (let i = 0; i < layer.mask.length; i++) {
+            if (texMask[i] === 0) layer.mask[i] = 0;
+          }
+        }
+      }
+    } else if (separationMode === 'color-sep') {
+      const adjImageData = applyAdjToImageData(artImageData);
+      csExportImageData = adjImageData;
+      csExportSettings = {
+        numColors:      colorSepNumColors,
+        colorPriority:  colorSepColorPriority / 100,
+        pattern:        colorSepPattern,
+        patternScale:   colorSepPatternScale,
+        patternDensity: colorSepPatternDensity,
+        patternAngle:   colorSepPatternAngle,
+      };
+      const { layers: csLayers, colors } = colorSeparate(adjImageData, csExportSettings, artBgMask, colorSepLockedColors ?? undefined);
+      csExportColors = colors;
+      artLayers = csLayers.filter(l => colorSepVisibility[l.id] !== false);
+      if (textureEnabled) {
+        const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
+        for (const layer of artLayers) {
+          for (let i = 0; i < layer.mask.length; i++) {
+            if (texMask[i] === 0) layer.mask[i] = 0;
+          }
+        }
+      }
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
       artLayers = processImage(artImageData, resolved, false, artBgMask, imageAdjustments, exportScaleFactor);
@@ -270,14 +337,25 @@ function App() {
         ? { ...cmykParams, garmentColor: Math.round(100 - (gR + gG + gB) / 3 / 2.55) }
         : cmykParams;
 
-      const artComposite = separationMode === 'cmyk'
-        ? renderCmykSmooth(artImageData, artBgMask, { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true }, overrideParams)
-        : separationMode === 'palette'
-          ? renderPaletteComposite(artImageData, paletteColors, artBgMask,
-              Object.fromEntries(paletteColors.map((_, i) => [`palette-${i}`, true])),
-              palettePattern, paletteTileSize, imageAdjustments,
-              paletteDensity, paletteAngle, paletteSoftness)
-          : renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
+      let artComposite: ImageData;
+      if (separationMode === 'cmyk') {
+        artComposite = renderCmykSmooth(artImageData, artBgMask, { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true }, overrideParams);
+      } else if (separationMode === 'palette') {
+        artComposite = renderPaletteComposite(artImageData, paletteColors, artBgMask,
+          Object.fromEntries(paletteColors.map((_, i) => [`palette-${i}`, true])),
+          palettePattern, paletteTileSize, imageAdjustments,
+          paletteDensity, paletteAngle, paletteSoftness);
+      } else if (separationMode === 'color-sep' && csExportImageData && csExportSettings) {
+        artComposite = renderColorSepComposite(csExportImageData, csExportColors, colorSepVisibility, csExportSettings, artBgMask);
+        if (textureEnabled) {
+          const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
+          for (let i = 0; i < texMask.length; i++) {
+            if (texMask[i] === 0) artComposite.data[i * 4 + 3] = 0;
+          }
+        }
+      } else {
+        artComposite = renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
+      }
       const docCanvas = document.createElement('canvas');
       docCanvas.width = docPxW; docCanvas.height = docPxH;
       const dCtx = docCanvas.getContext('2d')!;

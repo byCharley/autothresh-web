@@ -1251,6 +1251,7 @@ export function LayerPanel() {
         ) : separationMode === 'palette' ? (
           <>
             <InksSection />
+            <TextureSection />
             <FabricSection />
             <ArtworkSection />
           </>
@@ -1268,6 +1269,7 @@ export function LayerPanel() {
               onLockedColors={setColorSepLockedColors}
               onColorChange={handleColorSepColorChange}
             />
+            <TextureSection />
             <FabricSection />
             <ArtworkSection />
           </>
