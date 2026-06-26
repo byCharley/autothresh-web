@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { AppIcon } from './AppIcon';
 import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 
 const PRODUCT_URL = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefined
-  ?? 'https://charleypangus.com/products/sepforge';
+  ?? 'https://charleypangus.com/collections/webapps';
 
 interface Props {
   firstName?: string;
@@ -29,16 +30,11 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
     }}>
       {/* Logo */}
       <div style={{ marginBottom: 36, textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--accent)', lineHeight: 1 }}>
-            SepForge<span style={{ fontSize: 14, verticalAlign: 'super', lineHeight: 0 }}>™</span>
-          </div>
-          <span style={{ width: 1, height: 40, background: 'rgba(255,255,255,0.2)', display: 'block', flexShrink: 0 }} />
-          <img
-            src="/CharleyPangus_Favicon.svg"
-            alt="Charley Pangus"
-            style={{ height: 40, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.7 }}
-          />
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+          <AppIcon size={56} color="var(--accent)" />
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
+          AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
         </div>
       </div>
 
@@ -66,7 +62,7 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
         )}
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
-          SepForge requires an active subscription.
+          AutoThresh Web requires an active subscription.
           Subscribe to get full access to the tonal separation tool.
         </div>
 

@@ -214,7 +214,7 @@ function App() {
     }
 
     const regPaddingPx = Math.round(regMarkPadding * documentDpi);
-    const baseName    = fileName || imageFileName.replace(/\.[^.]+$/, '') || 'sepforge';
+    const baseName    = fileName || imageFileName.replace(/\.[^.]+$/, '') || 'autothresh';
 
     // ── Build per-layer canvas: place artwork mask at its offset in the doc ──
     const buildLayerCanvas = (pl: typeof artLayers[number], withMarks: boolean): HTMLCanvasElement => {
@@ -541,7 +541,7 @@ function App() {
         <ExportModal
           onClose={() => setShowExport(false)}
           onExport={handleExport}
-          defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'sepforge'}
+          defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'autothresh'}
           separationMode={separationMode}
         />
       )}
@@ -562,7 +562,7 @@ function App() {
         </span>
         <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
         <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em' }}>
-          SepForge™ | 2026 All Rights Reserved
+          AutoThresh® | 2026 All Rights Reserved
         </span>
         <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
         <a href="https://www.charleypangus.com" target="_blank" rel="noopener noreferrer"

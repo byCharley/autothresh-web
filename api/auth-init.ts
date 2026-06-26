@@ -3,7 +3,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 // Keeps client_id and store_id server-side — browser only sends the PKCE challenge
 const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
-const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.sepforge.com/auth/callback';
+const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh.com/auth/callback';
 
 const SCOPES = 'openid email customer-account-api:full';
 

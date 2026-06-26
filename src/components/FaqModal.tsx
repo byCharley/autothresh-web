@@ -23,7 +23,7 @@ export function FaqModal({ onClose }: Props) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text)' }}>
-            FAQ — SepForge
+            FAQ — AutoThresh Web
           </span>
           <button
             onClick={onClose}
@@ -38,20 +38,21 @@ export function FaqModal({ onClose }: Props) {
         {/* Body */}
         <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.85, fontFamily: 'var(--font-sans)' }}>
 
-          <Item n={1} q="What is SepForge?">
-            SepForge is a browser-based screen print separation tool built for screen printers,
+          <Item n={1} q="What is AutoThresh Web?">
+            AutoThresh Web is a browser-based tonal separation tool built for screen printers,
             printmakers, and creatives who need precise, repeatable separations without the
-            complexity of traditional workflows. Designed by Charley Pangus, it supports
-            tonal threshold, CMYK, simulated process, dither, color separation, and vector
-            modes — all directly in your browser, no downloads, no plugins, no Photoshop required.
+            complexity of traditional workflows. Designed by Charley Pangus, it brings
+            professional-grade halftone and threshold processing directly to your browser —
+            no downloads, no plugins, and no Photoshop required.
           </Item>
 
-          <Item n={2} q="Is SepForge related to AutoThresh?">
-            SepForge evolved from the AutoThresh separation engine but goes far beyond it.
-            Where AutoThresh focused on tonal threshold separations, SepForge covers the
-            full range of screen print workflows — CMYK, simulated process, dither, color
-            separation, vector tracing, texture overlays, and more. It's a complete
-            rebrand reflecting how much more the tool can do.
+          <Item n={2} q="Is AutoThresh Web the same as AutoThresh Pro?">
+            AutoThresh Web shares the same core separation engine as AutoThresh Pro, but
+            it's built for a much wider audience. AutoThresh Pro is a Photoshop plugin,
+            while AutoThresh Web runs entirely in your browser — giving you the same
+            professional-grade tonal processing without needing Photoshop installed. It
+            also introduces new features and workflow improvements that make it accessible
+            to anyone, not just Photoshop users.
           </Item>
 
           <Item n={3} q="Can I pause or cancel my subscription anytime?">

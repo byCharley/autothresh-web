@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AppIcon } from './AppIcon';
 import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
@@ -30,10 +31,8 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
     }}>
       {/* Logo */}
       <div style={{ marginBottom: 40, textAlign: 'center' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 20, marginBottom: 16 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: '#f1f2f2', lineHeight: 1 }}>
-            SepForge<span style={{ fontSize: 16, verticalAlign: 'super', lineHeight: 0 }}>™</span>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 20, marginBottom: 20 }}>
+          <AppIcon size={72} color="#f1f2f2" />
           <span style={{ width: 1, height: 56, background: 'rgba(255,255,255,0.2)', display: 'block', flexShrink: 0 }} />
           <img
             src="/CharleyPangus_Favicon.svg"
@@ -41,8 +40,11 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
             style={{ height: 58, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.9 }}
           />
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-          Professional Separation Tool For Merch Designers
+        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
+          AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+          Professional Tonal Separation Tool
         </div>
       </div>
 
@@ -54,7 +56,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
         <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 28 }}>
           Sign in with your{' '}
           <span style={{ color: 'var(--text)', fontWeight: 600 }}>Charley Pangus</span>
-          {' '}store account to access SepForge.
+          {' '}store account to access AutoThresh Web.
           <br />
           <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
             You'll receive a one-time passcode by email.
@@ -100,7 +102,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
         </button>
 
         <div style={{ marginTop: 16, fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
-          Access requires an active SepForge subscription.
+          Access requires an active AutoThresh subscription.
         </div>
 
         {onSwitchAccount && (
