@@ -678,7 +678,7 @@ html, body, #root {
   align-items: center;
   justify-content: space-between;
   padding: 0 14px;
-  height: 34px;
+  height: 40px;
   cursor: pointer;
   user-select: none;
 }

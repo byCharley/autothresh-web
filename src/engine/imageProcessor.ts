@@ -762,6 +762,7 @@ export function processImage(
   bgMask?: Uint8Array | null,
   imageAdj?: ImageAdjustments | null,
   patternScaleFactor = 1,
+  importanceMap?: Float32Array | null,
 ): ProcessedLayer[] {
   const { data, width, height } = imageData;
   const n = width * height;
@@ -779,6 +780,7 @@ export function processImage(
   }
 
   const PATTERN_STRENGTH_MAX = 55;
+  const DETAIL_BOOST = 25;
 
   // Scale pattern parameters to keep visual dot/grain size consistent across
   // different canvas resolutions (e.g. zoom changes artPrevW but dots should
@@ -818,7 +820,8 @@ export function processImage(
       if (bgMask && bgMask[i] === 255) continue;
       const mod  = patVals ? (patVals[i] - 0.5) * 2 * strength : 0;
       const adjL = Math.max(0, Math.min(255, lums[i] + mod));
-      finalMask[i] = adjL >= layer.thresholdMin && adjL <= layer.thresholdMax ? 255 : 0;
+      const expand = importanceMap ? importanceMap[i] * DETAIL_BOOST : 0;
+      finalMask[i] = adjL >= (layer.thresholdMin - expand) && adjL <= (layer.thresholdMax + expand) ? 255 : 0;
     }
 
     return { id: layer.id, name: layer.name, mask: finalMask, color: hexToRgb(layer.color), visible: layer.visible };

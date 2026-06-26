@@ -449,8 +449,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   colorSepNumColors:     4,
   colorSepColorPriority: 70,
-  colorSepPattern:       'none' as PatternType,
-  colorSepPatternScale:  12,
+  colorSepPattern:       'noise' as PatternType,
+  colorSepPatternScale:  1,
   colorSepPatternDensity: 75,
   colorSepPatternAngle:  45,
   colorSepColors:        [],
@@ -482,7 +482,17 @@ export const useStore = create<AppState>((set, get) => ({
   setOriginalImage: (originalImage, previewImage, imageFileName) =>
     set({ originalImage, previewImage, imageFileName, bgMask: null, palettePool: [], activePaletteIdx: 0 }),
   clearImage: () =>
-    set({ originalImage: null, previewImage: null, processedLayers: [], imageFileName: '', bgMask: null, palettePool: [], activePaletteIdx: 0, paintMasks: {}, vectorSvg: null, vectorColors: [] }),
+    set((s) => ({
+      originalImage: null, previewImage: null, processedLayers: [], imageFileName: '',
+      bgMask: null, palettePool: [], activePaletteIdx: 0, paintMasks: {},
+      vectorSvg: null, vectorColors: [],
+      paletteColors: [],
+      paletteVisibility: {},
+      paletteAnalyzeKey: s.paletteAnalyzeKey + 1,
+      colorSepColors: [],
+      colorSepLockedColors: null,
+      colorSepVisibility: {},
+    })),
   updateLayer: (id, updates) =>
     set((s) => ({ layers: s.layers.map((l) => (l.id === id ? { ...l, ...updates } : l)) })),
   selectLayer: (selectedLayerId) => set({ selectedLayerId }),
@@ -551,8 +561,8 @@ export const useStore = create<AppState>((set, get) => ({
     paletteAnalyzeKey: s.paletteAnalyzeKey + 1,
     colorSepNumColors: 4,
     colorSepColorPriority: 70,
-    colorSepPattern: 'none' as PatternType,
-    colorSepPatternScale: 12,
+    colorSepPattern: 'noise' as PatternType,
+    colorSepPatternScale: 1,
     colorSepPatternDensity: 75,
     colorSepPatternAngle: 45,
     colorSepLockedColors: null,

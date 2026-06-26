@@ -30,6 +30,7 @@ import {
 } from './engine/imageProcessor';
 import type { LayerConfig, PatternConfig, ProcessedLayer, PatternType } from './engine/imageProcessor';
 import { generateTextureMask } from './engine/textureGenerator';
+import { buildImportanceMap } from './engine/analysisPass';
 import { encodeTiff } from './engine/exportFormats';
 
 function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerConfig[] {
@@ -114,7 +115,38 @@ function App() {
     return <SubscribePage firstName={session?.firstName} email={session?.email} onLogout={logout} onSwitchAccount={switchAccount} />;
   }
 
-  const handleExport = async ({ mode: _mode, format, fileName }: ExportConfig) => {
+  function buildColorRefCanvas(refColors: RGB[]): HTMLCanvasElement {
+    const S = 56, labelH = 28, gap = 6, pad = 14;
+    const cols = Math.min(refColors.length, 5);
+    const rows = Math.ceil(refColors.length / cols);
+    const w = pad * 2 + cols * S + (cols - 1) * gap;
+    const h = pad * 2 + rows * (S + labelH) + (rows - 1) * gap;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    refColors.forEach(([r, g, b], i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const x = pad + col * (S + gap), y = pad + row * (S + labelH + gap);
+      const hexVal = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+      ctx.fillStyle = hexVal;
+      ctx.fillRect(x, y, S, S);
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, S - 1, S - 1);
+      ctx.fillStyle = '#111111';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`Color ${i + 1}`, x + S / 2, y + S + 11);
+      ctx.fillStyle = '#666666';
+      ctx.font = '8px monospace';
+      ctx.fillText(hexVal, x + S / 2, y + S + 22);
+    });
+    return c;
+  }
+
+  const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo }: ExportConfig) => {
     if (!originalImage) return;
 
     // ── Vector mode: download the traced SVG directly ────────────────────────
@@ -151,6 +183,7 @@ function App() {
     const artImageData = artExpCanvas.getContext('2d')!.getImageData(0, 0, artScaleW, artScaleH);
 
     const artBgMask = bgRemovalEnabled ? computeBackgroundMask(artImageData, bgTolerance) : null;
+    const importanceMap = buildImportanceMap(artImageData, artBgMask);
 
     // Palette tile size — same logic as CanvasView so export matches the preview exactly
     const _palIsErrDiff = ['diffusion', 'atkinson', 'jarvis', 'stucki'].includes(palettePattern);
@@ -201,7 +234,7 @@ function App() {
       artLayers = paletteSeparate(
         artImageData, paletteColors, artBgMask,
         palettePattern, paletteTileSize, imageAdjustments,
-        paletteDensity, paletteAngle, paletteSoftness,
+        paletteDensity, paletteAngle, paletteSoftness, importanceMap,
       ).filter(l => paletteVisibility[l.id] !== false);
       if (textureEnabled) {
         const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
@@ -222,7 +255,7 @@ function App() {
         patternDensity: colorSepPatternDensity,
         patternAngle:   colorSepPatternAngle,
       };
-      const { layers: csLayers, colors } = colorSeparate(adjImageData, csExportSettings, artBgMask, colorSepLockedColors ?? undefined);
+      const { layers: csLayers, colors } = colorSeparate(adjImageData, csExportSettings, artBgMask, colorSepLockedColors ?? undefined, importanceMap);
       csExportColors = colors;
       artLayers = csLayers.filter(l => colorSepVisibility[l.id] !== false);
       if (textureEnabled) {
@@ -235,7 +268,7 @@ function App() {
       }
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
-      artLayers = processImage(artImageData, resolved, false, artBgMask, imageAdjustments, exportScaleFactor);
+      artLayers = processImage(artImageData, resolved, false, artBgMask, imageAdjustments, exportScaleFactor, importanceMap);
       if (textureEnabled) {
         const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
         for (const layer of artLayers) {
@@ -346,9 +379,9 @@ function App() {
         artComposite = renderPaletteComposite(artImageData, paletteColors, artBgMask,
           Object.fromEntries(paletteColors.map((_, i) => [`palette-${i}`, true])),
           palettePattern, paletteTileSize, imageAdjustments,
-          paletteDensity, paletteAngle, paletteSoftness);
+          paletteDensity, paletteAngle, paletteSoftness, importanceMap);
       } else if (separationMode === 'color-sep' && csExportImageData && csExportSettings) {
-        artComposite = renderColorSepComposite(csExportImageData, csExportColors, colorSepVisibility, csExportSettings, artBgMask);
+        artComposite = renderColorSepComposite(csExportImageData, csExportColors, colorSepVisibility, csExportSettings, artBgMask, importanceMap);
         if (textureEnabled) {
           const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
           for (let i = 0; i < texMask.length; i++) {
@@ -423,6 +456,11 @@ function App() {
           folder.file(`${layerName(pl).toLowerCase()}.png`, await canvasToBlob(buildLayerCanvas(pl, true)));
         }
         folder.file('composite.png', await canvasToBlob(buildCompositeCanvas(true)));
+        if (includeColorInfo) {
+          const refColors: RGB[] = separationMode === 'color-sep' ? csExportColors
+            : artLayers.map(l => l.color as RGB);
+          if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors)));
+        }
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen.zip`);
       }
       return;
@@ -553,6 +591,11 @@ function App() {
           folder.file(`${layerName(pl).toLowerCase()}.tiff`, buf);
         }
         folder.file('composite.tiff', encodeTiff(getPixels(buildCompositeCanvas(true)), documentDpi));
+        if (includeColorInfo) {
+          const refColors: RGB[] = separationMode === 'color-sep' ? csExportColors
+            : artLayers.map(l => l.color as RGB);
+          if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors)));
+        }
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-tiff.zip`);
       }
     }

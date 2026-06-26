@@ -3,9 +3,10 @@ import { useState } from 'react';
 export type ExportFormat = 'png' | 'psd' | 'pdf' | 'tiff' | 'svg';
 
 export interface ExportConfig {
-  mode:     'screen' | 'dtg';
-  format:   ExportFormat;
-  fileName: string;
+  mode:             'screen' | 'dtg';
+  format:           ExportFormat;
+  fileName:         string;
+  includeColorInfo: boolean;
 }
 
 interface Props {
@@ -62,14 +63,15 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
   const isVector = separationMode === 'vector';
   const FORMATS  = isVector ? [{ value: 'svg' as ExportFormat, label: 'SVG', ext: '.svg' }] : isDither ? FORMATS_DITHER : FORMATS_ALL;
 
-  const [mode,      setMode]      = useState<'screen' | 'dtg'>(isDither ? 'dtg' : 'screen');
-  const [format,    setFormat]    = useState<ExportFormat>(isVector ? 'svg' : 'png');
-  const [fileName,  setFileName]  = useState(defaultFileName);
-  const [exporting, setExporting] = useState(false);
+  const [mode,             setMode]             = useState<'screen' | 'dtg'>(isDither ? 'dtg' : 'screen');
+  const [format,           setFormat]           = useState<ExportFormat>(isVector ? 'svg' : 'png');
+  const [fileName,         setFileName]         = useState(defaultFileName);
+  const [exporting,        setExporting]        = useState(false);
+  const [includeColorInfo, setIncludeColorInfo] = useState(false);
 
   const handleExport = async () => {
     setExporting(true);
-    await onExport({ mode: isDither ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName });
+    await onExport({ mode: isDither ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo });
     setExporting(false);
     onClose();
   };
@@ -197,6 +199,31 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
             </span>
           </div>
         </div>
+
+        {/* Color info toggle — not applicable for vector */}
+        {!isVector && (
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                Color Reference
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+                Include a color swatch sheet with hex codes
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0 }}>
+              <input
+                type="checkbox"
+                checked={includeColorInfo}
+                onChange={e => setIncludeColorInfo(e.target.checked)}
+                style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                {includeColorInfo ? 'On' : 'Off'}
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* Actions */}
         <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

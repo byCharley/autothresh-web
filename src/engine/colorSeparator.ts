@@ -67,6 +67,7 @@ function runKMeansCore(
   k: number,
   chromaBoost: number,
   seed: number,
+  weights?: number[],
 ): { centers: OKLab[]; counts: number[] } {
   let rng = seed >>> 0;
   const rand = () => { rng = (Math.imul(1664525, rng) + 1013904223) >>> 0; return rng / 4294967296; };
@@ -90,18 +91,22 @@ function runKMeansCore(
   for (let iter = 0; iter < 40; iter++) {
     const sums: [number, number, number, number][] = Array.from({ length: centers.length }, () => [0, 0, 0, 0]);
     counts = new Array<number>(centers.length).fill(0);
-    for (const s of samples) {
+    for (let si = 0; si < samples.length; si++) {
+      const s = samples[si];
+      const w = weights ? weights[si] : 1;
       let minD = Infinity, nearest = 0;
       for (let c = 0; c < centers.length; c++) {
         const d = oklabDist2(s, centers[c], chromaBoost);
         if (d < minD) { minD = d; nearest = c; }
       }
-      sums[nearest][0] += s[0]; sums[nearest][1] += s[1]; sums[nearest][2] += s[2]; counts[nearest]++;
+      sums[nearest][0] += s[0] * w; sums[nearest][1] += s[1] * w; sums[nearest][2] += s[2] * w;
+      sums[nearest][3] += w; counts[nearest]++;
     }
     let changed = false;
     for (let c = 0; c < centers.length; c++) {
       if (!counts[c]) continue;
-      const nL = sums[c][0] / counts[c], na = sums[c][1] / counts[c], nb = sums[c][2] / counts[c];
+      const wt = sums[c][3];
+      const nL = sums[c][0] / wt, na = sums[c][1] / wt, nb = sums[c][2] / wt;
       if (Math.abs(nL - centers[c][0]) + Math.abs(na - centers[c][1]) + Math.abs(nb - centers[c][2]) > 1e-6) {
         centers[c] = [nL, na, nb]; changed = true;
       }
@@ -152,6 +157,7 @@ export function kMeansOklab(
   colorPriority: number,
   bgMask: Uint8Array | null,
   seed = 12345,
+  importanceMap?: Float32Array | null,
 ): RGB[] {
   const { data, width, height } = imageData;
   const n = width * height;
@@ -161,15 +167,17 @@ export function kMeansOklab(
   const chromaBoost = colorPriority * 2;
 
   const samples: OKLab[] = [];
+  const weights: number[] = [];
   for (let i = 0; i < n; i += step) {
     if (bgMask?.[i] === 255 || data[i * 4 + 3] < 128) continue;
     samples.push(rgbToOklab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]));
+    weights.push(importanceMap ? 0.5 + importanceMap[i] * 1.5 : 1);
   }
   if (samples.length === 0) return [[20, 20, 20], [120, 120, 120], [220, 220, 220]].slice(0, effectiveK) as RGB[];
 
   // Oversample: find more candidates than needed so we have room to consolidate.
-  const oversampleK = Math.min(Math.max(samples.length, 1), Math.min(36, effectiveK * 4));
-  let { centers, counts } = runKMeansCore(samples, oversampleK, chromaBoost, seed);
+  const oversampleK = Math.min(Math.max(samples.length, 1), Math.min(90, effectiveK * 3));
+  let { centers, counts } = runKMeansCore(samples, oversampleK, chromaBoost, seed, importanceMap ? weights : undefined);
 
   // Drop clusters that are too small to matter.
   const minCount = samples.length * MIN_FRACTION;
@@ -191,7 +199,7 @@ export function kMeansOklab(
 // ─── Main Separation Pipeline ─────────────────────────────────────────────────
 
 export interface ColorSepSettings {
-  numColors:      number;    // 2–8
+  numColors:      number;    // 2–30
   colorPriority:  number;    // 0–1: 0=tonal, 1=full color
   pattern:        PatternType;
   patternScale:   number;
@@ -219,6 +227,7 @@ export function colorSeparate(
   settings: ColorSepSettings,
   bgMask: Uint8Array | null,
   lockedColors?: RGB[],
+  importanceMap?: Float32Array | null,
 ): { layers: ProcessedLayer[]; colors: RGB[] } {
   const { data, width: w, height: h } = imageData;
   const n = w * h;
@@ -227,7 +236,7 @@ export function colorSeparate(
   const usePattern = patternDensity < 100 && pattern !== 'none';
 
   // 1. Cluster image colors in OKLAB (or use locked palette if provided)
-  const colors = (lockedColors && lockedColors.length > 0) ? lockedColors : kMeansOklab(imageData, numColors, colorPriority, bgMask);
+  const colors = (lockedColors && lockedColors.length > 0) ? lockedColors : kMeansOklab(imageData, numColors, colorPriority, bgMask, 12345, importanceMap);
   const nc = colors.length;
   const centersLab: OKLab[] = colors.map(([r, g, b]) => rgbToOklab(r, g, b));
 
@@ -293,9 +302,10 @@ export function renderColorSepComposite(
   visibility: Record<string, boolean>,
   settings: ColorSepSettings,
   bgMask: Uint8Array | null,
+  importanceMap?: Float32Array | null,
 ): ImageData {
   // Pass colors as lockedColors so assignment is consistent with the displayed palette
-  const { layers } = colorSeparate(imageData, { ...settings, numColors: colors.length }, bgMask, colors);
+  const { layers } = colorSeparate(imageData, { ...settings, numColors: colors.length }, bgMask, colors, importanceMap);
   const { width: w, height: h } = imageData;
   const n = w * h;
   const out = new ImageData(w, h);

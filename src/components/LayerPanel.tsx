@@ -58,7 +58,7 @@ function SectionHeader({ title, open, onToggle }: { title: string; open: boolean
       onClick={onToggle}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        width: '100%', padding: '0 12px', height: 32,
+        width: '100%', padding: '0 12px', height: 40,
         background: 'none', border: 'none', borderTop: '1px solid var(--border)',
         cursor: 'pointer', color: 'var(--text-muted)',
       }}
@@ -467,7 +467,7 @@ function InksSection() {
         onClick={() => setOpen((o) => !o)}
         style={{
           display: 'flex', alignItems: 'center', width: '100%',
-          padding: '0 12px', height: 32,
+          padding: '0 12px', height: 40,
           background: 'none', border: 'none', borderTop: '1px solid var(--border)',
           cursor: 'pointer', color: 'var(--text-muted)',
         }}
@@ -865,13 +865,13 @@ function ColorPresetsSection({
   };
 
   return (
-    <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid var(--border)' }}>
+    <div style={{ padding: '10px 12px 10px', borderBottom: '1px solid var(--border)' }}>
       {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           Palettes
         </span>
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 5 }}>
           <button
             onClick={() => onLockedColors(null)}
             style={{ ...btnBase, background: lockedColors === null ? 'var(--accent)' : 'var(--surface-2)', color: lockedColors === null ? '#000' : 'var(--text-muted)' }}
@@ -885,7 +885,7 @@ function ColorPresetsSection({
       </div>
 
       {/* Built-in palette buttons */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
         {Object.entries(COLOR_PRESETS).map(([key, { label }]) => {
           const swatches = defaultPaletteColors(Math.min(4, numColors), key);
           return (
@@ -894,18 +894,18 @@ function ColorPresetsSection({
               onClick={() => applyBuiltin(key)}
               title={label}
               style={{
-                display: 'flex', alignItems: 'center', gap: 3, padding: '2px 5px 2px 3px',
-                height: 22, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 4, padding: '3px 7px 3px 4px',
+                height: 26, cursor: 'pointer',
                 border: '1px solid var(--border)',
                 background: 'var(--surface-2)',
               }}
             >
-              <div style={{ display: 'flex', gap: 1 }}>
+              <div style={{ display: 'flex', gap: 2 }}>
                 {swatches.map(([r, g, b], i) => (
-                  <div key={i} style={{ width: 8, height: 14, background: `rgb(${r},${g},${b})` }} />
+                  <div key={i} style={{ width: 9, height: 16, background: `rgb(${r},${g},${b})` }} />
                 ))}
               </div>
-              <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{label}</span>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{label}</span>
             </button>
           );
         })}
@@ -913,7 +913,7 @@ function ColorPresetsSection({
 
       {/* Save input */}
       {saving && (
-        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+        <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
           <input
             autoFocus
             value={saveName}
@@ -921,34 +921,34 @@ function ColorPresetsSection({
             onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setSaving(false); }}
             placeholder="Name this palette..."
             style={{
-              flex: 1, fontSize: 10, height: 22, padding: '0 6px',
+              flex: 1, fontSize: 10, height: 26, padding: '0 8px',
               fontFamily: 'var(--font-mono)', background: 'var(--surface-2)',
               border: '1px solid var(--accent)', color: 'var(--text)', outline: 'none',
             }}
           />
           <button
             onClick={handleSave}
-            style={{ ...btnBase, padding: '0 10px', height: 22, background: 'var(--accent)', color: '#000', border: '1px solid var(--accent)' }}
+            style={{ ...btnBase, padding: '0 12px', height: 26, background: 'var(--accent)', color: '#000', border: '1px solid var(--accent)' }}
           >Save</button>
         </div>
       )}
 
       {/* User saved presets */}
       {userPresets.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {userPresets.map(({ name, colors: pc }, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 4px', border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer' }}
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer' }}
               onClick={() => onLockedColors(pc)}
             >
-              <div style={{ display: 'flex', gap: 1 }}>
+              <div style={{ display: 'flex', gap: 2 }}>
                 {pc.slice(0, 5).map(([r, g, b], j) => (
-                  <div key={j} style={{ width: 8, height: 14, background: `rgb(${r},${g},${b})` }} />
+                  <div key={j} style={{ width: 9, height: 16, background: `rgb(${r},${g},${b})` }} />
                 ))}
               </div>
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', flex: 1 }}>{name}</span>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', flex: 1 }}>{name}</span>
               <button
                 onClick={e => { e.stopPropagation(); handleDelete(i); }}
-                style={{ width: 16, height: 16, fontSize: 11, lineHeight: '14px', cursor: 'pointer', border: 'none', background: 'none', color: 'var(--text-dim)', padding: 0 }}
+                style={{ width: 18, height: 18, fontSize: 12, lineHeight: '16px', cursor: 'pointer', border: 'none', background: 'none', color: 'var(--text-dim)', padding: 0 }}
               >×</button>
             </div>
           ))}
@@ -974,27 +974,26 @@ function ColorSepLayerSection({
   onLockedColors: (v: RGB[] | null) => void;
   onColorChange: (ci: number, hex: string) => void;
 }) {
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   return (
     <div style={{ borderBottom: '1px solid var(--border)' }}>
       {/* Controls */}
       <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            Colors
-          </span>
-          <div style={{ display: 'flex', gap: 3 }}>
-            {[2, 3, 4, 5, 6, 8].map(n => (
-              <button
-                key={n}
-                onClick={() => onNumColors(n)}
-                style={{
-                  width: 24, height: 22, fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 600,
-                  cursor: 'pointer', border: '1px solid var(--border)',
-                  background: numColors === n ? 'var(--accent)' : 'var(--surface-2)',
-                  color: numColors === n ? '#000' : 'var(--text-muted)',
-                }}
-              >{n}</button>
-            ))}
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              Colors
+            </span>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', fontWeight: 700 }}>{numColors}</span>
+          </div>
+          <input
+            type="range" min={2} max={30} step={1} value={numColors}
+            onChange={e => onNumColors(Number(e.target.value))}
+            style={{ width: '100%', accentColor: 'var(--accent)' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>2</span>
+            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>30</span>
           </div>
         </div>
         <div>
@@ -1026,49 +1025,66 @@ function ColorSepLayerSection({
         currentColors={colors}
       />
 
-      {/* Color layer cards */}
-      <div style={{ padding: '8px 8px 4px' }}>
-        {colors.length === 0 ? (
-          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', padding: '8px 4px', lineHeight: 1.6 }}>
-            Upload an image to auto-detect colors.
-          </div>
-        ) : (
-          [...colors].reverse().map((color, ri) => {
-            const ci = colors.length - 1 - ri;
+      {/* Color strips */}
+      {colors.length === 0 ? (
+        <div style={{ padding: '8px 12px', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
+          Upload an image to auto-detect colors.
+        </div>
+      ) : (
+        <div style={{ padding: '4px 8px 6px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3 }}>
+          {colors.map((color, ci) => {
             const id = `colorsep-${ci}`;
             const visible = visibility[id] !== false;
             const hex = '#' + color.map(v => v.toString(16).padStart(2, '0')).join('');
+            const hovered = hoveredId === id;
             return (
-              <div key={id} className="layer-card" style={{ marginBottom: 4 }}>
-                <div className="layer-swatch" style={{ position: 'relative', cursor: 'pointer' }} title="Click to change color">
-                  <div className="layer-swatch-inner" style={{ background: hex }} />
+              <div
+                key={id}
+                onMouseEnter={() => setHoveredId(id)}
+                onMouseLeave={() => setHoveredId(null)}
+                style={{
+                  position: 'relative', overflow: 'hidden',
+                  border: `1px solid ${hovered ? 'var(--border-2)' : 'var(--border)'}`,
+                  opacity: visible ? 1 : 0.4,
+                  transition: 'opacity 0.1s, border-color 0.1s',
+                }}
+              >
+                {/* Swatch — click to open color picker */}
+                <div style={{ position: 'relative', height: 30, background: hex, cursor: 'pointer' }}>
                   <input
                     type="color"
                     value={hex}
                     onChange={(e) => onColorChange(ci, e.target.value)}
-                    style={{
-                      position: 'absolute', inset: 0, opacity: 0,
-                      cursor: 'pointer', width: '100%', height: '100%',
-                    }}
+                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
                   />
                 </div>
-                <div className="layer-card-info">
-                  <div className="layer-card-name">Color {ci + 1}</div>
-                  <div className="layer-card-sub" style={{ fontFamily: 'var(--font-mono)' }}>{hex.toUpperCase()}</div>
-                </div>
-                <div className="layer-card-actions">
+                {/* Info bar */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  height: 18, paddingLeft: 4, paddingRight: 0,
+                  background: 'var(--surface-2)', borderTop: '1px solid var(--border)',
+                }}>
+                  <span style={{
+                    flex: 1, fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: hovered ? 400 : 600,
+                    color: hovered ? 'var(--text-muted)' : 'var(--text)',
+                    letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    transition: 'color 0.1s',
+                  }}>
+                    {hovered ? hex.slice(1).toUpperCase() : `C${ci + 1}`}
+                  </span>
                   <button
                     className={`vis-btn ${!visible ? 'hidden-layer' : ''}`}
-                    onClick={() => onVisibilityChange(id, !visible)}
+                    style={{ width: 18, height: 18, flexShrink: 0 }}
+                    onClick={(e) => { e.stopPropagation(); onVisibilityChange(id, !visible); }}
                   >
                     <EyeIcon visible={visible} />
                   </button>
                 </div>
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }

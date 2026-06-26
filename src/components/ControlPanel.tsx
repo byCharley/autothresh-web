@@ -189,14 +189,18 @@ function PatternControls({
   const isGrain = pattern.startsWith('grain') || pattern.startsWith('noise');
   const isMicro = pattern === 'grain-micro';
   const hasPattern = pattern !== 'none';
-  const scaleMin  = isGrain ? 0.5 : 1;
+  const scaleMin  = 1;
   const scaleMax  = scaleMaxOverride ?? (isGrain ? 6 : 40);
   const scaleStep = isGrain ? 0.5 : 1;
   return (
     <>
       <div className="field">
         <span className="field-label">Type</span>
-        <PatternSelect value={pattern} onChange={onPattern} />
+        <PatternSelect value={pattern} onChange={(v) => {
+          onPattern(v);
+          const newIsGrain = v.startsWith('grain') || v.startsWith('noise');
+          if (newIsGrain) onScale(1);
+        }} />
       </div>
       {hasPattern && (
         <>
@@ -302,8 +306,6 @@ function DocumentSection() {
     documentDpi, setDocumentDpi,
     documentWidthIn, documentHeightIn,
     setDocumentWidth, setDocumentHeight,
-    showRegistrationMarks, setShowRegistrationMarks,
-    regMarkPadding, setRegMarkPadding,
     originalImage, globalPattern, separationMode,
   } = useStore();
 
@@ -316,7 +318,7 @@ function DocumentSection() {
   const artHIn = originalImage ? (originalImage.height / documentDpi).toFixed(2) : null;
 
   return (
-    <Section title="Document Setup" defaultOpen={true}>
+    <Section title="Document Setup" defaultOpen={false}>
       {/* Presets */}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
         {DOC_PRESETS.map((p) => (
@@ -388,26 +390,29 @@ function DocumentSection() {
           </div>
         )}
       </div>
+    </Section>
+  );
+}
 
-      {/* Registration Marks — not applicable to vector exports */}
-      {!isVector && (
-        <div style={{ borderTop: '1px solid var(--border)', marginTop: 10, paddingTop: 10 }}>
-          <SwitchRow
-            label="Registration Marks"
-            checked={showRegistrationMarks}
-            onChange={setShowRegistrationMarks}
-            hint={showRegistrationMarks ? 'Shown at document corners — visible in preview and baked into export' : undefined}
-          />
-          {showRegistrationMarks && (
-            <Slider
-              label="Padding"
-              value={regMarkPadding}
-              min={0.1} max={2.0} step={0.1}
-              onChange={setRegMarkPadding}
-              unit='"'
-            />
-          )}
-        </div>
+function RegistrationSection() {
+  const { showRegistrationMarks, setShowRegistrationMarks, regMarkPadding, setRegMarkPadding, separationMode } = useStore();
+  if (separationMode === 'vector') return null;
+  return (
+    <Section title="Registration Marks" defaultOpen={false}>
+      <SwitchRow
+        label="Enable"
+        checked={showRegistrationMarks}
+        onChange={setShowRegistrationMarks}
+        hint={showRegistrationMarks ? 'Shown at document corners — visible in preview and baked into export' : undefined}
+      />
+      {showRegistrationMarks && (
+        <Slider
+          label="Padding"
+          value={regMarkPadding}
+          min={0.1} max={2.0} step={0.1}
+          onChange={setRegMarkPadding}
+          unit='"'
+        />
       )}
     </Section>
   );
@@ -995,6 +1000,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         <div className="panel-header"><span className="panel-title">Controls</span></div>
         <div className="control-scroll">
           <DocumentSection />
+          <RegistrationSection />
         </div>
       </aside>
     );
@@ -1021,6 +1027,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
 
       <div className="control-scroll">
         <DocumentSection />
+        <RegistrationSection />
         {separationMode === 'cmyk' ? (
           <>
             <CmykAutoSection quality={cmykQuality} />

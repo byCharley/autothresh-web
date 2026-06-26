@@ -600,6 +600,7 @@ export function computeZones(
   density?: number,
   angle?: number,
   softness?: number,
+  importanceMap?: Float32Array | null,
 ): Int32Array {
   const { data, width: w, height: h } = imageData;
   const n = w * h;
@@ -861,7 +862,8 @@ export function computeZones(
       // ink areas, not just at zone boundaries. Previously was ±step/2 which made
       // dithering invisible in solid areas — looked like an overlay rather than
       // being baked into the separation.
-      const offset = tileVal * step * 2 * dn;
+      const impScale = importanceMap ? 1 - importanceMap[i] * 0.55 : 1;
+      const offset = tileVal * step * 2 * dn * impScale;
       zones[i] = Math.max(0, Math.min(k - 1, Math.floor((L + offset) / step)));
     }
   }
@@ -881,12 +883,13 @@ export function paletteSeparate(
   density?: number,
   angle?: number,
   softness?: number,
+  importanceMap?: Float32Array | null,
 ): ProcessedLayer[] {
   const { width: w, height: h } = imageData;
   const k = colors.length;
   const n = w * h;
 
-  const zones = computeZones(imageData, k, bgMask, pattern, Math.round(patternScale), imageAdj, density, angle, softness);
+  const zones = computeZones(imageData, k, bgMask, pattern, Math.round(patternScale), imageAdj, density, angle, softness, importanceMap);
 
   return colors.map(([cr, cg, cb], ci) => {
     const mask = new Uint8Array(n);
@@ -916,12 +919,13 @@ export function renderPaletteComposite(
   density?: number,
   angle?: number,
   softness?: number,
+  importanceMap?: Float32Array | null,
 ): ImageData {
   const { width: w, height: h } = imageData;
   const k = colors.length;
   const n = w * h;
 
-  const zones = computeZones(imageData, k, bgMask, pattern, Math.round(patternScale), imageAdj, density, angle, softness);
+  const zones = computeZones(imageData, k, bgMask, pattern, Math.round(patternScale), imageAdj, density, angle, softness, importanceMap);
 
   const out = new ImageData(w, h);
   const od = out.data;

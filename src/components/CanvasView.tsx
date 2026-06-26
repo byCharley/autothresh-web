@@ -10,6 +10,7 @@ import { kMeansColors, paletteSeparate, renderPaletteComposite, bayerOrder } fro
 import { colorSeparate, renderColorSepComposite } from '../engine/colorSeparator';
 import type { LayerConfig, PatternConfig, ImageAdjustments } from '../engine/imageProcessor';
 import { generateTextureMask } from '../engine/textureGenerator';
+import { buildImportanceMap } from '../engine/analysisPass';
 import { loadAllTextures } from '../engine/textureLoader';
 import { traceImageToSVG } from '../engine/vectorTracer';
 
@@ -216,10 +217,8 @@ export function CanvasView() {
   }
 
   // Main processing effect.
-  // Runs only when settings change — never on zoom. Zoom is a pure CSS transform.
-  // Always processes at MAX_PREVIEW_DIM so the rendered canvas is stable across
-  // all zoom levels (same as Photoshop's magnifier: zooming in shows bigger pixels,
-  // not a re-render at higher resolution).
+  // Runs when settings change — zoom is a pure CSS transform and never triggers a reprocess.
+  // Always renders at MAX_PREVIEW_DIM; bilinear CSS upscaling gives clean results at any zoom.
   useEffect(() => {
     if (!originalImage) return;
     let cancelled = false;
@@ -228,7 +227,6 @@ export function CanvasView() {
     const tid = setTimeout(() => {
       setIsProcessing(true);
       rafId = requestAnimationFrame(() => {
-        // Always use the fixed base resolution — never zoom-scaled.
         // Palette mode: fix layout at 300 DPI so changing DPI doesn't resize the canvas.
         // DPI still affects pattern density via the effectiveTileSize formula below.
         const layout = separationMode === 'palette'
@@ -252,6 +250,8 @@ export function CanvasView() {
           const tol = bgLum > 200 ? 40 : bgTolerance;
           return computeBackgroundMask(artScaled, tol);
         })();
+
+        const importanceMap = buildImportanceMap(artScaled, localBgMask);
 
         let artComposite: ImageData;
         if (separationMode === 'cmyk') {
@@ -329,14 +329,14 @@ export function CanvasView() {
           const plateLayers = paletteSeparate(
             artScaled, paletteColors, localBgMask,
             palettePattern, effectiveTileSize, imageAdjustments,
-            paletteDensity, paletteAngle, paletteSoftness,
+            paletteDensity, paletteAngle, paletteSoftness, importanceMap,
           );
           setProcessedLayers(plateLayers.filter(l => paletteVisibility[l.id] !== false));
 
           artComposite = renderPaletteComposite(
             artScaled, paletteColors, localBgMask, paletteVisibility,
             palettePattern, effectiveTileSize, imageAdjustments,
-            paletteDensity, paletteAngle, paletteSoftness,
+            paletteDensity, paletteAngle, paletteSoftness, importanceMap,
           );
 
           // Color mode: overlay original image with 'color' blend to restore original hues
@@ -397,13 +397,13 @@ export function CanvasView() {
           };
           const { layers: csLayers, colors: csColors } = colorSeparate(
             adjScaled, colorSepSettings, localBgMask,
-            colorSepLockedColors ?? undefined,
+            colorSepLockedColors ?? undefined, importanceMap,
           );
           setColorSepColors(csColors);
           setProcessedLayers(csLayers.filter(l => colorSepVisibility[l.id] !== false));
 
           artComposite = renderColorSepComposite(
-            adjScaled, csColors, colorSepVisibility, colorSepSettings, localBgMask,
+            adjScaled, csColors, colorSepVisibility, colorSepSettings, localBgMask, importanceMap,
           );
 
           if (textureEnabled) {
@@ -464,7 +464,7 @@ export function CanvasView() {
           const resolved = resolvePatterns(layers, globalPattern);
           // Run without internal knockout so paint masks can be applied first,
           // then the external applyKnockout call below handles overlap removal.
-          const processed = processImage(artScaled, resolved, false, localBgMask, imageAdjustments);
+          const processed = processImage(artScaled, resolved, false, localBgMask, imageAdjustments, 1, importanceMap);
 
           if (textureEnabled) {
             const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
@@ -562,7 +562,6 @@ export function CanvasView() {
           canvas.height = docPrevH;
           canvas.getContext('2d')!.drawImage(docCanvas, 0, 0);
           setCanvasDims({ w: docPrevW, h: docPrevH });
-          // Always fixed — cssScale = zoom * MAX_PREVIEW_DIM / MAX_PREVIEW_DIM = zoom
           setRenderedAtDim(MAX_PREVIEW_DIM);
           setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
         }
@@ -586,7 +585,7 @@ export function CanvasView() {
     vectorNumColors, vectorDetail, vectorSmooth, vectorInkColor, vectorPathMode, vectorMinSpeckle,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, colorSepLockedColors,
-    // renderDim intentionally excluded — zoom must never trigger a reprocess
+    // renderDim excluded — zoom is a pure CSS transform, never triggers a reprocess
   ]);
 
   // Fit-to-view on image load. Uses zoom-independent base dims.
@@ -859,10 +858,10 @@ export function CanvasView() {
   //   renderedAtDim = MAX_PREVIEW_DIM * zoom → cssScale = 1  (1:1, sharp)
   //   renderedAtDim = MAX_RENDER_DIM (cap hit) → cssScale > 1  (nearest-neighbor)
   const cssScale    = zoom * MAX_PREVIEW_DIM / renderedAtDim;
-  // Palette/dither mode always uses nearest-neighbor: bilinear interpolation blends adjacent
-  // ink dots (e.g. red + blue → purple), which makes fine dither patterns look blurry.
-  // Physical ink dots are either on or off — nearest-neighbor preserves that at any zoom.
-  const isPixelated = cssScale > 1.02 || separationMode === 'palette';
+  // Dither/palette mode uses nearest-neighbor: bilinear blends adjacent ink dots
+  // (e.g. red + blue → purple). All other modes use smooth bilinear upscaling so
+  // zooming in doesn't produce visible pixel blocks on the 1200px canvas.
+  const isPixelated = separationMode === 'palette';
 
   // Artboard box style for empty state.
   const artboardBoxStyle: React.CSSProperties = artboardSize.w > 0
