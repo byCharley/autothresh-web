@@ -73,7 +73,7 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
       const itemPlanName = items[0]?.selling_plan_name ?? items[0]?.title;
 
       if (valid) {
-        subscriptionStatus = isInTrial ? 'trial' : st.toLowerCase();
+        subscriptionStatus = (isInTrial && (st === 'ACTIVE' || st === 'TRIAL')) ? 'trial' : st.toLowerCase();
         nextBillingDate = isInTrial
           ? trialEndRaw
           : (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
