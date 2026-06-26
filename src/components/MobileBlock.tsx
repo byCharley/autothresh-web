@@ -1,5 +1,3 @@
-import { AppIcon } from './AppIcon';
-
 export function MobileBlock() {
   return (
     <div style={{
@@ -11,19 +9,21 @@ export function MobileBlock() {
       padding: '32px 24px', textAlign: 'center',
       fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
     }}>
-      {/* App icon */}
-      <div style={{ marginBottom: 24 }}>
-        <AppIcon size={72} color="var(--accent)" />
-      </div>
-
       {/* Branding */}
-      <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', color: '#fff', marginBottom: 4 }}>
-        SepForge™{' '}
-        <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 20 }}>
+        <div style={{ fontFamily: 'monospace', fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', color: '#f1f2f2', lineHeight: 1 }}>
+          SepForge<span style={{ fontSize: 14, verticalAlign: 'super', lineHeight: 0 }}>™</span>
+        </div>
+        <span style={{ width: 1, height: 44, background: 'rgba(255,255,255,0.2)', display: 'block', flexShrink: 0 }} />
+        <img
+          src="/CharleyPangus_Favicon.svg"
+          alt="Charley Pangus"
+          style={{ height: 44, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.9 }}
+        />
       </div>
 
       {/* Divider */}
-      <div style={{ width: 32, height: 1, background: '#333', margin: '16px auto' }} />
+      <div style={{ width: 32, height: 1, background: '#333', margin: '4px auto 20px' }} />
 
       {/* Message */}
       <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 12 }}>
