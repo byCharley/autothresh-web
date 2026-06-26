@@ -194,14 +194,20 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <span style={{
                     width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                    background: subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817' : '#3ecf4f',
-                    boxShadow: subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '0 0 4px #e6a81788' : '0 0 4px #3ecf4f88',
+                    background: subscriptionStatus === 'trial' ? '#a78bfa'
+                      : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
+                      : '#3ecf4f',
+                    boxShadow: subscriptionStatus === 'trial' ? '0 0 4px #a78bfa88'
+                      : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '0 0 4px #e6a81788'
+                      : '0 0 4px #3ecf4f88',
                   }} />
                   <span style={{
                     fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'capitalize',
-                    color: subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817' : '#3ecf4f',
+                    color: subscriptionStatus === 'trial' ? '#a78bfa'
+                      : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
+                      : '#3ecf4f',
                   }}>
-                    {subscriptionStatus ?? 'Active'}
+                    {subscriptionStatus === 'trial' ? 'Free Trial' : (subscriptionStatus ?? 'Active')}
                   </span>
                 </div>
 
@@ -214,15 +220,21 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
 
                 {nextBillingFormatted && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Next billing</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      {subscriptionStatus === 'trial' ? 'Trial ends' : 'Next billing'}
+                    </span>
                     <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{nextBillingFormatted}</span>
                   </div>
                 )}
 
                 {daysRemaining !== null && daysRemaining > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Days left</span>
-                    <span style={{ fontSize: 11, color: 'var(--text)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{daysRemaining}</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      {subscriptionStatus === 'trial' ? 'Trial days left' : 'Days left'}
+                    </span>
+                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600,
+                      color: subscriptionStatus === 'trial' ? '#a78bfa' : 'var(--text)',
+                    }}>{daysRemaining}</span>
                   </div>
                 )}
               </div>

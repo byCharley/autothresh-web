@@ -54,10 +54,17 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
     let subscriptionStatus: string | undefined;
     const hasSub = subs.some(s => {
       const st = String(s.status ?? '').toUpperCase();
-      const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'CANCELLED' || st === 'CANCELED';
+      const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'CANCELLED' || st === 'CANCELED' || st === 'TRIAL';
+
+      // Detect trial period — Seal may use explicit TRIAL status or an ACTIVE sub with a future trial end date
+      const trialEndRaw = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
+      const isInTrial = st === 'TRIAL' || (!!trialEndRaw && new Date(trialEndRaw) > new Date());
+
       if (valid) {
-        subscriptionStatus = st.toLowerCase();
-        nextBillingDate = (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
+        subscriptionStatus = isInTrial ? 'trial' : st.toLowerCase();
+        nextBillingDate = isInTrial
+          ? trialEndRaw
+          : (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
         planTitle = (s.plan_title ?? s.product_title ?? s.title ?? s.name ?? s.plan_name) as string | undefined;
       }
       return valid;
