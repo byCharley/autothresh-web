@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { AppIcon } from './AppIcon';
 
 interface TopBarProps {
   onExport: () => void;
