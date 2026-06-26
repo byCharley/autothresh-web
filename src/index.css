@@ -196,9 +196,9 @@ html, body, #root {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: #000;
 }
-.btn-primary:hover { background: var(--accent-h); border-color: var(--accent-h); }
+.btn-primary:hover { background: var(--accent-h); border-color: var(--accent-h); color: #000; }
 
 .btn-ghost {
   background: transparent;

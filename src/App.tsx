@@ -18,6 +18,7 @@ import { PresetsModal } from './components/PresetsModal';
 import { EulaModal } from './components/EulaModal';
 import { FaqModal } from './components/FaqModal';
 import { BetaNoticeModal, shouldShowBetaNotice } from './components/BetaNoticeModal';
+import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components/WhatsNewModal';
 import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
@@ -68,9 +69,11 @@ function App() {
   useHistorySync();
   const { status, session, initiateLogin, switchAccount, logout } = useAuth();
   const [showExport, setShowExport] = useState(false);
-  const [showEula, setShowEula]     = useState(false);
-  const [showFaq, setShowFaq]       = useState(false);
+  const [showEula, setShowEula]         = useState(false);
+  const [showFaq, setShowFaq]           = useState(false);
   const [showBetaNotice, setShowBetaNotice] = useState(() => shouldShowBetaNotice());
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [hasUpdates, setHasUpdates]     = useState(() => hasUnseenUpdates());
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();
@@ -747,10 +750,27 @@ function App() {
         >
           EULA
         </button>
+        <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
+        <button
+          onClick={() => {
+            setShowWhatsNew(true);
+            markChangelogSeen();
+            setHasUpdates(false);
+          }}
+          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: hasUpdates ? 'var(--accent)' : 'var(--text-dim)', letterSpacing: '0.06em', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = hasUpdates ? 'var(--accent)' : 'var(--text-dim)')}
+        >
+          {hasUpdates && (
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', flexShrink: 0 }} />
+          )}
+          What's New
+        </button>
       </footer>
-      {showFaq  && <FaqModal  onClose={() => setShowFaq(false)}  />}
-      {showEula && <EulaModal onClose={() => setShowEula(false)} />}
+      {showFaq      && <FaqModal      onClose={() => setShowFaq(false)}      />}
+      {showEula     && <EulaModal     onClose={() => setShowEula(false)}     />}
       {showBetaNotice && <BetaNoticeModal onClose={() => setShowBetaNotice(false)} />}
+      {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} />}
     </div>
   );
 }
