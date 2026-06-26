@@ -23,7 +23,7 @@ export function EulaModal({ onClose }: Props) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text)' }}>
-            Terms of Use — AutoThresh Web
+            Terms of Use — SepForge
           </span>
           <button
             onClick={onClose}
@@ -39,7 +39,7 @@ export function EulaModal({ onClose }: Props) {
         <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.85, fontFamily: 'var(--font-sans)' }}>
 
           <Section title="Account Sharing">
-            Your AutoThresh Web subscription is a single-user license. Sharing your
+            Your SepForge subscription is a single-user license. Sharing your
             login credentials with anyone else is strictly prohibited. If we detect
             that an account is being accessed by multiple users, the subscription
             will be immediately terminated and the associated IP address will be
@@ -64,7 +64,7 @@ export function EulaModal({ onClose }: Props) {
           </Section>
 
           <Section title="Acceptance">
-            By signing in and using AutoThresh Web you agree to these terms. If you
+            By signing in and using SepForge you agree to these terms. If you
             do not agree, please do not use the service.
           </Section>
 

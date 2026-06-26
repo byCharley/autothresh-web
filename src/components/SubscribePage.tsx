@@ -34,7 +34,7 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
           <AppIcon size={56} color="var(--accent)" />
         </div>
         <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-          AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
+          SepForge™ <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
         </div>
       </div>
 
@@ -62,7 +62,7 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
         )}
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
-          AutoThresh Web requires an active subscription.
+          SepForge requires an active subscription.
           Subscribe to get full access to the tonal separation tool.
         </div>
 

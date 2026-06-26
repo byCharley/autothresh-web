@@ -41,7 +41,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
           />
         </div>
         <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-          AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
+          SepForge™ <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
           Professional Tonal Separation Tool
@@ -56,7 +56,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
         <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 28 }}>
           Sign in with your{' '}
           <span style={{ color: 'var(--text)', fontWeight: 600 }}>Charley Pangus</span>
-          {' '}store account to access AutoThresh Web.
+          {' '}store account to access SepForge.
           <br />
           <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
             You'll receive a one-time passcode by email.
@@ -102,7 +102,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
         </button>
 
         <div style={{ marginTop: 16, fontSize: 10, color: 'var(--text-dim)', lineHeight: 1.6, fontFamily: 'var(--font-mono)' }}>
-          Access requires an active AutoThresh subscription.
+          Access requires an active SepForge subscription.
         </div>
 
         {onSwitchAccount && (
