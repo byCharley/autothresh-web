@@ -17,6 +17,7 @@ import { MockupPreview } from './components/MockupPreview';
 import { PresetsModal } from './components/PresetsModal';
 import { EulaModal } from './components/EulaModal';
 import { FaqModal } from './components/FaqModal';
+import { BetaNoticeModal, shouldShowBetaNotice } from './components/BetaNoticeModal';
 import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
@@ -68,6 +69,7 @@ function App() {
   const [showExport, setShowExport] = useState(false);
   const [showEula, setShowEula]     = useState(false);
   const [showFaq, setShowFaq]       = useState(false);
+  const [showBetaNotice, setShowBetaNotice] = useState(() => shouldShowBetaNotice());
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();
@@ -690,6 +692,7 @@ function App() {
       </footer>
       {showFaq  && <FaqModal  onClose={() => setShowFaq(false)}  />}
       {showEula && <EulaModal onClose={() => setShowEula(false)} />}
+      {showBetaNotice && <BetaNoticeModal onClose={() => setShowBetaNotice(false)} />}
     </div>
   );
 }
