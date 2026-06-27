@@ -3,7 +3,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const resend    = new Resend(process.env.RESEND_API_KEY);
 const FROM      = process.env.RESEND_FROM_EMAIL ?? 'AutoThresh <noreply@charleypangus.com>';
-const TO        = 'panguscharley@gmail.com';
+const TO        = 'info@charleypangus.com';
 
 const EMAIL_RE  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
