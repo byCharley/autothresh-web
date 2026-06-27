@@ -19,6 +19,7 @@ import { EulaModal } from './components/EulaModal';
 import { FaqModal } from './components/FaqModal';
 import { BetaNoticeModal, shouldShowBetaNotice } from './components/BetaNoticeModal';
 import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components/WhatsNewModal';
+import { ContactModal } from './components/ContactModal';
 import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
@@ -72,8 +73,9 @@ function App() {
   const [showEula, setShowEula]         = useState(false);
   const [showFaq, setShowFaq]           = useState(false);
   const [showBetaNotice, setShowBetaNotice] = useState(() => shouldShowBetaNotice());
-  const [showWhatsNew, setShowWhatsNew] = useState(false);
-  const [hasUpdates, setHasUpdates]     = useState(() => hasUnseenUpdates());
+  const [showWhatsNew, setShowWhatsNew]   = useState(false);
+  const [hasUpdates, setHasUpdates]       = useState(() => hasUnseenUpdates());
+  const [showContact, setShowContact]     = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();
@@ -727,13 +729,13 @@ function App() {
           @charleypangus
         </a>
         <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
-        <a href="https://charleypangus.com/pages/support" target="_blank" rel="noopener noreferrer"
-          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', textDecoration: 'none' }}
+        <button onClick={() => setShowContact(true)}
+          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
           onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
         >
-          Support
-        </a>
+          Contact
+        </button>
         <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
         <button onClick={() => setShowFaq(true)}
           style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
@@ -771,6 +773,7 @@ function App() {
       {showEula     && <EulaModal     onClose={() => setShowEula(false)}     />}
       {showBetaNotice && <BetaNoticeModal onClose={() => setShowBetaNotice(false)} />}
       {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} />}
+      {showContact  && <ContactModal  onClose={() => setShowContact(false)}  />}
     </div>
   );
 }
