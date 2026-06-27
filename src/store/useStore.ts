@@ -35,6 +35,14 @@ export interface PresetData {
   paletteDensity?: number;
   paletteAngle?: number;
   paletteImageAdjustments?: ImageAdjustments;
+  // Color Sep fields
+  colorSepNumColors?: number;
+  colorSepColorPriority?: number;
+  colorSepPattern?: PatternType;
+  colorSepPatternScale?: number;
+  colorSepPatternDensity?: number;
+  colorSepPatternAngle?: number;
+  colorSepLockedColors?: RGB[] | null;
 }
 
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
@@ -684,12 +692,9 @@ export const useStore = create<AppState>((set, get) => ({
   setSeparationMode: (separationMode) => { localStorage.setItem('at-mode', separationMode); return set((s) => ({
     historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20),
     separationMode,
-    // Swap image adjustments: save current mode's settings, restore new mode's
-    imageAdjustments: s.imageAdjustmentsPerMode[separationMode] ?? { ...DEFAULT_IMAGE_ADJ },
-    imageAdjustmentsPerMode: {
-      ...s.imageAdjustmentsPerMode,
-      [s.separationMode]: { ...s.imageAdjustments },
-    },
+    // Always reset image adjustments on mode switch — each mode starts from the original image
+    imageAdjustments: { ...DEFAULT_IMAGE_ADJ },
+    imageAdjustmentsPerMode: {},
     // When entering CMYK mode, show all plates composite by default
     cmykVisibility: separationMode === 'cmyk'
       ? { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true }
@@ -778,7 +783,16 @@ export const useStore = create<AppState>((set, get) => ({
       paletteDensity:      data.paletteDensity      ?? 100,
       paletteAngle:        data.paletteAngle        ?? 0,
     } : {};
-    return { ...base, ...dither };
+    const colorSep = data.mode === 'color-sep' ? {
+      colorSepNumColors:     data.colorSepNumColors     ?? s.colorSepNumColors,
+      colorSepColorPriority: data.colorSepColorPriority ?? s.colorSepColorPriority,
+      colorSepPattern:       data.colorSepPattern       ?? s.colorSepPattern,
+      colorSepPatternScale:  data.colorSepPatternScale  ?? s.colorSepPatternScale,
+      colorSepPatternDensity: data.colorSepPatternDensity ?? s.colorSepPatternDensity,
+      colorSepPatternAngle:  data.colorSepPatternAngle  ?? s.colorSepPatternAngle,
+      colorSepLockedColors:  data.colorSepLockedColors !== undefined ? data.colorSepLockedColors : s.colorSepLockedColors,
+    } : {};
+    return { ...base, ...dither, ...colorSep };
   }),
   capturePreset: (): PresetData => {
     const s = get();
@@ -811,6 +825,15 @@ export const useStore = create<AppState>((set, get) => ({
       base.paletteDensity      = s.paletteDensity;
       base.paletteAngle        = s.paletteAngle;
       base.paletteImageAdjustments = s.imageAdjustments;
+    }
+    if (s.separationMode === 'color-sep') {
+      base.colorSepNumColors      = s.colorSepNumColors;
+      base.colorSepColorPriority  = s.colorSepColorPriority;
+      base.colorSepPattern        = s.colorSepPattern;
+      base.colorSepPatternScale   = s.colorSepPatternScale;
+      base.colorSepPatternDensity = s.colorSepPatternDensity;
+      base.colorSepPatternAngle   = s.colorSepPatternAngle;
+      base.colorSepLockedColors   = s.colorSepLockedColors;
     }
     return base;
   },
