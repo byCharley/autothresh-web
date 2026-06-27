@@ -96,7 +96,7 @@ export function ContactModal({ onClose }: Props) {
               <p style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 24 }}>
                 Thanks for reaching out. A confirmation has been sent to <strong>{email}</strong> and I'll get back to you as soon as possible.
               </p>
-              <button className="btn btn-primary" onClick={onClose} style={{ minWidth: 100 }}>
+              <button className="btn btn-primary" onClick={onClose} style={{ minWidth: 100, display: 'block', margin: '0 auto' }}>
                 Done
               </button>
             </div>
