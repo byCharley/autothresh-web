@@ -28,11 +28,10 @@ export function PresetsModal({ token, onClose }: Props) {
   const [deletingId, setDeletingId]     = useState<string | null>(null);
   const [newName, setNewName]           = useState('');
   const [loadedId, setLoadedId]         = useState<string | null>(null);
-  const [activeTab, setActiveTab]       = useState<PresetMode>(() => {
-    if (separationMode === 'palette')   return 'palette';
-    if (separationMode === 'color-sep') return 'color-sep';
-    return 'threshold';
-  });
+  const currentMode: PresetMode =
+    separationMode === 'palette'   ? 'palette'   :
+    separationMode === 'color-sep' ? 'color-sep' :
+    'threshold';
 
   useEffect(() => { fetchPresets(); }, []);
 
@@ -103,7 +102,7 @@ export function PresetsModal({ token, onClose }: Props) {
     return 'threshold';
   }
 
-  const tabPresets = presets.filter((p) => getPresetMode(p.data) === activeTab);
+  const tabPresets = presets.filter((p) => getPresetMode(p.data) === currentMode);
   const isEmpty = !loading && tabPresets.length === 0;
 
   const TAB_LABELS: Record<PresetMode, string> = {
@@ -156,35 +155,17 @@ export function PresetsModal({ token, onClose }: Props) {
           {/* Left: saved presets list */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid var(--border)' }}>
 
-            {/* Mode tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              {(['threshold', 'palette', 'color-sep'] as PresetMode[]).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  style={{
-                    flex: 1, height: 36, fontSize: 10, fontFamily: 'var(--font-mono)',
-                    fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
-                    cursor: 'pointer', border: 'none',
-                    borderBottom: `2px solid ${activeTab === tab ? 'var(--accent)' : 'transparent'}`,
-                    background: activeTab === tab ? 'var(--accent-dim)' : 'transparent',
-                    color: activeTab === tab ? 'var(--accent)' : 'var(--text-muted)',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  {TAB_LABELS[tab]}
-                  {!loading && (
-                    <span style={{
-                      marginLeft: 6, fontSize: 9, opacity: 0.6,
-                      background: activeTab === tab ? 'var(--accent)' : 'var(--surface-2)',
-                      color: activeTab === tab ? '#000' : 'var(--text-dim)',
-                      padding: '1px 5px', borderRadius: 3,
-                    }}>
-                      {presets.filter((p) => getPresetMode(p.data) === tab).length}
-                    </span>
-                  )}
-                </button>
-              ))}
+            {/* Mode header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', height: 36, borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)' }}>
+                {TAB_LABELS[currentMode]}
+              </span>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Presets</span>
+              {!loading && (
+                <span style={{ marginLeft: 'auto', fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  {tabPresets.length} saved
+                </span>
+              )}
             </div>
 
             {loading ? (
@@ -197,18 +178,18 @@ export function PresetsModal({ token, onClose }: Props) {
                   <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
                 </svg>
                 <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text)', fontWeight: 600 }}>
-                  No {TAB_LABELS[activeTab]} presets saved yet
+                  No {TAB_LABELS[currentMode]} presets saved yet
                 </div>
                 <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.7, maxWidth: 220 }}>
                   {apiAvailable
-                    ? `Switch to ${TAB_LABELS[activeTab]} mode, set up your settings, then save a preset from the right panel.`
+                    ? `Switch to ${TAB_LABELS[currentMode]} mode, set up your settings, then save a preset from the right panel.`
                     : 'Save a preset to get started. Your settings will sync to your account once connected.'}
                 </div>
               </div>
             ) : (
               <>
                 <div style={{ padding: '8px 14px 6px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', flexShrink: 0 }}>
-                  {TAB_LABELS[activeTab]} Presets ({tabPresets.length})
+                  {TAB_LABELS[currentMode]} Presets ({tabPresets.length})
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px' }}>
                   {tabPresets.map((preset) => {
