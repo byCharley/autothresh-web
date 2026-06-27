@@ -54,13 +54,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await resend.emails.send({
       from:    FROM,
       to:      email.trim(),
-      subject: 'Message received — AutoThresh®',
+      subject: 'Message received — AutoThresh™',
       html: `
         <div style="font-family:monospace;font-size:13px;color:#1a1a1a;max-width:480px">
           <p style="margin:0 0 12px">Hi ${safeName},</p>
           <p style="margin:0 0 12px">Your message has been received. I'll get back to you as soon as possible.</p>
           <hr style="border:none;border-top:1px solid #e0e0e0;margin:16px 0"/>
-          <p style="margin:0;color:#888;font-size:11px">AutoThresh® Web — Charley Pangus</p>
+          <p style="margin:0;color:#888;font-size:11px">AutoThresh™ Web — Charley Pangus</p>
         </div>
       `,
     });

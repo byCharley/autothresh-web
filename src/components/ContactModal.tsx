@@ -75,7 +75,7 @@ export function ContactModal({ onClose }: Props) {
               Contact
             </span>
             <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.05em' }}>
-              AutoThresh® Web
+              AutoThresh™ Web
             </span>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4, lineHeight: 1 }}>
