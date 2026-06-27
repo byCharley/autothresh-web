@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import type { PresetData } from '../store/useStore';
 
-type PresetMode = 'threshold' | 'palette' | 'color-sep' | 'cmyk';
+type PresetMode = 'threshold' | 'palette' | 'color-sep';
 
 interface SavedPreset {
   id: string;
@@ -31,7 +31,6 @@ export function PresetsModal({ token, onClose }: Props) {
   const [activeTab, setActiveTab]       = useState<PresetMode>(() => {
     if (separationMode === 'palette')   return 'palette';
     if (separationMode === 'color-sep') return 'color-sep';
-    if (separationMode === 'cmyk')      return 'cmyk';
     return 'threshold';
   });
 
@@ -101,7 +100,6 @@ export function PresetsModal({ token, onClose }: Props) {
     const m = data.separationMode ?? data.mode;
     if (m === 'palette')   return 'palette';
     if (m === 'color-sep') return 'color-sep';
-    if (m === 'cmyk')      return 'cmyk';
     return 'threshold';
   }
 
@@ -109,21 +107,19 @@ export function PresetsModal({ token, onClose }: Props) {
   const isEmpty = !loading && tabPresets.length === 0;
 
   const TAB_LABELS: Record<PresetMode, string> = {
-    threshold: 'Threshold',
-    palette:   'Dither',
+    threshold:   'Threshold',
+    palette:     'Dither',
     'color-sep': 'Color',
-    cmyk:      'CMYK',
   };
 
   const MODE_DESCRIPTIONS: Record<PresetMode, string> = {
     threshold:   'Saves layers, colors, thresholds, patterns, texture, and document settings.',
     palette:     'Saves dither style, ink colors, scale, color mode, and image adjustments.',
     'color-sep': 'Saves color count, priority, pattern, locked colors, and image adjustments.',
-    cmyk:        'Saves LPI, dot angles, UCR/GCR settings, channel visibility, and image adjustments.',
   };
 
   const currentModeLabel: Record<string, string> = {
-    threshold: 'Threshold', palette: 'Dither', 'color-sep': 'Color', cmyk: 'CMYK', vector: 'Vector',
+    threshold: 'Threshold', palette: 'Dither', 'color-sep': 'Color', vector: 'Vector',
   };
 
   return (
@@ -162,7 +158,7 @@ export function PresetsModal({ token, onClose }: Props) {
 
             {/* Mode tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              {(['threshold', 'palette', 'color-sep', 'cmyk'] as PresetMode[]).map((tab) => (
+              {(['threshold', 'palette', 'color-sep'] as PresetMode[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
