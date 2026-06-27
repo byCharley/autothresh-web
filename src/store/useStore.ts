@@ -43,6 +43,13 @@ export interface PresetData {
   colorSepPatternDensity?: number;
   colorSepPatternAngle?: number;
   colorSepLockedColors?: RGB[] | null;
+  // CMYK fields
+  cmykParams?: CmykParams;
+  cmykAngles?: Record<string, number>;
+  cmykLpi?: number;
+  cmykViewMode?: 'composite' | 'plates';
+  cmykQuality?: number | null;
+  cmykVisibility?: Record<string, boolean>;
 }
 
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
@@ -792,7 +799,15 @@ export const useStore = create<AppState>((set, get) => ({
       colorSepPatternAngle:  data.colorSepPatternAngle  ?? s.colorSepPatternAngle,
       colorSepLockedColors:  data.colorSepLockedColors !== undefined ? data.colorSepLockedColors : s.colorSepLockedColors,
     } : {};
-    return { ...base, ...dither, ...colorSep };
+    const cmyk = data.mode === 'cmyk' ? {
+      cmykParams:     data.cmykParams     ?? s.cmykParams,
+      cmykAngles:     data.cmykAngles     ?? s.cmykAngles,
+      cmykLpi:        data.cmykLpi        ?? s.cmykLpi,
+      cmykViewMode:   data.cmykViewMode   ?? s.cmykViewMode,
+      cmykQuality:    data.cmykQuality    !== undefined ? data.cmykQuality    : s.cmykQuality,
+      cmykVisibility: data.cmykVisibility ?? s.cmykVisibility,
+    } : {};
+    return { ...base, ...dither, ...colorSep, ...cmyk };
   }),
   capturePreset: (): PresetData => {
     const s = get();
@@ -834,6 +849,14 @@ export const useStore = create<AppState>((set, get) => ({
       base.colorSepPatternDensity = s.colorSepPatternDensity;
       base.colorSepPatternAngle   = s.colorSepPatternAngle;
       base.colorSepLockedColors   = s.colorSepLockedColors;
+    }
+    if (s.separationMode === 'cmyk') {
+      base.cmykParams     = s.cmykParams;
+      base.cmykAngles     = s.cmykAngles;
+      base.cmykLpi        = s.cmykLpi;
+      base.cmykViewMode   = s.cmykViewMode;
+      base.cmykQuality    = s.cmykQuality;
+      base.cmykVisibility = s.cmykVisibility;
     }
     return base;
   },
