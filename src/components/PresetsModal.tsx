@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import type { PresetData } from '../store/useStore';
 
-type PresetMode = 'threshold' | 'palette';
+type PresetMode = 'threshold' | 'palette' | 'color-sep' | 'cmyk';
 
 interface SavedPreset {
   id: string;
@@ -28,9 +28,12 @@ export function PresetsModal({ token, onClose }: Props) {
   const [deletingId, setDeletingId]     = useState<string | null>(null);
   const [newName, setNewName]           = useState('');
   const [loadedId, setLoadedId]         = useState<string | null>(null);
-  const [activeTab, setActiveTab]       = useState<PresetMode>(
-    separationMode === 'palette' ? 'palette' : 'threshold'
-  );
+  const [activeTab, setActiveTab]       = useState<PresetMode>(() => {
+    if (separationMode === 'palette')   return 'palette';
+    if (separationMode === 'color-sep') return 'color-sep';
+    if (separationMode === 'cmyk')      return 'cmyk';
+    return 'threshold';
+  });
 
   useEffect(() => { fetchPresets(); }, []);
 
@@ -95,13 +98,33 @@ export function PresetsModal({ token, onClose }: Props) {
   }
 
   function getPresetMode(data: PresetData): PresetMode {
-    return (data.mode === 'palette' || data.separationMode === 'palette') ? 'palette' : 'threshold';
+    const m = data.separationMode ?? data.mode;
+    if (m === 'palette')   return 'palette';
+    if (m === 'color-sep') return 'color-sep';
+    if (m === 'cmyk')      return 'cmyk';
+    return 'threshold';
   }
 
   const tabPresets = presets.filter((p) => getPresetMode(p.data) === activeTab);
   const isEmpty = !loading && tabPresets.length === 0;
 
-  const TAB_LABELS: Record<PresetMode, string> = { threshold: 'Threshold', palette: 'Dither' };
+  const TAB_LABELS: Record<PresetMode, string> = {
+    threshold: 'Threshold',
+    palette:   'Dither',
+    'color-sep': 'Color',
+    cmyk:      'CMYK',
+  };
+
+  const MODE_DESCRIPTIONS: Record<PresetMode, string> = {
+    threshold:   'Saves layers, colors, thresholds, patterns, texture, and document settings.',
+    palette:     'Saves dither style, ink colors, scale, color mode, and image adjustments.',
+    'color-sep': 'Saves color count, priority, pattern, locked colors, and image adjustments.',
+    cmyk:        'Saves LPI, dot angles, UCR/GCR settings, channel visibility, and image adjustments.',
+  };
+
+  const currentModeLabel: Record<string, string> = {
+    threshold: 'Threshold', palette: 'Dither', 'color-sep': 'Color', cmyk: 'CMYK', vector: 'Vector',
+  };
 
   return (
     <div
@@ -139,7 +162,7 @@ export function PresetsModal({ token, onClose }: Props) {
 
             {/* Mode tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              {(['threshold', 'palette'] as PresetMode[]).map((tab) => (
+              {(['threshold', 'palette', 'color-sep', 'cmyk'] as PresetMode[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -259,13 +282,11 @@ export function PresetsModal({ token, onClose }: Props) {
                 Mode:
               </span>
               <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                {separationMode === 'palette' ? 'Dither' : 'Threshold'}
+                {currentModeLabel[separationMode] ?? separationMode}
               </span>
             </div>
             <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.7 }}>
-              {separationMode === 'palette'
-                ? 'Saves dither style, ink colors, scale, color mode, and image adjustments.'
-                : 'Saves layers, colors, thresholds, patterns, texture, and document settings.'}
+              {MODE_DESCRIPTIONS[separationMode as PresetMode] ?? 'Saves current mode settings.'}
             </div>
             <input
               type="text"
