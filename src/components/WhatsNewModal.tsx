@@ -91,14 +91,14 @@ function Tag({ type }: { type: keyof typeof TAG_COLORS }) {
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
-interface Props { onClose: () => void; }
+interface Props { onClose: () => void; onContact?: () => void; }
 
 function formatDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
-export function WhatsNewModal({ onClose }: Props) {
+export function WhatsNewModal({ onClose, onContact }: Props) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -211,10 +211,16 @@ export function WhatsNewModal({ onClose }: Props) {
             color: 'var(--text-dim)', lineHeight: 1.7,
           }}>
             Updates ship automatically — no reinstall needed.{' '}
-            <a href="https://charleypangus.com/pages/support" target="_blank" rel="noopener noreferrer"
-              style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-              Send feedback or report a bug →
-            </a>
+            {onContact ? (
+              <button onClick={onContact} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit' }}>
+                Send feedback or report a bug →
+              </button>
+            ) : (
+              <a href="https://charleypangus.com/pages/support" target="_blank" rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', textDecoration: 'none' }}>
+                Send feedback or report a bug →
+              </a>
+            )}
           </div>
         </div>
       </div>

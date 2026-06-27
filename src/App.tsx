@@ -772,7 +772,7 @@ function App() {
       {showFaq      && <FaqModal      onClose={() => setShowFaq(false)}      />}
       {showEula     && <EulaModal     onClose={() => setShowEula(false)}     />}
       {showBetaNotice && <BetaNoticeModal onClose={() => setShowBetaNotice(false)} />}
-      {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} />}
+      {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} onContact={() => { setShowWhatsNew(false); setShowContact(true); }} />}
       {showContact  && <ContactModal  onClose={() => setShowContact(false)}  />}
     </div>
   );
