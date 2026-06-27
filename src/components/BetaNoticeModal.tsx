@@ -8,9 +8,10 @@ export function shouldShowBetaNotice(): boolean {
 
 interface Props {
   onClose: () => void;
+  onContact?: () => void;
 }
 
-export function BetaNoticeModal({ onClose }: Props) {
+export function BetaNoticeModal({ onClose, onContact }: Props) {
   const [neverShow, setNeverShow] = useState(false);
 
   const handleClose = () => {
@@ -69,16 +70,24 @@ export function BetaNoticeModal({ onClose }: Props) {
             Features, workflows, and the interface are subject to change as we continue to improve the product.
           </p>
           <p style={{ margin: 0 }}>
-            We value your feedback and use it to shape every update. If you run into anything or have a suggestion,
-            please reach out at{' '}
-            <a
-              href="https://charleypangus.com/pages/support/contact"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}
-            >
-              charleypangus.com/pages/support/contact
-            </a>
+            We value your feedback and use it to shape every update. If you run into anything or have a suggestion,{' '}
+            {onContact ? (
+              <button
+                onClick={() => { handleClose(); onContact(); }}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 500 }}
+              >
+                send us a message
+              </button>
+            ) : (
+              <a
+                href="https://charleypangus.com/pages/support/contact"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}
+              >
+                send us a message
+              </a>
+            )}
             .
           </p>
         </div>
