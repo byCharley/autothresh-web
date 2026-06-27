@@ -38,13 +38,12 @@ export function EulaModal({ onClose }: Props) {
         {/* Body */}
         <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.85, fontFamily: 'var(--font-sans)' }}>
 
-          <Section title="Account Sharing">
-            Your AutoThresh Web subscription is a single-user license. Sharing your
-            login credentials with anyone else is strictly prohibited. If we detect
-            that an account is being accessed by multiple users, the subscription
-            will be immediately terminated and the associated IP address will be
-            permanently banned from the platform. Deliberate or repeated violations
-            may result in further legal action at our discretion.
+          <Section title="Subscription &amp; Users">
+            Each AutoThresh™ subscription is licensed to a single user only. Sharing
+            your account, login credentials, or access with any other person is strictly
+            prohibited. If we determine that an account is being shared — regardless of
+            intent — the subscription will be permanently banned with no exceptions and
+            no refund. There is no appeal process for account-sharing violations.
           </Section>
 
           <Section title="Refund Policy">
