@@ -94,6 +94,7 @@ export interface LayerConfig extends PatternConfig {
   exposure: number;    // -100 to 100
   blur: number;        // 0–20
   useGlobalPattern: boolean;
+  originalId?: string; // set on duplicated layers; limits one duplicate per source
 }
 
 export interface ProcessedLayer {

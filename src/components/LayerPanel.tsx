@@ -1487,10 +1487,10 @@ export function LayerPanel() {
                       </div>
                     </div>
                     <div className="layer-card-actions">
-                      {layers.length < 6 && (
+                      {!layers.some((l) => l.originalId === layer.id) && (
                         <button
                           className="vis-btn"
-                          title="Duplicate layer — copy range, then erase what you don't want"
+                          title="Duplicate layer — copy range, then paint or erase what you need"
                           onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }}
                           style={{ color: 'var(--text-dim)', opacity: 0.5 }}
                           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}

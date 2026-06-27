@@ -672,9 +672,11 @@ export const useStore = create<AppState>((set, get) => ({
     };
   }),
   duplicateLayer: (id) => set((s) => {
-    if (s.layers.length >= 6) return s;
     const src = s.layers.find((l) => l.id === id);
     if (!src) return s;
+    // One duplicate per layer — block if one already exists for this source
+    const alreadyDuplicated = s.layers.some((l) => l.originalId === id);
+    if (alreadyDuplicated) return s;
     // Numbered naming: "Shadows" → "Shadows 01", "Shadows 01" → "Shadows 02"
     const stemMatch = src.name.match(/^(.*?)\s+(\d+)$/);
     const stem = stemMatch ? stemMatch[1] : src.name;
@@ -685,7 +687,7 @@ export const useStore = create<AppState>((set, get) => ({
       .filter((n): n is number => n !== null);
     const nextNum = usedNums.length === 0 ? 1 : Math.max(...usedNums) + 1;
     const newName = `${stem} ${String(nextNum).padStart(2, '0')}`;
-    const copy: typeof src = { ...src, id: `layer-${Date.now()}`, name: newName };
+    const copy: typeof src = { ...src, id: `layer-${Date.now()}`, name: newName, originalId: id };
     const idx = s.layers.indexOf(src);
     return {
       layers: [...s.layers.slice(0, idx + 1), copy, ...s.layers.slice(idx + 1)],
