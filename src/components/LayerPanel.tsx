@@ -91,11 +91,50 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
   label: string; value: number; min: number; max: number;
   step?: number; onChange: (v: number) => void; unit?: string;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const displayVal = step < 1 ? value.toFixed(1) : String(value);
+
+  const commit = (raw: string) => {
+    const n = parseFloat(raw);
+    if (!isNaN(n)) onChange(Math.min(max, Math.max(min, n)));
+    setEditing(false);
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
         <span style={{ flex: 1, fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{label}</span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{value}{unit}</span>
+        {editing ? (
+          <input
+            type="number"
+            className="slider-num-input"
+            value={draft}
+            min={min} max={max} step={step}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={(e) => commit(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
+              if (e.key === 'Escape') setEditing(false);
+            }}
+            style={{
+              width: 48, height: 18, padding: '0 4px', fontSize: 11,
+              fontFamily: 'var(--font-mono)', background: 'var(--surface-2)',
+              border: '1px solid var(--accent)', color: 'var(--text)',
+              textAlign: 'right',
+            }}
+          />
+        ) : (
+          <span
+            title="Click to enter a value"
+            onClick={() => { setDraft(displayVal); setEditing(true); }}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', cursor: 'text', borderBottom: '1px dashed var(--border-2)' }}
+          >
+            {displayVal}{unit}
+          </span>
+        )}
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         style={{ width: '100%' }}
@@ -1207,7 +1246,7 @@ export function LayerPanel() {
   };
 
   return (
-    <aside className="panel-left">
+    <aside className="panel-left" data-tutorial="tutorial-layers">
       <div className="panel-header">
         <span className="panel-title">Layers</span>
         {separationMode === 'threshold' && (
@@ -1220,7 +1259,7 @@ export function LayerPanel() {
       {/* Single scrollable column */}
       <div className="left-scroll">
         {/* Mode Switcher */}
-        <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }} data-tutorial="tutorial-modes">
           <div style={{ display: 'flex', padding: '6px 8px', gap: 4 }}>
             {(['threshold', 'palette', 'color-sep', 'vector'] as const).map((mode) => (
               <button

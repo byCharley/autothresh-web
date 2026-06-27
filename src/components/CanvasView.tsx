@@ -949,13 +949,14 @@ export function CanvasView() {
     <div
       ref={containerRef}
       className="canvas-view"
+      data-tutorial="tutorial-canvas"
       onWheel={handleWheel}
       onPointerDown={(e) => {
         activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        e.currentTarget.setPointerCapture(e.pointerId);
 
         // Two fingers → start pinch, cancel any drag/paint
         if (activePointersRef.current.size === 2) {
+          e.currentTarget.setPointerCapture(e.pointerId);
           const pts = [...activePointersRef.current.values()];
           const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
           const rect = containerRef.current!.getBoundingClientRect();
@@ -969,8 +970,13 @@ export function CanvasView() {
           return;
         }
 
-        if (paintMode !== 'off' && !spaceHeldRef.current) { handlePaintMouseDown(e); return; }
+        if (paintMode !== 'off' && !spaceHeldRef.current) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          handlePaintMouseDown(e);
+          return;
+        }
         if (!originalImage) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
         setIsDragging(true);
         setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
       }}

@@ -877,6 +877,10 @@ input[type='range']::-moz-range-thumb {
 }
 .at-input::-webkit-inner-spin-button,
 .at-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* Slider manual-entry inputs */
+.slider-num-input { -moz-appearance: textfield; }
+.slider-num-input::-webkit-inner-spin-button,
+.slider-num-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .at-input:focus { border-color: var(--accent); }
 
 /* No-image state */

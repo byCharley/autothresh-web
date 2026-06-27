@@ -35,11 +35,51 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
   label: string; value: number; min: number; max: number;
   step?: number; onChange: (v: number) => void; unit?: string;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const displayVal = step < 1 ? value.toFixed(1) : String(value);
+
+  const commit = (raw: string) => {
+    const n = parseFloat(raw);
+    if (!isNaN(n)) onChange(Math.min(max, Math.max(min, n)));
+    setEditing(false);
+  };
+
   return (
     <div className="field">
       <div className="field-row">
         <span className="field-label" style={{ flex: 1 }}>{label}</span>
-        <span className="field-value">{step < 1 ? value.toFixed(1) : value}{unit}</span>
+        {editing ? (
+          <input
+            type="number"
+            className="slider-num-input"
+            value={draft}
+            min={min} max={max} step={step}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={(e) => commit(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
+              if (e.key === 'Escape') setEditing(false);
+            }}
+            style={{
+              width: 48, height: 18, padding: '0 4px', fontSize: 11,
+              fontFamily: 'var(--font-mono)', background: 'var(--surface-2)',
+              border: '1px solid var(--accent)', color: 'var(--text)',
+              textAlign: 'right',
+            }}
+          />
+        ) : (
+          <span
+            className="field-value"
+            title="Click to enter a value"
+            onClick={() => { setDraft(displayVal); setEditing(true); }}
+            style={{ cursor: 'text', borderBottom: '1px dashed var(--border-2)' }}
+          >
+            {displayVal}{unit}
+          </span>
+        )}
       </div>
       <div className="slider-track">
         <input type="range" min={min} max={max} step={step} value={value}
@@ -1008,7 +1048,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
 
   if (!originalImage) {
     return (
-      <aside className="panel-right">
+      <aside className="panel-right" data-tutorial="tutorial-controls">
         <div className="panel-header"><span className="panel-title">Controls</span></div>
         <div className="control-scroll">
           <DocumentSection />
@@ -1019,7 +1059,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
   }
 
   return (
-    <aside className="panel-right">
+    <aside className="panel-right" data-tutorial="tutorial-controls">
       <div className="panel-header">
         {separationMode === 'cmyk' ? (
           <span className="panel-title">CMYK</span>

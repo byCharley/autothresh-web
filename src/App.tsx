@@ -20,6 +20,7 @@ import { FaqModal } from './components/FaqModal';
 import { BetaNoticeModal, shouldShowBetaNotice } from './components/BetaNoticeModal';
 import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components/WhatsNewModal';
 import { ContactModal } from './components/ContactModal';
+import { TutorialOverlay } from './components/TutorialOverlay';
 import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
@@ -77,6 +78,7 @@ function App() {
   const [showWhatsNew, setShowWhatsNew]   = useState(false);
   const [hasUpdates, setHasUpdates]       = useState(() => hasUnseenUpdates());
   const [showContact, setShowContact]     = useState(false);
+  const [showTutorial, setShowTutorial]   = useState(false);
   const [leftOpen, setLeftOpen]   = useState(true);
   const [rightOpen, setRightOpen] = useState(() => window.innerWidth > 1100);
   const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();
@@ -627,7 +629,7 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} />
 
       {isPaused && (
         <div style={{
@@ -775,6 +777,7 @@ function App() {
       {showBetaNotice && <BetaNoticeModal onClose={() => setShowBetaNotice(false)} onContact={() => { setShowBetaNotice(false); setShowContact(true); }} />}
       {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} onContact={() => { setShowWhatsNew(false); setShowContact(true); }} />}
       {showContact  && <ContactModal  onClose={() => setShowContact(false)}  />}
+      {showTutorial && <TutorialOverlay onClose={() => setShowTutorial(false)} />}
     </div>
   );
 }

@@ -6,6 +6,7 @@ interface TopBarProps {
   onExport: () => void;
   onMockup: () => void;
   onPresets: () => void;
+  onTutorial: () => void;
   onLogout?: () => void;
   userEmail?: string;
   firstName?: string;
@@ -14,7 +15,7 @@ interface TopBarProps {
   subscriptionStatus?: string;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -274,9 +275,23 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
 
       <button
         className="btn btn-ghost"
+        onClick={onTutorial}
+        title="Take a quick tour of the tools"
+        style={{ height: 26 }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="8" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="12" y1="12" x2="12" y2="16" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+        Tutorial
+      </button>
+      <button
+        className="btn btn-ghost"
         onClick={onPresets}
         title="Save and load layer presets"
         style={{ height: 26 }}
+        data-tutorial="tutorial-presets"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
           <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
@@ -289,6 +304,7 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
         disabled={!originalImage}
         title="Preview artwork on shirt mockups"
         style={{ opacity: originalImage ? 1 : 0.4, height: 26 }}
+        data-tutorial="tutorial-mockup"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
           <path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0 0-1.34-2.23z"/>
@@ -300,6 +316,7 @@ export function TopBar({ onExport, onMockup, onPresets, onLogout, userEmail, fir
         onClick={onExport}
         disabled={!originalImage}
         style={{ opacity: originalImage ? 1 : 0.4, height: 26, color: '#1a1a1a' }}
+        data-tutorial="tutorial-export"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
