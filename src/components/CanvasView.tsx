@@ -816,7 +816,7 @@ export function CanvasView() {
     return { cx: canvasX - artworkBounds.x, cy: canvasY - artworkBounds.y };
   }
 
-  const applyPaintPoint = (e: React.MouseEvent) => {
+  const applyPaintPoint = (e: React.PointerEvent) => {
     const coords = getArtworkCoords(e);
     if (!coords || !isPaintingRef.current || !paintDraftRef.current) return;
     const { cx, cy } = coords;
@@ -832,7 +832,7 @@ export function CanvasView() {
     }
   };
 
-  const handlePaintMouseDown = (e: React.MouseEvent) => {
+  const handlePaintMouseDown = (e: React.PointerEvent) => {
     if (paintMode === 'off' || !selectedLayerId || !artworkBounds) return;
     e.stopPropagation();
     isPaintingRef.current = true;
@@ -846,7 +846,7 @@ export function CanvasView() {
     applyPaintPoint(e);
   };
 
-  const handlePaintMouseMove = (e: React.MouseEvent) => {
+  const handlePaintMouseMove = (e: React.PointerEvent) => {
     if (!isPaintingRef.current) return;
     applyPaintPoint(e);
   };
@@ -944,13 +944,17 @@ export function CanvasView() {
       ref={containerRef}
       className="canvas-view"
       onWheel={handleWheel}
-      onMouseDown={(e) => {
-        if (paintMode !== 'off' && !spaceHeldRef.current) { handlePaintMouseDown(e); return; }
+      onPointerDown={(e) => {
+        if (paintMode !== 'off' && !spaceHeldRef.current) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          handlePaintMouseDown(e); return;
+        }
         if (!originalImage) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
         setIsDragging(true);
         setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
       }}
-      onMouseMove={(e) => {
+      onPointerMove={(e) => {
         if (paintMode !== 'off' && !spaceHeldRef.current) {
           handlePaintMouseMove(e);
           const rect = containerRef.current?.getBoundingClientRect();
@@ -960,14 +964,19 @@ export function CanvasView() {
         setBrushPos(null);
         if (isDragging) setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
       }}
-      onMouseUp={() => {
+      onPointerUp={(e) => {
+        e.currentTarget.releasePointerCapture(e.pointerId);
         if (isPaintingRef.current) handlePaintMouseUp();
         setIsDragging(false);
       }}
-      onMouseLeave={() => {
+      onPointerCancel={(e) => {
+        e.currentTarget.releasePointerCapture(e.pointerId);
         if (isPaintingRef.current) handlePaintMouseUp();
         setBrushPos(null);
         setIsDragging(false);
+      }}
+      onPointerLeave={() => {
+        if (!isPaintingRef.current) setBrushPos(null);
       }}
       style={{
         cursor: paintMode !== 'off' && !isSpacePanning
@@ -975,6 +984,7 @@ export function CanvasView() {
           : isDragging ? 'grabbing'
           : (isSpacePanning || originalImage) ? 'grab'
           : 'default',
+        touchAction: 'none',
       }}
     >
       {!originalImage ? (

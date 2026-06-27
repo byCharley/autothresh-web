@@ -61,9 +61,10 @@ async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> 
 
 function isMobileDevice(): boolean {
   const ua = navigator.userAgent;
-  const mobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-  const smallScreen = window.innerWidth < 1024;
-  return mobileUA || smallScreen;
+  // Block phones only — tablets (iPad, Android tablets) are allowed through
+  const phoneUA = /webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  const tinyScreen = window.innerWidth < 768;
+  return phoneUA || tinyScreen;
 }
 
 function App() {
@@ -76,8 +77,8 @@ function App() {
   const [showWhatsNew, setShowWhatsNew]   = useState(false);
   const [hasUpdates, setHasUpdates]       = useState(() => hasUnseenUpdates());
   const [showContact, setShowContact]     = useState(false);
-  const [leftOpen, setLeftOpen] = useState(true);
-  const [rightOpen, setRightOpen] = useState(true);
+  const [leftOpen, setLeftOpen]   = useState(true);
+  const [rightOpen, setRightOpen] = useState(() => window.innerWidth > 1100);
   const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();
   const [isMobile, setIsMobile] = useState(() => isMobileDevice());
   const {

@@ -48,14 +48,15 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     canvas.getContext('2d')!.putImageData(composite, 0, 0);
   }, [processedLayers, processedLayerDims, ditherComposite, separationMode]);
 
-  const onPreviewMouseDown = (e: React.MouseEvent) => {
+  const onPreviewPointerDown = (e: React.PointerEvent) => {
     if (!hasArt) return;
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { active: true, mx: e.clientX, my: e.clientY, ax: artPos.x, ay: artPos.y };
     setIsDragging(true);
   };
 
-  const onPreviewMouseMove = (e: React.MouseEvent) => {
+  const onPreviewPointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
     if (!d.active || !contentRef.current) return;
     const rect = contentRef.current.getBoundingClientRect();
@@ -64,7 +65,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     setArtPos({ x: d.ax + dx, y: d.ay + dy });
   };
 
-  const onPreviewMouseUp = () => {
+  const onPreviewPointerUp = () => {
     dragRef.current.active = false;
     setIsDragging(false);
   };
@@ -167,11 +168,12 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                 userSelect: 'none',
                 minHeight: 0,
                 padding: 12,
+                touchAction: 'none',
               }}
-              onMouseDown={onPreviewMouseDown}
-              onMouseMove={onPreviewMouseMove}
-              onMouseUp={onPreviewMouseUp}
-              onMouseLeave={onPreviewMouseUp}
+              onPointerDown={onPreviewPointerDown}
+              onPointerMove={onPreviewPointerMove}
+              onPointerUp={onPreviewPointerUp}
+              onPointerCancel={onPreviewPointerUp}
             >
               {!hasArt ? (
                 <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#444' }}>
