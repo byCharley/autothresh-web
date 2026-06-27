@@ -815,7 +815,15 @@ const CMYK_CARD_DEFS = [
 
 import type { RGB } from '../engine/colorSeparation';
 
-const PRESET_STORAGE_KEY = 'autothresh_color_presets';
+const PRESET_STORAGE_KEY     = 'autothresh_color_presets';
+const AUTO_PAL_STORAGE_KEY   = 'autothresh_auto_palettes';
+const MAX_AUTO_PALETTES      = 10;
+
+interface SavedAutoPalette { name: string; colors: string[]; }
+function loadAutoPalettes(): SavedAutoPalette[] {
+  try { return JSON.parse(localStorage.getItem(AUTO_PAL_STORAGE_KEY) ?? '[]'); }
+  catch { return []; }
+}
 
 interface SavedColorPreset {
   name: string;
@@ -1122,6 +1130,9 @@ export function LayerPanel() {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [modeInfoOpen, setModeInfoOpen] = useState(false);
+  const [savedAutoPalettes, setSavedAutoPalettes] = useState<SavedAutoPalette[]>(loadAutoPalettes);
+  const [savingAutoPalette, setSavingAutoPalette] = useState(false);
+  const [autoPaletteSaveName, setAutoPaletteSaveName] = useState('');
 
   const commitLayerName = (id: string) => {
     if (editValue.trim()) updateLayer(id, { name: editValue.trim() });
@@ -1170,6 +1181,29 @@ export function LayerPanel() {
       const nextPalette = palettePool[nextIdx];
       if (nextPalette) setPaletteColors(nextPalette.map(hexToRgb));
     }
+  };
+
+  const handleSaveAutoPalette = () => {
+    const name = autoPaletteSaveName.trim();
+    const current = palettePool[activePaletteIdx];
+    if (!name || !current?.length) return;
+    const updated = [{ name, colors: current }, ...savedAutoPalettes].slice(0, MAX_AUTO_PALETTES);
+    localStorage.setItem(AUTO_PAL_STORAGE_KEY, JSON.stringify(updated));
+    setSavedAutoPalettes(updated);
+    setSavingAutoPalette(false);
+    setAutoPaletteSaveName('');
+  };
+
+  const handleDeleteAutoPalette = (i: number) => {
+    const updated = savedAutoPalettes.filter((_, idx) => idx !== i);
+    localStorage.setItem(AUTO_PAL_STORAGE_KEY, JSON.stringify(updated));
+    setSavedAutoPalettes(updated);
+  };
+
+  const handleApplyAutoPalette = (colors: string[]) => {
+    setPalettePool([colors, ...palettePool]);
+    applyPalette(0);
+    if (separationMode === 'palette') setPaletteColors(colors.map(hexToRgb));
   };
 
   return (
@@ -1509,30 +1543,89 @@ export function LayerPanel() {
             {/* Auto Palette */}
             {previewImage && (
               <div style={{ padding: '4px 8px 8px', borderTop: '1px solid var(--border)' }}>
+                {/* Buttons row */}
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <button
-                    className="btn btn-ghost"
-                    style={{ flex: 1, fontSize: 10, height: 26 }}
-                    onClick={handleAutoPalette}
-                  >
+                  <button className="btn btn-ghost" style={{ flex: 1, fontSize: 10, height: 26 }} onClick={handleAutoPalette}>
                     Auto Palette
                   </button>
                   {palettePool.length > 1 && (
-                    <button
-                      className="btn btn-ghost btn-icon"
-                      onClick={handleShuffle}
-                      title={`Shuffle (${activePaletteIdx + 1}/${palettePool.length})`}
-                      style={{ width: 26, height: 26 }}
-                    >
+                    <button className="btn btn-ghost btn-icon" onClick={handleShuffle} title={`Shuffle (${activePaletteIdx + 1}/${palettePool.length})`} style={{ width: 26, height: 26 }}>
                       <ShuffleIcon />
                     </button>
                   )}
+                  {palettePool.length > 0 && savedAutoPalettes.length < MAX_AUTO_PALETTES && (
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => { setSavingAutoPalette(s => !s); setAutoPaletteSaveName(''); }}
+                      title="Save this palette"
+                      style={{ fontSize: 9, height: 26, padding: '0 8px', color: savingAutoPalette ? 'var(--accent)' : undefined }}
+                    >
+                      Save
+                    </button>
+                  )}
+                  {savedAutoPalettes.length >= MAX_AUTO_PALETTES && palettePool.length > 0 && (
+                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>10/10</span>
+                  )}
                 </div>
+
+                {/* Active swatch bar */}
                 {palettePool.length > 0 && (
                   <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
                     {palettePool[activePaletteIdx]?.map((c, i) => (
                       <div key={i} style={{ flex: 1, height: 8, background: c, border: '1px solid var(--border-2)', borderRadius: 1 }} />
                     ))}
+                  </div>
+                )}
+
+                {/* Save name input */}
+                {savingAutoPalette && (
+                  <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
+                    <input
+                      autoFocus
+                      value={autoPaletteSaveName}
+                      onChange={e => setAutoPaletteSaveName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleSaveAutoPalette(); if (e.key === 'Escape') setSavingAutoPalette(false); }}
+                      placeholder="Name this palette..."
+                      style={{ flex: 1, fontSize: 10, height: 24, padding: '0 7px', fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: '1px solid var(--accent)', color: 'var(--text)', outline: 'none' }}
+                    />
+                    <button
+                      onClick={handleSaveAutoPalette}
+                      disabled={!autoPaletteSaveName.trim()}
+                      style={{ fontSize: 9, height: 24, padding: '0 10px', fontFamily: 'var(--font-mono)', cursor: 'pointer', background: 'var(--accent)', color: '#000', border: '1px solid var(--accent)' }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
+
+                {/* Saved palettes */}
+                {savedAutoPalettes.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <span style={{ display: 'block', fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 5 }}>
+                      Saved ({savedAutoPalettes.length}/{MAX_AUTO_PALETTES})
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      {savedAutoPalettes.map(({ name, colors }, i) => (
+                        <div
+                          key={i}
+                          onClick={() => handleApplyAutoPalette(colors)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px', cursor: 'pointer', border: '1px solid var(--border)', background: 'var(--surface-2)' }}
+                        >
+                          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                            {colors.slice(0, 7).map((c, j) => (
+                              <div key={j} style={{ width: 9, height: 14, background: c }} />
+                            ))}
+                          </div>
+                          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {name}
+                          </span>
+                          <button
+                            onClick={e => { e.stopPropagation(); handleDeleteAutoPalette(i); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 0, fontSize: 14, lineHeight: 1, flexShrink: 0 }}
+                          >×</button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
