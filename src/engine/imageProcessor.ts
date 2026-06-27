@@ -827,6 +827,30 @@ export function processImage(
     return { id: layer.id, name: layer.name, mask: finalMask, color: hexToRgb(layer.color), visible: layer.visible };
   });
 
+  // ── 4. Gap-fill: assign uncovered foreground pixels to the nearest range ─────
+  // Eliminates black pixels caused by manual range gaps or per-layer noise
+  // divergence at layer boundaries. Uses raw luminance (no pattern mod) so the
+  // assignment is deterministic regardless of each layer's pattern settings.
+  for (let i = 0; i < n; i++) {
+    if (bgMask && bgMask[i] === 255) continue;
+    let covered = false;
+    for (let li = 0; li < results.length; li++) {
+      if (results[li].mask[i] === 255) { covered = true; break; }
+    }
+    if (covered) continue;
+    const lum = globalLums[i];
+    let bestLayer = 0;
+    let bestDist = Infinity;
+    for (let li = 0; li < layers.length; li++) {
+      const l = layers[li];
+      const dist = lum < l.thresholdMin ? l.thresholdMin - lum
+                 : lum > l.thresholdMax ? lum - l.thresholdMax
+                 : 0;
+      if (dist < bestDist) { bestDist = dist; bestLayer = li; }
+    }
+    results[bestLayer].mask[i] = 255;
+  }
+
   if (knockoutEnabled) {
     for (let i = 0; i < results.length - 1; i++)
       for (let j = i + 1; j < results.length; j++)
