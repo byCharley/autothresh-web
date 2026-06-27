@@ -44,6 +44,9 @@ export function CanvasView() {
   const paintOverlayRef     = useRef<HTMLCanvasElement>(null);
   const brushSizeRef        = useRef(20);
   const containerRef        = useRef<HTMLDivElement>(null);
+  const zoomRef             = useRef(1);
+  const activePointersRef   = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchRef            = useRef<{ dist: number; midX: number; midY: number } | null>(null);
   const lastAutoDetectKey   = useRef('');
   const lastAutoAdjImageRef = useRef<ImageData | null>(null);
   const fileInputRef     = useRef<HTMLInputElement>(null);
@@ -185,6 +188,9 @@ export function CanvasView() {
     };
     load('/textures/Noise_Texture.png', 'noise-texture');
   }, []);
+
+  // Keep zoomRef in sync so pinch handlers can read current zoom without stale closures.
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
   // Debounce zoom → renderDim.
   // When the user zooms in, wait 200 ms for them to stop, then re-render at a
@@ -945,16 +951,54 @@ export function CanvasView() {
       className="canvas-view"
       onWheel={handleWheel}
       onPointerDown={(e) => {
-        if (paintMode !== 'off' && !spaceHeldRef.current) {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          handlePaintMouseDown(e); return;
-        }
-        if (!originalImage) return;
+        activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
         e.currentTarget.setPointerCapture(e.pointerId);
+
+        // Two fingers → start pinch, cancel any drag/paint
+        if (activePointersRef.current.size === 2) {
+          const pts = [...activePointersRef.current.values()];
+          const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          const rect = containerRef.current!.getBoundingClientRect();
+          pinchRef.current = {
+            dist,
+            midX: (pts[0].x + pts[1].x) / 2 - rect.left,
+            midY: (pts[0].y + pts[1].y) / 2 - rect.top,
+          };
+          if (isPaintingRef.current) handlePaintMouseUp();
+          setIsDragging(false);
+          return;
+        }
+
+        if (paintMode !== 'off' && !spaceHeldRef.current) { handlePaintMouseDown(e); return; }
+        if (!originalImage) return;
         setIsDragging(true);
         setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
       }}
       onPointerMove={(e) => {
+        activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        // Two-finger pinch
+        if (activePointersRef.current.size === 2 && pinchRef.current) {
+          const pts = [...activePointersRef.current.values()];
+          const rect = containerRef.current!.getBoundingClientRect();
+          const newDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          const newMidX = (pts[0].x + pts[1].x) / 2 - rect.left;
+          const newMidY = (pts[0].y + pts[1].y) / 2 - rect.top;
+          const { dist: prevDist, midX: prevMidX, midY: prevMidY } = pinchRef.current;
+          const factor = newDist / prevDist;
+          const oldZoom = zoomRef.current;
+          const newZoom = Math.min(8, Math.max(0.05, oldZoom * factor));
+          zoomRef.current = newZoom;
+          const ratio = newZoom / oldZoom;
+          setZoom(newZoom);
+          setOffset((o) => ({
+            x: newMidX - (newMidX - o.x) * ratio + (newMidX - prevMidX),
+            y: newMidY - (newMidY - o.y) * ratio + (newMidY - prevMidY),
+          }));
+          pinchRef.current = { dist: newDist, midX: newMidX, midY: newMidY };
+          return;
+        }
+
         if (paintMode !== 'off' && !spaceHeldRef.current) {
           handlePaintMouseMove(e);
           const rect = containerRef.current?.getBoundingClientRect();
@@ -965,12 +1009,16 @@ export function CanvasView() {
         if (isDragging) setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
       }}
       onPointerUp={(e) => {
+        activePointersRef.current.delete(e.pointerId);
         e.currentTarget.releasePointerCapture(e.pointerId);
+        if (activePointersRef.current.size < 2) pinchRef.current = null;
         if (isPaintingRef.current) handlePaintMouseUp();
         setIsDragging(false);
       }}
       onPointerCancel={(e) => {
+        activePointersRef.current.delete(e.pointerId);
         e.currentTarget.releasePointerCapture(e.pointerId);
+        pinchRef.current = null;
         if (isPaintingRef.current) handlePaintMouseUp();
         setBrushPos(null);
         setIsDragging(false);
