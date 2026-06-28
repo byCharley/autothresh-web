@@ -28,10 +28,14 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
   const [blendMode, setBlendMode]   = useState<BlendMode>('auto');
   const [isDragging, setIsDragging] = useState(false);
   const [search, setSearch]         = useState('');
+  const [galleryOpen, setGalleryOpen] = useState(true);
+  const [showColors, setShowColors]   = useState(true);
 
   const dragRef      = useRef({ active: false, mx: 0, my: 0, ax: 0, ay: 0 });
   const contentRef   = useRef<HTMLDivElement>(null);
   const artCanvasRef = useRef<HTMLCanvasElement>(null);
+  const pointersRef  = useRef(new Map<number, { x: number; y: number }>());
+  const pinchDistRef = useRef<number | null>(null);
 
   const mockup  = MOCKUPS.find(m => m.id === mockupId) ?? MOCKUPS[0];
   const variant = mockup?.variants.find(v => v.name === colorName) ?? mockup?.variants[0];
@@ -94,21 +98,43 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     return [...map.entries()];
   }, [filtered]);
 
-  // ── Pointer handlers (artwork drag) ───────────────────────────────────────
+  // ── Pointer handlers (artwork drag + pinch-to-scale) ─────────────────────
   const onPreviewPointerDown = (e: React.PointerEvent) => {
     if (!hasArt) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 2) {
+      const pts = [...pointersRef.current.values()];
+      pinchDistRef.current = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      dragRef.current.active = false;
+      setIsDragging(false);
+      return;
+    }
     dragRef.current = { active: true, mx: e.clientX, my: e.clientY, ax: artPos.x, ay: artPos.y };
     setIsDragging(true);
   };
   const onPreviewPointerMove = (e: React.PointerEvent) => {
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 2 && pinchDistRef.current !== null) {
+      const pts = [...pointersRef.current.values()];
+      const newDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const factor = newDist / pinchDistRef.current;
+      pinchDistRef.current = newDist;
+      setArtScale(prev => Math.min(100, Math.max(5, Math.round(prev * factor))));
+      return;
+    }
     const d = dragRef.current;
     if (!d.active || !contentRef.current) return;
     const rect = contentRef.current.getBoundingClientRect();
     setArtPos({ x: d.ax + ((e.clientX - d.mx) / rect.width) * 100, y: d.ay + ((e.clientY - d.my) / rect.height) * 100 });
   };
-  const onPreviewPointerUp = () => { dragRef.current.active = false; setIsDragging(false); };
+  const onPreviewPointerUp = (e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId);
+    pinchDistRef.current = null;
+    dragRef.current.active = false;
+    setIsDragging(false);
+  };
 
   // ── Download ──────────────────────────────────────────────────────────────
   const downloadPreview = () => {
@@ -188,13 +214,11 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* Preview area */}
+        {/* Preview area — fills all remaining space */}
         <div
           style={{
-            flex: 1, minHeight: 0,
-            background: '#111',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            overflow: 'hidden', position: 'relative',
+            flex: 1, minHeight: 0, position: 'relative',
+            background: '#111', overflow: 'hidden',
             cursor: !hasArt ? 'default' : isDragging ? 'grabbing' : 'grab',
             userSelect: 'none', touchAction: 'none',
           }}
@@ -203,98 +227,87 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
           onPointerUp={onPreviewPointerUp}
           onPointerCancel={onPreviewPointerUp}
         >
-          {!hasArt ? (
-            <div style={{ textAlign: 'center', padding: 20 }}>
-              {variant && (
-                <img
-                  src={variant.file}
-                  alt={mockup?.name}
-                  style={{ maxHeight: 'calc(100dvh - 52px - 290px)', maxWidth: '100%', opacity: 0.5, pointerEvents: 'none' }}
-                />
-              )}
-              <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#555', marginTop: 10 }}>
-                Load artwork first
+          {/* Centered mockup content */}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {!hasArt ? (
+              <div style={{ textAlign: 'center', padding: 20 }}>
+                {variant && (
+                  <img
+                    src={variant.file}
+                    alt={mockup?.name}
+                    style={{ maxHeight: '100%', maxWidth: '100%', opacity: 0.5, pointerEvents: 'none' }}
+                  />
+                )}
+                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#555', marginTop: 10 }}>
+                  Load artwork first
+                </div>
               </div>
-            </div>
-          ) : (
-            <div ref={contentRef} style={{ position: 'relative', lineHeight: 0, flexShrink: 0 }}>
-              <img
-                src={variant?.file}
-                style={{
-                  display: 'block', height: 'auto', width: 'auto',
-                  maxHeight: 'calc(100dvh - 52px - 290px)',
-                  maxWidth: '100vw',
-                  pointerEvents: 'none',
-                  transition: 'opacity 0.15s ease',
-                }}
-                alt={mockup?.name}
-                draggable={false}
-              />
-              <canvas
-                ref={artCanvasRef}
-                style={{
-                  position: 'absolute',
-                  left: `${artPos.x}%`, top: `${artPos.y}%`,
-                  width: `${artScale}%`, height: 'auto',
-                  transform: 'translate(-50%, -50%)',
-                  mixBlendMode: effectiveBlend as React.CSSProperties['mixBlendMode'],
-                  pointerEvents: 'none',
-                }}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Bottom controls panel */}
-        <div style={{ flexShrink: 0, background: 'var(--surface)', borderTop: '1px solid var(--border)', overflowY: 'auto', maxHeight: '55dvh' }}>
-
-          {/* Garment gallery — horizontal scroll */}
-          <div style={{ padding: '10px 14px 4px', flexShrink: 0 }}>
-            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 8 }}>
-              Garment
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 14px 14px', scrollbarWidth: 'none' }}>
-            {groups.map(([, items]) =>
-              items.map((m) => {
-                const active = m.id === mockupId;
-                const thumb = m.variants.find(v => v.name === colorName) ?? m.variants[0];
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => setMockupId(m.id)}
-                    style={{
-                      flexShrink: 0, width: 76,
-                      background: active ? 'color-mix(in srgb, var(--accent) 10%, var(--surface-2))' : 'var(--surface-2)',
-                      border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                      borderRadius: 2, cursor: 'pointer', padding: 0, overflow: 'hidden',
-                      WebkitTapHighlightColor: 'transparent',
-                    } as React.CSSProperties}
-                  >
-                    <div style={{ background: '#f0f0f0', height: 86, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                      <img src={thumb.file} alt={`${m.brand} ${m.view}`} style={{ height: '100%', width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }} />
-                    </div>
-                    <div style={{ padding: '4px 5px 5px', borderTop: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}` }}>
-                      <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: active ? 'var(--accent)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {m.view}
-                      </div>
-                      <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
-                        {m.model}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
+            ) : (
+              <div ref={contentRef} style={{ position: 'relative', lineHeight: 0, flexShrink: 0 }}>
+                <img
+                  src={variant?.file}
+                  style={{
+                    display: 'block', width: 'auto', height: 'auto',
+                    maxWidth: '100vw', maxHeight: '100%',
+                    pointerEvents: 'none',
+                    transition: 'opacity 0.15s ease',
+                  }}
+                  alt={mockup?.name}
+                  draggable={false}
+                />
+                <canvas
+                  ref={artCanvasRef}
+                  style={{
+                    position: 'absolute',
+                    left: `${artPos.x}%`, top: `${artPos.y}%`,
+                    width: `${artScale}%`, height: 'auto',
+                    transform: 'translate(-50%, -50%)',
+                    mixBlendMode: effectiveBlend as React.CSSProperties['mixBlendMode'],
+                    pointerEvents: 'none',
+                  }}
+                />
+              </div>
             )}
           </div>
 
-          {/* Color swatches */}
-          <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px 12px' }}>
-            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 8 }}>
-              Color{variant && <span style={{ color: 'var(--text-muted)', marginLeft: 6, textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>· {variant.name}</span>}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {mockup?.variants.map((v) => {
+          {/* Color toggle button — top-right of preview */}
+          {mockup && mockup.variants.length > 1 && (
+            <button
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => setShowColors(v => !v)}
+              title={showColors ? 'Hide colors' : 'Show colors'}
+              style={{
+                position: 'absolute', top: 8, right: 8, zIndex: 5,
+                width: 30, height: 30,
+                background: showColors ? 'var(--accent)' : 'rgba(18,18,18,0.85)',
+                border: `1px solid ${showColors ? 'var(--accent)' : 'rgba(255,255,255,0.15)'}`,
+                borderRadius: 4, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                WebkitTapHighlightColor: 'transparent',
+              } as React.CSSProperties}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={showColors ? '#000' : 'var(--text-muted)'} strokeWidth="2">
+                <circle cx="12" cy="12" r="3"/><circle cx="6.5" cy="7" r="2.5"/><circle cx="17.5" cy="7" r="2.5"/>
+                <circle cx="6.5" cy="17" r="2.5"/><circle cx="17.5" cy="17" r="2.5"/>
+              </svg>
+            </button>
+          )}
+
+          {/* Floating vertical color swatches */}
+          {showColors && mockup && mockup.variants.length > 1 && (
+            <div
+              onPointerDown={(e) => e.stopPropagation()}
+              style={{
+                position: 'absolute', right: 8, top: 46, zIndex: 4,
+                display: 'flex', flexDirection: 'column', gap: 6,
+                background: 'rgba(12,12,12,0.88)',
+                padding: '8px 6px', borderRadius: 6,
+                border: '1px solid rgba(255,255,255,0.1)',
+                maxHeight: 'calc(100% - 62px)', overflowY: 'auto',
+                scrollbarWidth: 'none',
+              } as React.CSSProperties}
+            >
+              {mockup.variants.map((v) => {
                 const active = colorName === v.name;
                 return (
                   <button
@@ -302,17 +315,16 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                     title={v.name}
                     onClick={() => setColorName(v.name)}
                     style={{
-                      width: 32, height: 32, borderRadius: '50%',
+                      width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
                       background: v.hex,
-                      border: active ? '2.5px solid var(--accent)' : '1.5px solid var(--border-2)',
-                      cursor: 'pointer', padding: 0, flexShrink: 0,
-                      boxShadow: active ? '0 0 0 1px var(--accent)' : 'none',
-                      position: 'relative',
+                      border: active ? '2.5px solid var(--accent)' : '1.5px solid rgba(255,255,255,0.2)',
+                      cursor: 'pointer', padding: 0, position: 'relative',
+                      boxShadow: active ? '0 0 0 1px var(--accent)' : '0 1px 3px rgba(0,0,0,0.6)',
                       WebkitTapHighlightColor: 'transparent',
                     } as React.CSSProperties}
                   >
                     {active && (
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
                         stroke={hexLuminance(v.hex) < 0.5 ? '#fff' : '#000'}
                         strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
                         style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
@@ -323,21 +335,92 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                 );
               })}
             </div>
-          </div>
+          )}
+        </div>
+
+        {/* Bottom controls */}
+        <div style={{ flexShrink: 0, background: 'var(--surface)', borderTop: '2px solid var(--accent)' }}>
+
+          {/* Garment gallery — collapsible */}
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setGalleryOpen(v => !v)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 14px',
+              background: 'none', border: 'none',
+              borderBottom: galleryOpen ? '1px solid var(--border)' : 'none',
+              cursor: 'pointer', textAlign: 'left',
+              WebkitTapHighlightColor: 'transparent',
+            } as React.CSSProperties}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', flexShrink: 0 }}>
+                Garment
+              </span>
+              {mockup && (
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {mockup.brand} {mockup.model} · {mockup.view}
+                </span>
+              )}
+            </div>
+            <svg
+              width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              style={{ color: 'var(--text-dim)', transform: galleryOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease', flexShrink: 0, marginLeft: 6 }}
+            >
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {galleryOpen && (
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 14px 12px', scrollbarWidth: 'none' } as React.CSSProperties}>
+              {groups.map(([, items]) =>
+                items.map((m) => {
+                  const active = m.id === mockupId;
+                  const thumb = m.variants.find(v => v.name === colorName) ?? m.variants[0];
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => setMockupId(m.id)}
+                      style={{
+                        flexShrink: 0, width: 68,
+                        background: active ? 'color-mix(in srgb, var(--accent) 10%, var(--surface-2))' : 'var(--surface-2)',
+                        border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                        borderRadius: 2, cursor: 'pointer', padding: 0, overflow: 'hidden',
+                        WebkitTapHighlightColor: 'transparent',
+                      } as React.CSSProperties}
+                    >
+                      <div style={{ background: '#f0f0f0', height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                        <img src={thumb.file} alt={`${m.brand} ${m.view}`} style={{ height: '100%', width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }} />
+                      </div>
+                      <div style={{ padding: '3px 4px 4px', borderTop: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}` }}>
+                        <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: active ? 'var(--accent)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {m.view}
+                        </div>
+                        <div style={{ fontSize: 6, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
+                          {m.model}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
 
           {/* Scale + Download */}
           <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px', paddingBottom: 'max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px))' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Scale</span>
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{artScale}%</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', flexShrink: 0 }}>Scale</span>
+              <input type="range" min={5} max={100} value={artScale} style={{ flex: 1 }}
+                onChange={(e) => setArtScale(Number(e.target.value))} />
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', flexShrink: 0, minWidth: 28, textAlign: 'right' }}>{artScale}%</span>
             </div>
-            <input type="range" min={5} max={100} value={artScale} style={{ width: '100%', marginBottom: 14 }}
-              onChange={(e) => setArtScale(Number(e.target.value))} />
             <button
               className="btn btn-primary"
               onClick={downloadPreview}
               disabled={!hasArt}
-              style={{ width: '100%', height: 42, opacity: hasArt ? 1 : 0.4, color: '#1a1a1a', fontSize: 12, fontFamily: 'var(--font-mono)', gap: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ width: '100%', height: 40, opacity: hasArt ? 1 : 0.4, color: '#1a1a1a', fontSize: 12, fontFamily: 'var(--font-mono)', gap: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
