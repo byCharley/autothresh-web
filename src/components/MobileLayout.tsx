@@ -4,6 +4,7 @@ import { CanvasView } from './CanvasView';
 import { LayerPanel } from './LayerPanel';
 import { ControlPanel } from './ControlPanel';
 import { AppIcon } from './AppIcon';
+import { renderComposite } from '../engine/imageProcessor';
 
 interface Session {
   firstName?: string;
@@ -26,8 +27,12 @@ type Sheet = 'layers' | 'controls' | null;
 export function MobileLayout({ onExport, onMockup, onLogout, session, children }: Props) {
   const [activeSheet, setActiveSheet] = useState<Sheet>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [previewCenter, setPreviewCenter] = useState({ x: 0.5, y: 0.5 });
   const menuRef = useRef<HTMLDivElement>(null);
-  const { originalImage, imageFileName, separationMode, cmykQuality } = useStore();
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewDragRef = useRef({ active: false, sx: 0, sy: 0, cx: 0.5, cy: 0.5 });
+  const { originalImage, imageFileName, separationMode, cmykQuality,
+          processedLayers, processedLayerDims, ditherComposite } = useStore();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -40,6 +45,62 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
 
   const toggleSheet = (tab: 'layers' | 'controls') =>
     setActiveSheet(prev => prev === tab ? null : tab);
+
+  // ── Live preview strip ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (activeSheet !== 'controls') return;
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+
+    let srcCanvas: HTMLCanvasElement | null = null;
+    if (separationMode === 'palette' && ditherComposite) {
+      srcCanvas = document.createElement('canvas');
+      srcCanvas.width  = ditherComposite.w;
+      srcCanvas.height = ditherComposite.h;
+      srcCanvas.getContext('2d')!.putImageData(ditherComposite.data, 0, 0);
+    } else if (processedLayers.length && processedLayerDims) {
+      srcCanvas = document.createElement('canvas');
+      const { w, h } = processedLayerDims;
+      srcCanvas.width = w; srcCanvas.height = h;
+      const composite = renderComposite(processedLayers, w, h, true, '#ffffff', false);
+      srcCanvas.getContext('2d')!.putImageData(composite, 0, 0);
+    }
+
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (!srcCanvas) return;
+
+    // Show ~35% of the artwork width — close-up but with spatial context
+    const zoom = canvas.width / (srcCanvas.width * 0.35);
+    const viewW = canvas.width  / zoom;
+    const viewH = canvas.height / zoom;
+
+    const cx = Math.min(Math.max(previewCenter.x * srcCanvas.width,  viewW / 2), srcCanvas.width  - viewW / 2);
+    const cy = Math.min(Math.max(previewCenter.y * srcCanvas.height, viewH / 2), srcCanvas.height - viewH / 2);
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(srcCanvas, cx - viewW / 2, cy - viewH / 2, viewW, viewH, 0, 0, canvas.width, canvas.height);
+  }, [activeSheet, processedLayers, processedLayerDims, ditherComposite, separationMode, previewCenter]);
+
+  const onPreviewDown = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    previewDragRef.current = { active: true, sx: e.clientX, sy: e.clientY, cx: previewCenter.x, cy: previewCenter.y };
+  };
+  const onPreviewMove = (e: React.PointerEvent) => {
+    const d = previewDragRef.current;
+    if (!d.active || !previewCanvasRef.current) return;
+    const srcW = (separationMode === 'palette' && ditherComposite) ? ditherComposite.w : (processedLayerDims?.w ?? 1);
+    const srcH = (separationMode === 'palette' && ditherComposite) ? ditherComposite.h : (processedLayerDims?.h ?? 1);
+    const zoom  = previewCanvasRef.current.width / (srcW * 0.35);
+    const dxN = -(e.clientX - d.sx) / zoom / srcW;
+    const dyN = -(e.clientY - d.sy) / zoom / srcH;
+    setPreviewCenter({
+      x: Math.min(Math.max(d.cx + dxN, 0), 1),
+      y: Math.min(Math.max(d.cy + dyN, 0), 1),
+    });
+  };
+  const onPreviewUp = () => { previewDragRef.current.active = false; };
 
   const subStatus = session?.subscriptionStatus;
   const subColor = subStatus === 'tester' ? '#38bdf8'
@@ -183,7 +244,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
       {/* ─── Bottom Sheet ────────────────────────────────────── */}
       <div style={{
         position: 'absolute', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-        height: activeSheet === 'controls' ? '52vh' : '68vh',
+        height: '68vh',
         background: 'var(--surface)',
         borderTop: '2px solid var(--accent)',
         transform: activeSheet ? 'translateY(0)' : 'translateY(100%)',
@@ -216,6 +277,37 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
             </svg>
           </button>
         </div>
+        {/* Live preview strip — Adjust sheet only */}
+        {activeSheet === 'controls' && (
+          <div style={{ flexShrink: 0, position: 'relative', borderBottom: '1px solid var(--border)', cursor: 'grab', touchAction: 'none' }}>
+            <canvas
+              ref={previewCanvasRef}
+              width={Math.round(window.innerWidth)}
+              height={148}
+              style={{ display: 'block', width: '100%', height: 148 }}
+              onPointerDown={onPreviewDown}
+              onPointerMove={onPreviewMove}
+              onPointerUp={onPreviewUp}
+              onPointerCancel={onPreviewUp}
+            />
+            <div style={{
+              position: 'absolute', bottom: 6, left: 8,
+              fontSize: 8, fontFamily: 'var(--font-mono)', letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)',
+              pointerEvents: 'none',
+            }}>
+              Live · Drag to pan
+            </div>
+            <div style={{
+              position: 'absolute', bottom: 6, right: 8,
+              fontSize: 8, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em',
+              color: 'rgba(255,200,0,0.5)', pointerEvents: 'none',
+            }}>
+              ●
+            </div>
+          </div>
+        )}
+
         {/* Scrollable content */}
         <div className="mobile-sheet-content" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
           {activeSheet === 'layers' && <LayerPanel />}
