@@ -705,26 +705,7 @@ function ColorSepSection() {
   } = useStore();
   if (separationMode !== 'color-sep') return null;
 
-  return (
-    <Section title="Color Sep Pattern">
-      <PatternControls
-        pattern={colorSepPattern}
-        scale={colorSepPatternScale}
-        density={colorSepPatternDensity}
-        angle={colorSepPatternAngle}
-        onPattern={(v) => setColorSepPattern(v)}
-        onScale={(v) => setColorSepPatternScale(v)}
-        onDensity={(v) => setColorSepPatternDensity(v)}
-        onAngle={(v) => setColorSepPatternAngle(v)}
-        scaleMaxOverride={40}
-      />
-      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 6 }}>
-        {colorSepPattern === 'none'
-          ? 'None — solid separations with hard color edges.'
-          : 'Pattern blends the edges between color zones. Lower density = wider, more organic transitions. No holes.'}
-      </div>
-    </Section>
-  );
+  return null;
 }
 
 // ─── Vector Section ───────────────────────────────────────────────────────────
@@ -1092,9 +1073,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
           <ColorSepSection />
         ) : separationMode === 'vector' ? (
           <VectorSection />
-        ) : (
-          <GlobalPatternSection />
-        )}
+        ) : null}
         {separationMode !== 'vector' && <ImageAdjustmentsSection />}
 
         {/* Per-layer controls — threshold mode only */}
@@ -1136,34 +1115,6 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
                 onChange={(v) => updateLayer(layer.id, { blur: v })} />
             </Section>
 
-            <Section title="Pattern Override">
-              <SwitchRow
-                label="Override Global Pattern"
-                checked={!layer.useGlobalPattern}
-                onChange={(checked) => updateLayer(layer.id, { useGlobalPattern: !checked })}
-              />
-              {!layer.useGlobalPattern ? (
-                <PatternControls
-                  pattern={layer.pattern}
-                  scale={layer.patternScale}
-                  density={layer.patternDensity}
-                  angle={layer.patternAngle}
-                  onPattern={(v) => updateLayer(layer.id, { pattern: v })}
-                  onScale={(v) => updateLayer(layer.id, { patternScale: v })}
-                  onDensity={(v) => updateLayer(layer.id, { patternDensity: v })}
-                  onAngle={(v) => updateLayer(layer.id, { patternAngle: v })}
-                />
-              ) : (
-                <div style={{
-                  fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-                  padding: '8px 0', lineHeight: 1.5,
-                }}>
-                  Using global: <span style={{ color: 'var(--accent)' }}>
-                    {PATTERN_LABELS[globalPattern.pattern]}
-                  </span>
-                </div>
-              )}
-            </Section>
           </>
         ) : separationMode === 'threshold' && !layer ? (
           <div className="no-layer-selected" style={{ flex: 'none', padding: '16px 14px' }}>
