@@ -183,7 +183,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
       {/* ─── Bottom Sheet ────────────────────────────────────── */}
       <div style={{
         position: 'absolute', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-        height: '68vh',
+        height: activeSheet === 'controls' ? '52vh' : '68vh',
         background: 'var(--surface)',
         borderTop: '2px solid var(--accent)',
         transform: activeSheet ? 'translateY(0)' : 'translateY(100%)',
