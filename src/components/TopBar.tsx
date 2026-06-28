@@ -9,7 +9,6 @@ interface TopBarProps {
   onTutorial: () => void;
   onVideo: () => void;
   onLogout?: () => void;
-  onManageSubscription?: () => void;
   userEmail?: string;
   firstName?: string;
   subscriptionExpiresAt?: string;
@@ -17,7 +16,7 @@ interface TopBarProps {
   subscriptionStatus?: string;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onLogout, onManageSubscription, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -235,21 +234,22 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
                       Sign out
                     </button>
                   )}
-                  {onManageSubscription && (
-                    <button
-                      onClick={() => { setMenuOpen(false); onManageSubscription(); }}
-                      style={{
-                        background: 'none', border: '1px solid var(--border)', cursor: 'pointer',
-                        padding: '4px 10px', fontSize: 10,
-                        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-                        transition: 'border-color 0.12s, color 0.12s',
-                      }}
-                      onMouseEnter={(e) => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = 'var(--accent)'; b.style.color = 'var(--accent)'; }}
-                      onMouseLeave={(e) => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text-muted)'; }}
-                    >
-                      Manage subscription
-                    </button>
-                  )}
+                  <a
+                    href="https://www.charleypangus.com/login"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMenuOpen(false)}
+                    style={{
+                      border: '1px solid var(--border)', cursor: 'pointer',
+                      padding: '4px 10px', fontSize: 10,
+                      color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                      textDecoration: 'none', transition: 'border-color 0.12s, color 0.12s',
+                    }}
+                    onMouseEnter={(e) => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = 'var(--accent)'; a.style.color = 'var(--accent)'; }}
+                    onMouseLeave={(e) => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = 'var(--border)'; a.style.color = 'var(--text-muted)'; }}
+                  >
+                    Manage subscription
+                  </a>
                 </div>
               </div>
             );
