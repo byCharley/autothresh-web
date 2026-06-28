@@ -549,11 +549,12 @@ function App() {
 
     // Helper: get display name — Pantone override takes priority over default names
     const layerName = (pl: ProcessedLayer) => {
+      const baseName = pl.name ?? layers.find((l) => l.id === pl.id)?.name ?? pl.id;
       if (usePantoneNames) {
         const [r, g, b] = pl.color;
-        return nearestPantone(r, g, b).name;
+        return `${baseName} · ${nearestPantone(r, g, b).name}`;
       }
-      return pl.name ?? layers.find((l) => l.id === pl.id)?.name ?? pl.id;
+      return baseName;
     };
     const toHex = ([r, g, b]: [number, number, number]) =>
       '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
