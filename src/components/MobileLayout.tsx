@@ -32,8 +32,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewDragRef = useRef({ active: false, sx: 0, sy: 0, cx: 0.5, cy: 0.5 });
   const { originalImage, imageFileName, separationMode, cmykQuality,
-          processedLayers, processedLayerDims, ditherComposite,
-          splitView, setSplitView } = useStore();
+          processedLayers, processedLayerDims, ditherComposite } = useStore();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -160,26 +159,6 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
           </div>
         )}
 
-        {/* Split view toggle */}
-        {originalImage && (
-          <button
-            onClick={() => setSplitView(!splitView)}
-            style={{
-              background: splitView ? 'var(--accent-dim)' : 'var(--surface-2)',
-              border: `1px solid ${splitView ? 'var(--accent)' : 'var(--border)'}`,
-              cursor: 'pointer', flexShrink: 0,
-              width: 32, height: 32,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: splitView ? 'var(--accent)' : 'var(--text-dim)',
-              WebkitTapHighlightColor: 'transparent',
-            } as React.CSSProperties}
-            title="Split view"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="18" height="18"/><line x1="12" y1="3" x2="12" y2="21"/>
-            </svg>
-          </button>
-        )}
 
         {/* Account button */}
         <div ref={menuRef} style={{ position: 'relative', flexShrink: 0 }}>
