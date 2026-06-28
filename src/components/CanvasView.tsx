@@ -89,6 +89,7 @@ export function CanvasView() {
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, setColorSepColors,
     colorSepLockedColors,
+    splitView, setSplitView,
   } = useStore();
 
   // Increments when real texture PNGs finish loading so the processing effect reruns.
@@ -100,7 +101,7 @@ export function CanvasView() {
   const [dragStart, setDragStart]   = useState({ x: 0, y: 0 });
   const [isDragOver, setIsDragOver] = useState(false);
 
-  const [splitView, setSplitView] = useState(false);
+
 
   // renderDim: the effective max-dim used for the CURRENT canvas render.
   // Scales up with zoom so the canvas resolution matches the display, giving
@@ -1022,6 +1023,9 @@ export function CanvasView() {
       data-tutorial="tutorial-canvas"
       onWheel={handleWheel}
       onPointerDown={(e) => {
+        // Don't intercept clicks on toolbar buttons or interactive children
+        if ((e.target as Element).closest('.canvas-toolbar, button, input[type="range"]')) return;
+
         activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
         // Two fingers → start pinch, cancel any drag/paint
@@ -1322,7 +1326,7 @@ export function CanvasView() {
                     border: splitView ? '1px solid var(--accent)' : '1px solid transparent',
                   }}
                   title="Split view — original left, processed right"
-                  onClick={() => setSplitView((v) => !v)}
+                  onClick={() => setSplitView(!splitView)}
                 >
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
                     <rect x="3" y="3" width="18" height="18"/><line x1="12" y1="3" x2="12" y2="21"/>

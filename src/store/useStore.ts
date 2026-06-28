@@ -252,6 +252,7 @@ interface AppState {
   underbaseChoke: 0 | 1 | 2;
   underbaseIncludeShadows: boolean;
   pantonePreviewActive: boolean;
+  splitView: boolean;
 
   globalPattern: PatternConfig;
 
@@ -350,6 +351,7 @@ interface AppState {
   setUnderbaseChoke: (v: 0 | 1 | 2) => void;
   setUnderbaseIncludeShadows: (v: boolean) => void;
   setPantonePreviewActive: (v: boolean) => void;
+  setSplitView: (v: boolean) => void;
   updateGlobalPattern: (updates: Partial<PatternConfig>) => void;
   setBgRemovalEnabled: (v: boolean) => void;
   setBgTolerance: (v: number) => void;
@@ -450,6 +452,7 @@ export const useStore = create<AppState>((set, get) => ({
   underbaseChoke: 1,
   underbaseIncludeShadows: false,
   pantonePreviewActive: false,
+  splitView: false,
   globalPattern: DEFAULT_GLOBAL_PATTERN,
   bgRemovalEnabled: true,
   bgTolerance: 30,
@@ -559,6 +562,7 @@ export const useStore = create<AppState>((set, get) => ({
   setUnderbaseChoke: (underbaseChoke) => set({ underbaseChoke }),
   setUnderbaseIncludeShadows: (underbaseIncludeShadows) => set({ underbaseIncludeShadows }),
   setPantonePreviewActive: (pantonePreviewActive) => set({ pantonePreviewActive }),
+  setSplitView: (splitView) => set({ splitView }),
   updateGlobalPattern: (updates) =>
     set((s) => ({ globalPattern: { ...s.globalPattern, ...updates } })),
   setBgRemovalEnabled: (bgRemovalEnabled) => set({ bgRemovalEnabled }),
