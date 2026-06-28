@@ -21,6 +21,7 @@ import { BetaNoticeModal, shouldShowBetaNotice } from './components/BetaNoticeMo
 import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components/WhatsNewModal';
 import { ContactModal } from './components/ContactModal';
 import { TutorialOverlay } from './components/TutorialOverlay';
+import { LoginSplash } from './components/LoginSplash';
 import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
@@ -80,6 +81,21 @@ function App() {
   const [showContact, setShowContact]     = useState(false);
   const [showTutorial, setShowTutorial]   = useState(false);
   const [showVideo, setShowVideo]         = useState(false);
+  // Read the flag immediately so the splash is true on the very first render
+  // after the OAuth redirect — no waiting for auth to complete.
+  const [showSplash, setShowSplash] = useState(() => !!sessionStorage.getItem('at-pending-welcome'));
+
+  const handleLogin = () => {
+    sessionStorage.setItem('at-pending-welcome', '1');
+    initiateLogin();
+  };
+
+  // Clear the flag once auth lands — the splash timer handles its own dismissal.
+  useEffect(() => {
+    if (status === 'authenticated') {
+      sessionStorage.removeItem('at-pending-welcome');
+    }
+  }, [status]);
   const [leftOpen, setLeftOpen]   = useState(true);
   const [rightOpen, setRightOpen] = useState(() => window.innerWidth > 1100);
   const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();
@@ -108,16 +124,19 @@ function App() {
 
   if (status === 'loading') {
     return (
-      <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>
-          Verifying…
+      <>
+        <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>
+            Verifying…
+          </div>
         </div>
-      </div>
+        {showSplash && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
+      </>
     );
   }
 
   if (status === 'unauthenticated') {
-    return <LoginPage onLogin={initiateLogin} onSwitchAccount={switchAccount} />;
+    return <LoginPage onLogin={handleLogin} onSwitchAccount={switchAccount} />;
   }
 
   if (status === 'no-subscription') {
@@ -779,6 +798,7 @@ function App() {
       {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} onContact={() => { setShowWhatsNew(false); setShowContact(true); }} />}
       {showContact  && <ContactModal  onClose={() => setShowContact(false)}  />}
       {showTutorial && <TutorialOverlay onClose={() => setShowTutorial(false)} />}
+      {showSplash && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
       {showVideo && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9980, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
