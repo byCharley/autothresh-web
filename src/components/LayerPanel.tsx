@@ -1270,7 +1270,7 @@ export function LayerPanel() {
       <div className="left-scroll">
         {/* Mode Switcher */}
         <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }} data-tutorial="tutorial-modes">
-          <div style={{ display: 'flex', padding: '6px 8px', gap: 4, position: 'relative' }}>
+          <div style={{ display: 'flex', padding: '6px 8px', gap: 4, position: 'relative', background: 'var(--surface-2)' }}>
             {/* Sliding active pill */}
             {sliderRect && (
               <div style={{
@@ -1294,9 +1294,9 @@ export function LayerPanel() {
                   flex: 1, height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
                   fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
                   cursor: 'pointer', border: '1px solid var(--border)',
-                  background: 'var(--surface-2)',
+                  background: 'transparent',
                   color: separationMode === mode ? '#000' : 'var(--text-muted)',
-                  transition: 'color 0.18s',
+                  transition: 'color 0.22s cubic-bezier(0.22, 0.61, 0.36, 1)',
                   position: 'relative', zIndex: 1,
                 }}
               >
