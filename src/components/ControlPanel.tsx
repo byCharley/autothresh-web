@@ -203,11 +203,6 @@ function PatternSelect({ value, onChange }: { value: PatternType; onChange: (v: 
       <optgroup label="─ Texture ─">
         <option value="reticulation">Reticulation</option>
       </optgroup>
-      <optgroup label="─ Ordered Dither ─">
-        <option value="bayer-2">Bayer · 2×2</option>
-        <option value="bayer-4">Bayer · 4×4</option>
-        <option value="bayer-8">Bayer · 8×8</option>
-      </optgroup>
     </select>
   );
 }
@@ -705,7 +700,26 @@ function ColorSepSection() {
   } = useStore();
   if (separationMode !== 'color-sep') return null;
 
-  return null;
+  return (
+    <Section title="Color Sep Pattern">
+      <PatternControls
+        pattern={colorSepPattern}
+        scale={colorSepPatternScale}
+        density={colorSepPatternDensity}
+        angle={colorSepPatternAngle}
+        onPattern={(v) => setColorSepPattern(v)}
+        onScale={(v) => setColorSepPatternScale(v)}
+        onDensity={(v) => setColorSepPatternDensity(v)}
+        onAngle={(v) => setColorSepPatternAngle(v)}
+        scaleMaxOverride={40}
+      />
+      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 6 }}>
+        {colorSepPattern === 'none'
+          ? 'None — solid separations with hard color edges.'
+          : 'Pattern blends the edges between color zones. Lower density = wider, more organic transitions.'}
+      </div>
+    </Section>
+  );
 }
 
 // ─── Vector Section ───────────────────────────────────────────────────────────
@@ -1024,7 +1038,7 @@ function CmykScreenSection() {
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | null }) {
-  const { layers, selectedLayerId, updateLayer, globalPattern, originalImage, separationMode } = useStore();
+  const { layers, selectedLayerId, updateLayer, originalImage, separationMode } = useStore();
   const layer = layers.find((l) => l.id === selectedLayerId);
 
   if (!originalImage) {
@@ -1073,7 +1087,9 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
           <ColorSepSection />
         ) : separationMode === 'vector' ? (
           <VectorSection />
-        ) : null}
+        ) : (
+          <GlobalPatternSection />
+        )}
         {separationMode !== 'vector' && <ImageAdjustmentsSection />}
 
         {/* Per-layer controls — threshold mode only */}
