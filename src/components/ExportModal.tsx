@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useStore } from '../store/useStore';
 
 export type ExportFormat = 'png' | 'psd' | 'pdf' | 'tiff' | 'svg';
 
@@ -7,6 +8,9 @@ export interface ExportConfig {
   format:           ExportFormat;
   fileName:         string;
   includeColorInfo: boolean;
+  usePantoneNames:  boolean;
+  underbase:        boolean;
+  underbaseChoke:   0 | 1 | 2;
 }
 
 interface Props {
@@ -61,17 +65,24 @@ function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean
 export function ExportModal({ onClose, onExport, defaultFileName, separationMode }: Props) {
   const isDither = separationMode === 'palette';
   const isVector = separationMode === 'vector';
+  const isCmyk   = separationMode === 'cmyk';
   const FORMATS  = isVector ? [{ value: 'svg' as ExportFormat, label: 'SVG', ext: '.svg' }] : isDither ? FORMATS_DITHER : FORMATS_ALL;
 
   const [mode,             setMode]             = useState<'screen' | 'dtg'>(isDither ? 'dtg' : 'screen');
   const [format,           setFormat]           = useState<ExportFormat>(isVector ? 'svg' : 'png');
   const [fileName,         setFileName]         = useState(defaultFileName);
+  const { underbaseEnabled, underbaseChoke: storeChoke, setUnderbaseEnabled, setUnderbaseChoke } = useStore();
   const [exporting,        setExporting]        = useState(false);
   const [includeColorInfo, setIncludeColorInfo] = useState(false);
+  const [usePantoneNames,  setUsePantoneNames]  = useState(false);
+  const includeUnderbase = underbaseEnabled;
+  const undChoke         = storeChoke;
+  const setIncludeUnderbase = setUnderbaseEnabled;
+  const setUndChoke         = setUnderbaseChoke;
 
   const handleExport = async () => {
     setExporting(true);
-    await onExport({ mode: isDither ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo });
+    await onExport({ mode: isDither ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo, usePantoneNames, underbase: includeUnderbase, underbaseChoke: undChoke });
     setExporting(false);
     onClose();
   };
@@ -222,6 +233,86 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
                 {includeColorInfo ? 'On' : 'Off'}
               </span>
             </label>
+          </div>
+        )}
+
+        {/* Pantone names toggle — not applicable for vector or CMYK */}
+        {!isVector && !isCmyk && (
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                Pantone Names
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+                Convert layer names to nearest PMS Coated code
+              </div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0 }}>
+              <input
+                type="checkbox"
+                checked={usePantoneNames}
+                onChange={e => setUsePantoneNames(e.target.checked)}
+                style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                {usePantoneNames ? 'On' : 'Off'}
+              </span>
+            </label>
+          </div>
+        )}
+
+        {/* Underbase — not for vector mode */}
+        {!isVector && (
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: includeUnderbase ? 10 : 0 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  White Underbase
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+                  All inks flattened to white · exported as bottom layer
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0, marginLeft: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={includeUnderbase}
+                  onChange={e => setIncludeUnderbase(e.target.checked)}
+                  style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }}
+                />
+                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                  {includeUnderbase ? 'On' : 'Off'}
+                </span>
+              </label>
+            </div>
+            {includeUnderbase && (
+              <div>
+                <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Choke (shrink inward)
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {([0, 1, 2] as const).map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setUndChoke(n)}
+                      style={{
+                        flex: 1, padding: '8px 6px',
+                        border: `1px solid ${undChoke === n ? 'var(--accent)' : 'var(--border)'}`,
+                        background: undChoke === n ? 'var(--accent-dim)' : 'var(--surface-2)',
+                        cursor: 'pointer', textAlign: 'center', transition: 'all 0.1s',
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 700, color: undChoke === n ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                        {n === 0 ? 'None' : `${n}px`}
+                      </div>
+                      <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
+                        {n === 0 ? 'No choke' : n === 1 ? 'Standard' : 'Heavy'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

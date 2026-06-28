@@ -1,6 +1,7 @@
 import { useState, useRef, useLayoutEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, generateHarmonicPalettes } from '../engine/colorSeparation';
+import { nearestPantone, isShadowColor } from '../engine/pantoneMatch';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -1191,10 +1192,15 @@ export function LayerPanel() {
     colorSepColorPriority, setColorSepColorPriority,
     colorSepColors, colorSepVisibility, setColorSepVisibility,
     colorSepLockedColors, setColorSepLockedColors,
+    underbaseEnabled, underbaseChoke, setUnderbaseEnabled, setUnderbaseChoke,
+    underbaseIncludeShadows, setUnderbaseIncludeShadows,
+    pantonePreviewActive, setPantonePreviewActive,
+    processedLayers,
   } = useStore();
 
   const modeBtnRefs = useRef<(HTMLButtonElement | null)[]>([null, null, null, null]);
   const [sliderRect, setSliderRect] = useState<{ left: number; width: number } | null>(null);
+  const [showPantonePanel, setShowPantonePanel] = useState(false);
   const MODES = ['threshold', 'palette', 'color-sep', 'vector'] as const;
 
   useLayoutEffect(() => {
@@ -1605,6 +1611,142 @@ export function LayerPanel() {
               })}
             </div>
 
+
+            {/* Underbase — only for ink-separation modes */}
+            {separationMode !== 'vector' && separationMode !== 'cmyk' && (
+              <div style={{ borderTop: '1px solid var(--border)', padding: '8px 8px' }}>
+                {/* Header row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: underbaseEnabled ? 8 : 0 }}>
+                  {/* White swatch */}
+                  <div style={{
+                    width: 22, height: 22, flexShrink: 0,
+                    background: '#ffffff',
+                    border: `1.5px solid ${underbaseEnabled ? 'var(--accent)' : 'var(--border-2)'}`,
+                    borderRadius: 2,
+                    boxShadow: underbaseEnabled ? '0 0 0 1px var(--accent)' : 'none',
+                  }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', color: underbaseEnabled ? 'var(--text)' : 'var(--text-dim)', letterSpacing: '0.04em' }}>
+                      Underbase
+                    </div>
+                    <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      White · Bottom layer
+                    </div>
+                  </div>
+                  {/* Solo button */}
+                  {underbaseEnabled && (
+                    <button
+                      className="vis-btn"
+                      onClick={() => setSoloLayerId(soloLayerId === '__underbase__' ? null : '__underbase__')}
+                      title="Solo underbase"
+                      style={{ color: soloLayerId === '__underbase__' ? 'var(--accent)' : 'var(--text-dim)', opacity: soloLayerId && soloLayerId !== '__underbase__' ? 0.35 : 0.7 }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = soloLayerId === '__underbase__' ? '0.9' : soloLayerId ? '0.35' : '0.7')}
+                    >
+                      <SoloIcon active={soloLayerId === '__underbase__'} />
+                    </button>
+                  )}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', flexShrink: 0 }}>
+                    <input
+                      type="checkbox"
+                      checked={underbaseEnabled}
+                      onChange={e => { setUnderbaseEnabled(e.target.checked); if (!e.target.checked && soloLayerId === '__underbase__') setSoloLayerId(null); }}
+                      style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: underbaseEnabled ? 'var(--accent)' : 'var(--text-dim)' }}>
+                      {underbaseEnabled ? 'On' : 'Off'}
+                    </span>
+                  </label>
+                </div>
+
+                {/* Choke + shadow options */}
+                {underbaseEnabled && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {/* Choke row */}
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {([0, 1, 2] as const).map((n) => (
+                        <button
+                          key={n}
+                          onClick={() => setUnderbaseChoke(n)}
+                          style={{
+                            flex: 1, padding: '4px 4px',
+                            border: `1px solid ${underbaseChoke === n ? 'var(--accent)' : 'var(--border)'}`,
+                            background: underbaseChoke === n ? 'var(--accent-dim)' : 'var(--surface-2)',
+                            cursor: 'pointer', textAlign: 'center',
+                          }}
+                        >
+                          <div style={{ fontSize: 10, fontWeight: 700, color: underbaseChoke === n ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                            {n === 0 ? 'None' : `${n}px`}
+                          </div>
+                          <div style={{ fontSize: 8, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                            {n === 0 ? 'No choke' : n === 1 ? 'Standard' : 'Heavy'}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    {/* Shadow toggle — single compact row */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', paddingTop: 2 }}>
+                      <input
+                        type="checkbox"
+                        checked={underbaseIncludeShadows}
+                        onChange={e => setUnderbaseIncludeShadows(e.target.checked)}
+                        style={{ accentColor: 'var(--accent)', width: 12, height: 12, cursor: 'pointer', flexShrink: 0 }}
+                      />
+                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Include shadows in underbase</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Pantone Color Names */}
+            {separationMode !== 'vector' && separationMode !== 'cmyk' && (
+              <div style={{ borderTop: '1px solid var(--border)', padding: '8px 8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', letterSpacing: '0.04em' }}>
+                      Pantone Preview
+                    </div>
+                    <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      Nearest PMS Coated per color
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-ghost"
+                    style={{ fontSize: 9, height: 22, padding: '0 6px', color: pantonePreviewActive ? 'var(--accent)' : undefined }}
+                    onClick={() => { const next = !showPantonePanel; setShowPantonePanel(next); setPantonePreviewActive(next); }}
+                  >{showPantonePanel ? 'Hide' : 'Preview'}</button>
+                </div>
+
+                {showPantonePanel && processedLayers.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    {processedLayers.map(pl => {
+                      const [r, g, b] = pl.color;
+                      const srcHex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+                      const match = nearestPantone(r, g, b);
+                      const isShadow = isShadowColor(r, g, b);
+                      return (
+                        <div key={pl.id} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}>
+                          <div style={{ width: 14, height: 14, background: srcHex, border: '1px solid var(--border-2)', borderRadius: 2, flexShrink: 0 }} />
+                          <div style={{ fontSize: 9, color: 'var(--text-dim)', flexShrink: 0 }}>→</div>
+                          <div style={{ width: 14, height: 14, background: match.hex, border: '1px solid var(--border-2)', borderRadius: 2, flexShrink: 0 }} />
+                          <div style={{ flex: 1, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {match.name}
+                          </div>
+                          {isShadow && (
+                            <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>Shadow</div>
+                          )}
+                          <div style={{
+                            fontSize: 8, fontFamily: 'var(--font-mono)', flexShrink: 0,
+                            color: match.deltaE < 5 ? 'var(--accent)' : match.deltaE < 15 ? 'var(--text-dim)' : '#e06c75',
+                          }}>ΔE{match.deltaE}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Auto Palette */}
             {previewImage && (

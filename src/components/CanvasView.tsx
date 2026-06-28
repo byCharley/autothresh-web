@@ -13,6 +13,7 @@ import { generateTextureMask } from '../engine/textureGenerator';
 import { buildImportanceMap } from '../engine/analysisPass';
 import { loadAllTextures } from '../engine/textureLoader';
 import { traceImageToSVG } from '../engine/vectorTracer';
+import { isShadowColor, nearestPantoneRgb } from '../engine/pantoneMatch';
 
 function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerConfig[] {
   return layers.map((l) =>
@@ -67,7 +68,7 @@ export function CanvasView() {
   } | null>(null);
 
   const {
-    originalImage, previewImage, layers, knockoutEnabled,
+    originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, pantonePreviewActive,
     globalPattern,
     bgRemovalEnabled, bgTolerance,
     showRegistrationMarks, regMarkPadding, documentBleed,
@@ -286,6 +287,7 @@ export function CanvasView() {
         const importanceMap = buildImportanceMap(artScaled, localBgMask);
 
         let artComposite: ImageData;
+        let underbaseLayers: import('../engine/imageProcessor').ProcessedLayer[] = [];
         if (separationMode === 'cmyk') {
           const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
           const ALL_VIS = { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true };
@@ -363,10 +365,15 @@ export function CanvasView() {
             palettePattern, effectiveTileSize, imageAdjustments,
             paletteDensity, paletteAngle, paletteSoftness, importanceMap,
           );
-          setProcessedLayers(plateLayers.filter(l => paletteVisibility[l.id] !== false));
+          const visiblePlateLayers = plateLayers.filter(l => paletteVisibility[l.id] !== false);
+          setProcessedLayers(visiblePlateLayers);
+          underbaseLayers = plateLayers; // all layers regardless of visibility
 
+          const renderPaletteColors = pantonePreviewActive
+            ? paletteColors.map(([r, g, b]) => nearestPantoneRgb(r, g, b))
+            : paletteColors;
           artComposite = renderPaletteComposite(
-            artScaled, paletteColors, localBgMask, paletteVisibility,
+            artScaled, renderPaletteColors, localBgMask, paletteVisibility,
             palettePattern, effectiveTileSize, imageAdjustments,
             paletteDensity, paletteAngle, paletteSoftness, importanceMap,
           );
@@ -462,10 +469,15 @@ export function CanvasView() {
             adjScaled, colorSepSettings, localBgMask, lockedForSep!, importanceMap,
           );
           setColorSepColors(csColors);
-          setProcessedLayers(csLayers.filter(l => colorSepVisibility[l.id] !== false));
+          const visibleCsLayers = csLayers.filter(l => colorSepVisibility[l.id] !== false);
+          setProcessedLayers(visibleCsLayers);
+          underbaseLayers = csLayers; // all layers regardless of visibility
 
           // Use pre-computed layer masks — avoids a second colorSeparate call.
-          artComposite = renderColorSepCompositeFromLayers(csLayers, csColors, colorSepVisibility, artPrevW, artPrevH);
+          const renderCsColors = pantonePreviewActive
+            ? csColors.map(([r, g, b]) => nearestPantoneRgb(r, g, b))
+            : csColors;
+          artComposite = renderColorSepCompositeFromLayers(csLayers, renderCsColors, colorSepVisibility, artPrevW, artPrevH);
 
           if (textureEnabled) {
             const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
@@ -559,6 +571,7 @@ export function CanvasView() {
           });
 
           setProcessedLayers(expanded);
+          underbaseLayers = expanded;
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
           // Solo mode: show only the target layer's knocked-out mask so users
@@ -566,7 +579,10 @@ export function CanvasView() {
           const displayLayers = soloLayerId
             ? expanded.filter((pl) => pl.id === soloLayerId || pl.id.startsWith(`${soloLayerId}:`))
             : expanded;
-          artComposite = renderComposite(displayLayers, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
+          const renderDisplayLayers = pantonePreviewActive
+            ? displayLayers.map(pl => ({ ...pl, color: nearestPantoneRgb(...pl.color) }))
+            : displayLayers;
+          artComposite = renderComposite(renderDisplayLayers, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
         }
 
         // Split view: left = original image, right = processed result (all modes)
@@ -612,10 +628,63 @@ export function CanvasView() {
           dCtx.fillRect(0, 0, docPrevW, docPrevH);
         }
 
+        // Build underbase mask (shared for both normal draw and solo view)
+        const underbaseSolo = soloLayerId === '__underbase__';
+        const shouldDrawUnderbase = underbaseEnabled && separationMode !== 'vector' && separationMode !== 'cmyk'
+          && (!soloLayerId || underbaseSolo);
+
+        let ubCanvas: HTMLCanvasElement | null = null;
+        if (shouldDrawUnderbase) {
+          const combined = new Uint8Array(artPrevW * artPrevH);
+          for (const pl of underbaseLayers) {
+            const [r, g, b] = pl.color;
+            if (!underbaseIncludeShadows && isShadowColor(r, g, b)) continue;
+            for (let i = 0; i < pl.mask.length; i++) {
+              if (pl.mask[i] === 255) combined[i] = 255;
+            }
+          }
+          let ubMask = combined;
+          if (underbaseChoke > 0) {
+            ubMask = new Uint8Array(combined);
+            const c = underbaseChoke;
+            for (let y = 0; y < artPrevH; y++) {
+              for (let x = 0; x < artPrevW; x++) {
+                if (combined[y * artPrevW + x] !== 255) continue;
+                let erase = false;
+                outer: for (let dy = -c; dy <= c; dy++) {
+                  for (let dx = -c; dx <= c; dx++) {
+                    if (Math.abs(dx) + Math.abs(dy) > c) continue;
+                    const nx = x + dx, ny = y + dy;
+                    if (nx < 0 || nx >= artPrevW || ny < 0 || ny >= artPrevH || combined[ny * artPrevW + nx] === 0) {
+                      erase = true; break outer;
+                    }
+                  }
+                }
+                if (erase) ubMask[y * artPrevW + x] = 0;
+              }
+            }
+          }
+          const ubData = new ImageData(artPrevW, artPrevH);
+          for (let i = 0; i < ubMask.length; i++) {
+            if (ubMask[i] !== 255) continue;
+            ubData.data[i * 4] = 255; ubData.data[i * 4 + 1] = 255;
+            ubData.data[i * 4 + 2] = 255; ubData.data[i * 4 + 3] = 255;
+          }
+          ubCanvas = document.createElement('canvas');
+          ubCanvas.width = artPrevW; ubCanvas.height = artPrevH;
+          ubCanvas.getContext('2d')!.putImageData(ubData, 0, 0);
+          if (!underbaseSolo) dCtx.drawImage(ubCanvas, artPrevOffX, artPrevOffY);
+        }
+
         const artCanvas = document.createElement('canvas');
         artCanvas.width = artPrevW; artCanvas.height = artPrevH;
         artCanvas.getContext('2d')!.putImageData(artComposite, 0, 0);
-        dCtx.drawImage(artCanvas, artPrevOffX, artPrevOffY); // 1:1, no blur
+        // In underbase solo mode, skip the color art and draw only the white underbase
+        if (underbaseSolo && ubCanvas) {
+          dCtx.drawImage(ubCanvas, artPrevOffX, artPrevOffY);
+        } else {
+          dCtx.drawImage(artCanvas, artPrevOffX, artPrevOffY); // 1:1, no blur
+        }
 
         const canvas = canvasRef.current;
         if (canvas) {
@@ -646,6 +715,7 @@ export function CanvasView() {
     vectorNumColors, vectorDetail, vectorSmooth, vectorInkColor, vectorPathMode, vectorMinSpeckle,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, colorSepLockedColors,
+    underbaseEnabled, underbaseChoke, underbaseIncludeShadows, pantonePreviewActive,
     // renderDim excluded — zoom is a pure CSS transform, never triggers a reprocess
   ]);
 

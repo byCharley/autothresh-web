@@ -22,6 +22,7 @@
     "fit-curve": "^0.2.0",
     "imagetracerjs": "^1.2.6",
     "jszip": "^3.10.1",
+    "pantone-colors": "^1.0.3",
     "pdf-lib": "^1.17.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

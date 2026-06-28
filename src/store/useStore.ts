@@ -248,6 +248,10 @@ interface AppState {
   layers: LayerConfig[];
   selectedLayerId: string | null;
   knockoutEnabled: boolean;
+  underbaseEnabled: boolean;
+  underbaseChoke: 0 | 1 | 2;
+  underbaseIncludeShadows: boolean;
+  pantonePreviewActive: boolean;
 
   globalPattern: PatternConfig;
 
@@ -342,6 +346,10 @@ interface AppState {
   updateLayer: (id: string, updates: Partial<LayerConfig>) => void;
   selectLayer: (id: string | null) => void;
   setKnockoutEnabled: (v: boolean) => void;
+  setUnderbaseEnabled: (v: boolean) => void;
+  setUnderbaseChoke: (v: 0 | 1 | 2) => void;
+  setUnderbaseIncludeShadows: (v: boolean) => void;
+  setPantonePreviewActive: (v: boolean) => void;
   updateGlobalPattern: (updates: Partial<PatternConfig>) => void;
   setBgRemovalEnabled: (v: boolean) => void;
   setBgTolerance: (v: number) => void;
@@ -438,6 +446,10 @@ export const useStore = create<AppState>((set, get) => ({
   layers: DEFAULT_LAYERS,
   selectedLayerId: 'shadows',
   knockoutEnabled: true,
+  underbaseEnabled: false,
+  underbaseChoke: 1,
+  underbaseIncludeShadows: false,
+  pantonePreviewActive: false,
   globalPattern: DEFAULT_GLOBAL_PATTERN,
   bgRemovalEnabled: true,
   bgTolerance: 30,
@@ -543,6 +555,10 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({ layers: s.layers.map((l) => (l.id === id ? { ...l, ...updates } : l)) })),
   selectLayer: (selectedLayerId) => set({ selectedLayerId }),
   setKnockoutEnabled: (knockoutEnabled) => set({ knockoutEnabled }),
+  setUnderbaseEnabled: (underbaseEnabled) => set({ underbaseEnabled }),
+  setUnderbaseChoke: (underbaseChoke) => set({ underbaseChoke }),
+  setUnderbaseIncludeShadows: (underbaseIncludeShadows) => set({ underbaseIncludeShadows }),
+  setPantonePreviewActive: (pantonePreviewActive) => set({ pantonePreviewActive }),
   updateGlobalPattern: (updates) =>
     set((s) => ({ globalPattern: { ...s.globalPattern, ...updates } })),
   setBgRemovalEnabled: (bgRemovalEnabled) => set({ bgRemovalEnabled }),

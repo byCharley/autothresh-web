@@ -36,6 +36,7 @@ import type { LayerConfig, PatternConfig, ProcessedLayer, PatternType } from './
 import { generateTextureMask } from './engine/textureGenerator';
 import { buildImportanceMap } from './engine/analysisPass';
 import { encodeTiff } from './engine/exportFormats';
+import { isShadowColor, nearestPantone } from './engine/pantoneMatch';
 
 function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerConfig[] {
   return layers.map((l) =>
@@ -112,6 +113,7 @@ function App() {
     colorSepPatternDensity, colorSepPatternAngle, colorSepLockedColors, colorSepVisibility,
     paintMasks,
     vectorSvg,
+    underbaseIncludeShadows,
   } = useStore();
 
   useEffect(() => {
@@ -173,7 +175,7 @@ function App() {
     return c;
   }
 
-  const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo }: ExportConfig) => {
+  const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke }: ExportConfig) => {
     if (!originalImage) return;
 
     // ── Vector mode: download the traced SVG directly ────────────────────────
@@ -455,10 +457,64 @@ function App() {
       opacity: 1,
     };
 
+    // ── Underbase builder (white ink, all visible masks combined + choke) ──────
+    const buildUnderbaseCanvas = (chokePx: number): HTMLCanvasElement => {
+      const combined = new Uint8Array(artScaleW * artScaleH);
+      for (const pl of visibleLayers) {
+        const [r, g, b] = pl.color;
+        if (!underbaseIncludeShadows && isShadowColor(r, g, b)) continue;
+        for (let i = 0; i < pl.mask.length; i++) {
+          if (pl.mask[i] === 255) combined[i] = 255;
+        }
+      }
+      let mask = combined;
+      if (chokePx > 0) {
+        mask = new Uint8Array(combined);
+        for (let y = 0; y < artScaleH; y++) {
+          for (let x = 0; x < artScaleW; x++) {
+            if (combined[y * artScaleW + x] !== 255) continue;
+            let erase = false;
+            outer: for (let dy = -chokePx; dy <= chokePx; dy++) {
+              for (let dx = -chokePx; dx <= chokePx; dx++) {
+                if (Math.abs(dx) + Math.abs(dy) > chokePx) continue;
+                const nx = x + dx, ny = y + dy;
+                if (nx < 0 || nx >= artScaleW || ny < 0 || ny >= artScaleH || combined[ny * artScaleW + nx] === 0) {
+                  erase = true; break outer;
+                }
+              }
+            }
+            if (erase) mask[y * artScaleW + x] = 0;
+          }
+        }
+      }
+      const data = new ImageData(docPxW, docPxH);
+      for (let ay = 0; ay < artScaleH; ay++) {
+        for (let ax = 0; ax < artScaleW; ax++) {
+          if (mask[ay * artScaleW + ax] !== 255) continue;
+          const dx = artOffX + ax, dy = artOffY + ay;
+          if (dx < 0 || dx >= docPxW || dy < 0 || dy >= docPxH) continue;
+          const pi = (dy * docPxW + dx) * 4;
+          data.data[pi] = 255; data.data[pi + 1] = 255; data.data[pi + 2] = 255; data.data[pi + 3] = 255;
+        }
+      }
+      return canvasFromImageData(data);
+    };
+    const ubLabel = `Underbase · #FFFFFF${underbaseChoke > 0 ? ` (${underbaseChoke}px choke)` : ''}`;
+    const ubPsdLayer = underbase ? [{
+      name: ubLabel,
+      canvas: buildUnderbaseCanvas(underbaseChoke),
+      top: 0, left: 0, blendMode: 'normal' as const, opacity: 1,
+    }] : [];
+
     const visibleLayers = artLayers.filter((pl) => pl.visible);
-    // Helper: get display name for a processed layer (works for both threshold and CMYK)
-    const layerName = (pl: ProcessedLayer) =>
-      pl.name ?? layers.find((l) => l.id === pl.id)?.name ?? pl.id;
+    // Helper: get display name — Pantone override takes priority over default names
+    const layerName = (pl: ProcessedLayer) => {
+      if (usePantoneNames) {
+        const [r, g, b] = pl.color;
+        return nearestPantone(r, g, b).name;
+      }
+      return pl.name ?? layers.find((l) => l.id === pl.id)?.name ?? pl.id;
+    };
     const toHex = ([r, g, b]: [number, number, number]) =>
       '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
     const layerNameHex = (pl: ProcessedLayer) => `${layerName(pl)} · ${toHex(pl.color)}`;
@@ -479,12 +535,18 @@ function App() {
         zip.file('proof-on-white.png',   await canvasToBlob(buildCompositeCanvas(false, '#ffffff')));
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-cmyk-plates.zip`);
       } else if (separationMode === 'palette') {
-        // Single composite PNG for Color Match
-        const blob = await canvasToBlob(buildCompositeCanvas(false));
-        saveAs(blob, `${baseName}-dither.png`);
+        if (underbase) {
+          const zip = new JSZip();
+          zip.file('underbase.png',  await canvasToBlob(buildUnderbaseCanvas(underbaseChoke)));
+          zip.file('composite.png',  await canvasToBlob(buildCompositeCanvas(false)));
+          saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-dither.zip`);
+        } else {
+          saveAs(await canvasToBlob(buildCompositeCanvas(false)), `${baseName}-dither.png`);
+        }
       } else {
         const zip    = new JSZip();
         const folder = zip.folder('screen-print')!;
+        if (underbase) folder.file('underbase.png', await canvasToBlob(buildUnderbaseCanvas(underbaseChoke)));
         for (const pl of visibleLayers) {
           folder.file(`${layerName(pl).toLowerCase()}.png`, await canvasToBlob(buildLayerCanvas(pl, true)));
         }
@@ -541,6 +603,7 @@ function App() {
           width: docPxW, height: docPxH,
           children: [
             { name: 'Garment',     canvas: garmentCanvas, top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+            ...ubPsdLayer,
             { name: 'Color Proof', canvas: proofCanvas,   top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
             ...plateLayers,
           ],
@@ -561,6 +624,7 @@ function App() {
           width: docPxW, height: docPxH,
           children: [
             { name: 'White Paper', canvas: whiteBg,               top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+            ...ubPsdLayer,
             { name: 'Color Proof', canvas: buildCompositeCanvas(false), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
             ...plateLayers,
           ],
@@ -583,7 +647,7 @@ function App() {
           blendMode: 'normal' as const,
           opacity: 1,
         }] : [];
-        const buffer = writePsd({ width: docPxW, height: docPxH, children: [bgLayer, ...psdLayers, ...colorRefLayer] });
+        const buffer = writePsd({ width: docPxW, height: docPxH, children: [bgLayer, ...ubPsdLayer, ...psdLayers, ...colorRefLayer] });
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-screen.psd`);
       }
       return;
@@ -605,8 +669,10 @@ function App() {
       };
 
       if (separationMode === 'palette' || mode === 'dtg') {
+        if (underbase) await addPage(buildUnderbaseCanvas(underbaseChoke));
         await addPage(buildCompositeCanvas(false));
       } else {
+        if (underbase) await addPage(buildUnderbaseCanvas(underbaseChoke));
         for (const pl of visibleLayers) await addPage(buildLayerCanvas(pl, true));
         await addPage(buildCompositeCanvas(true));
       }
@@ -628,6 +694,7 @@ function App() {
       } else {
         const zip    = new JSZip();
         const folder = zip.folder('screen-print-tiff')!;
+        if (underbase) folder.file('underbase.tiff', encodeTiff(getPixels(buildUnderbaseCanvas(underbaseChoke)), documentDpi));
         for (const pl of visibleLayers) {
           const buf = encodeTiff(getPixels(buildLayerCanvas(pl, true)), documentDpi);
           folder.file(`${layerName(pl).toLowerCase()}.tiff`, buf);

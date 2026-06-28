@@ -5,7 +5,12 @@
       "Bash(npm create *)",
       "Bash(npm run *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Read(//tmp/**)",
+      "Bash(awk '/function PaletteSection/,/^function [A-Z]/' src/components/ControlPanel.tsx)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s http://localhost:3007)",
+      "Bash(git push *)"
     ]
   }
 }
