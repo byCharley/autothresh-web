@@ -6,6 +6,8 @@ interface Step {
   desc: string;
 }
 
+const VIDEO_URL = 'https://youtu.be/80Fogz8q5_U';
+
 const STEPS: Step[] = [
   {
     key: null,
@@ -202,6 +204,30 @@ export function TutorialOverlay({ onClose }: { onClose: () => void }) {
           <p style={{ margin: 0, fontSize: 11, fontFamily: 'var(--font-sans)', color: 'var(--text-muted)', lineHeight: 1.78 }}>
             {current.desc}
           </p>
+          {step === 0 && (
+            <a
+              href={VIDEO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7, marginTop: 12,
+                padding: '7px 10px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid var(--border)',
+                color: 'var(--accent)', textDecoration: 'none',
+                fontSize: 11, fontFamily: 'var(--font-mono)',
+                transition: 'background 0.12s',
+              }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.08)')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.04)')}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
+              </svg>
+              Watch the full video tutorial
+            </a>
+          )}
         </div>
 
         <div style={{ padding: '0 18px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

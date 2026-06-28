@@ -7,6 +7,7 @@ interface TopBarProps {
   onMockup: () => void;
   onPresets: () => void;
   onTutorial: () => void;
+  onVideo: () => void;
   onLogout?: () => void;
   userEmail?: string;
   firstName?: string;
@@ -15,7 +16,7 @@ interface TopBarProps {
   subscriptionStatus?: string;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -275,6 +276,18 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onLogout, us
 
       <button
         className="btn btn-ghost"
+        onClick={onVideo}
+        title="Watch the full video tutorial"
+        style={{ height: 26 }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+          <circle cx="12" cy="12" r="10"/>
+          <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
+        </svg>
+        Watch Tutorial
+      </button>
+      <button
+        className="btn btn-ghost"
         onClick={onTutorial}
         title="Take a quick tour of the tools"
         style={{ height: 26 }}
@@ -284,7 +297,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onLogout, us
           <line x1="12" y1="8" x2="12" y2="8" strokeWidth="2.5" strokeLinecap="round"/>
           <line x1="12" y1="12" x2="12" y2="16" strokeWidth="2" strokeLinecap="round"/>
         </svg>
-        Tutorial
+        Tour
       </button>
       <button
         className="btn btn-ghost"
