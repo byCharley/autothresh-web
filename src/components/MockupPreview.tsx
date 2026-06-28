@@ -326,7 +326,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Scale + Download */}
-          <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px 16px' }}>
+          <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px', paddingBottom: 'max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px))' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Scale</span>
               <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{artScale}%</span>

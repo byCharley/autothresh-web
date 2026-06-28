@@ -170,7 +170,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
       <div
         style={{
           position: 'absolute',
-          top: 52, left: 0, right: 0, bottom: 64,
+          top: 52, left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
           background: 'rgba(0,0,0,0.5)',
           opacity: activeSheet ? 1 : 0,
           pointerEvents: activeSheet ? 'all' : 'none',
@@ -182,7 +182,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
 
       {/* ─── Bottom Sheet ────────────────────────────────────── */}
       <div style={{
-        position: 'absolute', left: 0, right: 0, bottom: 64,
+        position: 'absolute', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
         height: '68vh',
         background: 'var(--surface)',
         borderTop: '2px solid var(--accent)',
@@ -225,8 +225,11 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
 
       {/* ─── Bottom Tab Bar ──────────────────────────────────── */}
       <div style={{
-        height: 64, flexShrink: 0,
+        height: 'calc(64px + env(safe-area-inset-bottom, 0px))',
+        flexShrink: 0,
         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+        alignItems: 'start',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         background: 'var(--surface)',
         borderTop: '1px solid var(--border)',
         zIndex: 60, position: 'relative',
