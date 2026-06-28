@@ -174,8 +174,6 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
               : subscriptionStatus === 'paused' ? 'Paused'
               : subscriptionStatus === 'cancelled' ? 'Cancelled'
               : 'Active';
-            const initial = (firstName || userEmail || '?')[0].toUpperCase();
-
             return (
               <div style={{
                 position: 'absolute', top: 'calc(100% + 4px)', right: 6,
