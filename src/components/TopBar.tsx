@@ -164,113 +164,116 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
             </svg>
           </button>
 
-          {menuOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 4px)', right: 6,
-              width: 240,
-              background: 'var(--surface)', border: '1px solid var(--border)',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-              zIndex: 200,
-            }}>
-              {/* Account header */}
-              <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
-                  Account
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 2, wordBreak: 'break-all' }}>
-                  {userEmail}
-                </div>
-                {firstName && (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-                    {firstName}
-                  </div>
-                )}
-              </div>
+          {menuOpen && (() => {
+            const subColor = subscriptionStatus === 'tester'  ? '#38bdf8'
+              : subscriptionStatus === 'trial'                ? '#a78bfa'
+              : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
+              : '#3ecf4f';
+            const subLabel = subscriptionStatus === 'tester' ? 'Tester'
+              : subscriptionStatus === 'trial' ? 'Free Trial'
+              : subscriptionStatus === 'paused' ? 'Paused'
+              : subscriptionStatus === 'cancelled' ? 'Cancelled'
+              : 'Active';
+            const initial = (firstName || userEmail || '?')[0].toUpperCase();
 
-              {/* Subscription info */}
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                  Subscription
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <span style={{
-                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                    background: subscriptionStatus === 'tester' ? '#38bdf8'
-                      : subscriptionStatus === 'trial' ? '#a78bfa'
-                      : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
-                      : '#3ecf4f',
-                    boxShadow: subscriptionStatus === 'tester' ? '0 0 4px #38bdf888'
-                      : subscriptionStatus === 'trial' ? '0 0 4px #a78bfa88'
-                      : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '0 0 4px #e6a81788'
-                      : '0 0 4px #3ecf4f88',
-                  }} />
-                  <span style={{
-                    fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'capitalize',
-                    color: subscriptionStatus === 'tester' ? '#38bdf8'
-                      : subscriptionStatus === 'trial' ? '#a78bfa'
-                      : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
-                      : '#3ecf4f',
+            return (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 4px)', right: 6,
+                width: 232,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+                zIndex: 200,
+              }}>
+                {/* Identity row */}
+                <div style={{ padding: '14px 14px 12px', display: 'flex', alignItems: 'center', gap: 11, borderBottom: '1px solid var(--border)' }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+                    background: 'var(--accent)', color: '#111',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)',
                   }}>
-                    {subscriptionStatus === 'tester' ? 'Tester'
-                      : subscriptionStatus === 'trial' ? 'Free Trial'
-                      : (subscriptionStatus ?? 'Active')}
-                  </span>
+                    {initial}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    {firstName && (
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 2 }}>
+                        {firstName}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {userEmail}
+                    </div>
+                  </div>
                 </div>
 
-                {planTitle && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Plan</span>
-                    <span style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>{planTitle}</span>
+                {/* Subscription row */}
+                <div style={{ padding: '11px 14px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{
+                        width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                        background: subColor, boxShadow: `0 0 5px ${subColor}99`,
+                      }} />
+                      <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: subColor, fontWeight: 600 }}>
+                        {subLabel}
+                      </span>
+                    </div>
+                    {planTitle && (
+                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                        {planTitle}
+                      </span>
+                    )}
                   </div>
-                )}
 
-                {nextBillingFormatted && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {subscriptionStatus === 'trial' ? 'Trial ends' : 'Next billing'}
-                    </span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{nextBillingFormatted}</span>
-                  </div>
-                )}
+                  {(nextBillingFormatted || (daysRemaining !== null && daysRemaining > 0)) && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 7 }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                        {subscriptionStatus === 'trial' ? 'Trial ends' : 'Next billing'}
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {nextBillingFormatted && (
+                          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{nextBillingFormatted}</span>
+                        )}
+                        {daysRemaining !== null && daysRemaining > 0 && (
+                          <span style={{
+                            fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                            color: '#111', background: subscriptionStatus === 'trial' ? '#a78bfa' : 'var(--accent)',
+                            padding: '1px 6px', borderRadius: 2,
+                          }}>
+                            {daysRemaining}d
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-                {daysRemaining !== null && daysRemaining > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {subscriptionStatus === 'trial' ? 'Trial days left' : 'Days left'}
-                    </span>
-                    <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 600,
-                      color: subscriptionStatus === 'trial' ? '#a78bfa' : 'var(--text)',
-                    }}>{daysRemaining}</span>
+                {/* Sign out */}
+                {onLogout && (
+                  <div style={{ padding: '6px 14px 10px' }}>
+                    <button
+                      onClick={() => { setMenuOpen(false); onLogout(); }}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 7, padding: '4px 0',
+                        fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
+                        transition: 'color 0.12s',
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                      </svg>
+                      Sign out
+                    </button>
                   </div>
                 )}
               </div>
-
-              {/* Sign out */}
-              {onLogout && (
-                <div style={{ padding: '8px' }}>
-                  <button
-                    onClick={() => { setMenuOpen(false); onLogout(); }}
-                    style={{
-                      width: '100%', padding: '8px 10px',
-                      background: 'none', border: '1px solid var(--border)',
-                      cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                      fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-2)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; }}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                      <polyline points="16 17 21 12 16 7"/>
-                      <line x1="21" y1="12" x2="9" y2="12"/>
-                    </svg>
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
