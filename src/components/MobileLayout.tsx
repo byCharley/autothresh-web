@@ -48,7 +48,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
 
   // ── Live preview strip ────────────────────────────────────────────────────
   useEffect(() => {
-    if (activeSheet !== 'controls') return;
+    if (activeSheet !== 'controls' && activeSheet !== 'layers') return;
     const canvas = previewCanvasRef.current;
     if (!canvas) return;
 
@@ -279,8 +279,8 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
             </svg>
           </button>
         </div>
-        {/* Live preview strip — Adjust sheet only */}
-        {activeSheet === 'controls' && (
+        {/* Live preview strip — Layers and Adjust sheets */}
+        {(activeSheet === 'layers' || activeSheet === 'controls') && (
           <div style={{ flexShrink: 0, position: 'relative', borderBottom: '1px solid var(--border)', cursor: 'grab', touchAction: 'none' }}>
             <canvas
               ref={previewCanvasRef}
