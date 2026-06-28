@@ -9,6 +9,7 @@ interface TopBarProps {
   onTutorial: () => void;
   onVideo: () => void;
   onLogout?: () => void;
+  onManageSubscription?: () => void;
   userEmail?: string;
   firstName?: string;
   subscriptionExpiresAt?: string;
@@ -16,7 +17,7 @@ interface TopBarProps {
   subscriptionStatus?: string;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onLogout, onManageSubscription, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -177,7 +178,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
             return (
               <div style={{
                 position: 'absolute', top: 'calc(100% + 4px)', right: 6,
-                width: 220,
+                width: 260,
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
                 zIndex: 200,
@@ -218,9 +219,9 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
                   )}
                 </div>
 
-                {/* Sign out */}
-                {onLogout && (
-                  <div style={{ padding: '7px 15px 9px' }}>
+                {/* Actions */}
+                <div style={{ padding: '7px 15px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  {onLogout && (
                     <button
                       onClick={() => { setMenuOpen(false); onLogout(); }}
                       style={{
@@ -233,8 +234,23 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
                     >
                       Sign out
                     </button>
-                  </div>
-                )}
+                  )}
+                  {onManageSubscription && (
+                    <button
+                      onClick={() => { setMenuOpen(false); onManageSubscription(); }}
+                      style={{
+                        background: 'none', border: '1px solid var(--border)', cursor: 'pointer',
+                        padding: '4px 10px', fontSize: 10,
+                        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                        transition: 'border-color 0.12s, color 0.12s',
+                      }}
+                      onMouseEnter={(e) => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = 'var(--accent)'; b.style.color = 'var(--accent)'; }}
+                      onMouseLeave={(e) => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text-muted)'; }}
+                    >
+                      Manage subscription
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })()}
