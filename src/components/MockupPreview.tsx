@@ -1,53 +1,100 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { renderComposite } from '../engine/imageProcessor';
 import { MOCKUPS } from '../config/mockups';
 
 type BlendMode = 'auto' | 'multiply' | 'screen' | 'overlay' | 'normal';
 
+function hexLuminance(hex: string) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+const SECTION_LABEL: React.CSSProperties = {
+  fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-mono)',
+  letterSpacing: '0.1em', textTransform: 'uppercase',
+  color: 'var(--text-dim)', marginBottom: 8,
+};
+
 export function MockupPreview({ onClose }: { onClose: () => void }) {
   const { processedLayers, processedLayerDims, ditherComposite, separationMode } = useStore();
 
-  const [mockupId, setMockupId]   = useState(MOCKUPS[0]?.id ?? '');
-  const [artPos, setArtPos]       = useState({ x: 50, y: 38 });
-  const [artScale, setArtScale]   = useState(55);
-  const [blendMode, setBlendMode] = useState<BlendMode>('auto');
+  const [mockupId, setMockupId]     = useState(MOCKUPS[0]?.id ?? '');
+  const [colorName, setColorName]   = useState(MOCKUPS[0]?.variants[0]?.name ?? '');
+  const [artPos, setArtPos]         = useState({ x: 50, y: 38 });
+  const [artScale, setArtScale]     = useState(55);
+  const [blendMode, setBlendMode]   = useState<BlendMode>('auto');
   const [isDragging, setIsDragging] = useState(false);
-  const [imgErrors, setImgErrors] = useState<Record<string, boolean>>({});
+  const [search, setSearch]         = useState('');
 
-  const availableMockups = MOCKUPS.filter(m => !imgErrors[m.id]);
-
-  const dragRef     = useRef({ active: false, mx: 0, my: 0, ax: 0, ay: 0 });
-  const contentRef  = useRef<HTMLDivElement>(null);
+  const dragRef      = useRef({ active: false, mx: 0, my: 0, ax: 0, ay: 0 });
+  const contentRef   = useRef<HTMLDivElement>(null);
   const artCanvasRef = useRef<HTMLCanvasElement>(null);
-  const imgRef      = useRef<HTMLImageElement>(null);
 
-  const mockup = availableMockups.find(m => m.id === mockupId) ?? availableMockups[0] ?? MOCKUPS[0];
-  const effectiveBlend: string = blendMode === 'auto'
-    ? (mockup.isDark ? 'screen' : 'multiply')
-    : blendMode;
+  const mockup  = MOCKUPS.find(m => m.id === mockupId) ?? MOCKUPS[0];
+  const variant = mockup?.variants.find(v => v.name === colorName) ?? mockup?.variants[0];
 
+  // Preload every variant image so switching is instant after first open
+  useEffect(() => {
+    MOCKUPS.forEach(m => m.variants.forEach(v => {
+      const img = new Image();
+      img.src = v.file;
+    }));
+  }, []);
+
+  // Reset color selection when switching mockup if current color isn't available
+  useEffect(() => {
+    if (mockup && !mockup.variants.find(v => v.name === colorName)) {
+      setColorName(mockup.variants[0]?.name ?? '');
+    }
+  }, [mockupId]);
+
+  const isDark = hexLuminance(variant?.hex ?? '#FFFFFF') < 0.45;
+  const effectiveBlend = blendMode === 'auto' ? (isDark ? 'screen' : 'multiply') : blendMode;
+
+  // ── Render artwork composite ───────────────────────────────────────────────
   useEffect(() => {
     const canvas = artCanvasRef.current;
     if (!canvas) return;
-
     if (separationMode === 'palette' && ditherComposite) {
-      // Use the final rendered composite (includes color mode blend, bg removal, etc.)
       const { data, w, h } = ditherComposite;
-      canvas.width  = w;
-      canvas.height = h;
+      canvas.width = w; canvas.height = h;
       canvas.getContext('2d')!.putImageData(data, 0, 0);
       return;
     }
-
     if (!processedLayers.length || !processedLayerDims) return;
     const { w, h } = processedLayerDims;
-    canvas.width  = w;
-    canvas.height = h;
+    canvas.width = w; canvas.height = h;
     const composite = renderComposite(processedLayers, w, h, true, '#ffffff', false);
     canvas.getContext('2d')!.putImageData(composite, 0, 0);
   }, [processedLayers, processedLayerDims, ditherComposite, separationMode]);
 
+  // ── Filtered gallery list ──────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return MOCKUPS;
+    return MOCKUPS.filter(m =>
+      m.brand.toLowerCase().includes(q) ||
+      m.model.toLowerCase().includes(q) ||
+      m.name.toLowerCase().includes(q) ||
+      m.category.toLowerCase().includes(q) ||
+      m.view.toLowerCase().includes(q)
+    );
+  }, [search]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof MOCKUPS>();
+    for (const m of filtered) {
+      const key = `${m.brand} ${m.model}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(m);
+    }
+    return [...map.entries()];
+  }, [filtered]);
+
+  // ── Pointer handlers (artwork drag) ───────────────────────────────────────
   const onPreviewPointerDown = (e: React.PointerEvent) => {
     if (!hasArt) return;
     e.preventDefault();
@@ -55,75 +102,56 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     dragRef.current = { active: true, mx: e.clientX, my: e.clientY, ax: artPos.x, ay: artPos.y };
     setIsDragging(true);
   };
-
   const onPreviewPointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
     if (!d.active || !contentRef.current) return;
     const rect = contentRef.current.getBoundingClientRect();
-    const dx = ((e.clientX - d.mx) / rect.width)  * 100;
-    const dy = ((e.clientY - d.my) / rect.height) * 100;
-    setArtPos({ x: d.ax + dx, y: d.ay + dy });
+    setArtPos({ x: d.ax + ((e.clientX - d.mx) / rect.width) * 100, y: d.ay + ((e.clientY - d.my) / rect.height) * 100 });
   };
+  const onPreviewPointerUp = () => { dragRef.current.active = false; setIsDragging(false); };
 
-  const onPreviewPointerUp = () => {
-    dragRef.current.active = false;
-    setIsDragging(false);
-  };
-
+  // ── Download ──────────────────────────────────────────────────────────────
   const downloadPreview = () => {
-    const imgEl    = imgRef.current;
     const artCanvas = artCanvasRef.current;
-    if (!imgEl || !artCanvas || !imgEl.complete || imgEl.naturalWidth === 0) return;
-
-    const natW = imgEl.naturalWidth;
-    const natH = imgEl.naturalHeight;
-    const renderedW = imgEl.offsetWidth;
-    const renderedH = imgEl.offsetHeight;
-    if (!renderedW || !renderedH) return;
-
-    const out = document.createElement('canvas');
-    out.width  = natW;
-    out.height = natH;
-    const ctx = out.getContext('2d')!;
-
-    // Draw mockup
-    ctx.drawImage(imgEl, 0, 0, natW, natH);
-
-    // Map artwork position/size from rendered → natural image coordinates
-    const scaleX      = natW / renderedW;
-    const scaleY      = natH / renderedH;
-    const artRW       = (artScale / 100) * renderedW;
-    const artAspect   = artCanvas.height / artCanvas.width;
-    const artRH       = artRW * artAspect;
-    const artNatX     = ((artPos.x / 100) * renderedW - artRW / 2) * scaleX;
-    const artNatY     = ((artPos.y / 100) * renderedH - artRH / 2) * scaleY;
-    const artNatW     = artRW * scaleX;
-    const artNatH     = artRH * scaleY;
-
-    ctx.globalCompositeOperation = (effectiveBlend === 'normal' ? 'source-over' : effectiveBlend) as GlobalCompositeOperation;
-    ctx.drawImage(artCanvas, artNatX, artNatY, artNatW, artNatH);
-
-    out.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a   = document.createElement('a');
-      a.href     = url;
-      a.download = `mockup-${mockup.name.toLowerCase().replace(/\s+/g, '-')}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 'image/png');
+    if (!artCanvas || !variant) return;
+    const img = new Image();
+    img.onload = () => {
+      const natW = img.naturalWidth, natH = img.naturalHeight;
+      const displayEl = contentRef.current?.querySelector('img') as HTMLImageElement | null;
+      const renderedW = displayEl?.offsetWidth ?? natW;
+      const renderedH = displayEl?.offsetHeight ?? natH;
+      const out = document.createElement('canvas');
+      out.width = natW; out.height = natH;
+      const ctx = out.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, natW, natH);
+      const scaleX = natW / renderedW, scaleY = natH / renderedH;
+      const artRW = (artScale / 100) * renderedW;
+      const artRH = artRW * (artCanvas.height / artCanvas.width);
+      ctx.globalCompositeOperation = (effectiveBlend === 'normal' ? 'source-over' : effectiveBlend) as GlobalCompositeOperation;
+      ctx.drawImage(artCanvas,
+        ((artPos.x / 100) * renderedW - artRW / 2) * scaleX,
+        ((artPos.y / 100) * renderedH - artRH / 2) * scaleY,
+        artRW * scaleX, artRH * scaleY,
+      );
+      out.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mockup-${mockup.brand}-${mockup.model}-${mockup.view}-${variant.name}.png`
+          .toLowerCase().replace(/\s+/g, '-');
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    };
+    img.src = variant.file;
   };
 
   const hasArt = separationMode === 'palette'
     ? !!ditherComposite
     : processedLayers.length > 0 && !!processedLayerDims;
 
-  const blendLabel = (m: BlendMode) => {
-    if (m === 'auto') return `Auto (${mockup.isDark ? 'Screen' : 'Multiply'})`;
-    return m.charAt(0).toUpperCase() + m.slice(1);
-  };
+  const blendLabel = (m: BlendMode) => m === 'auto' ? `Auto (${isDark ? 'Screen' : 'Multiply'})` : m.charAt(0).toUpperCase() + m.slice(1);
 
   return (
     <div
@@ -131,21 +159,21 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        style={{
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          width: '98vw', height: '94vh',
-          display: 'flex', flexDirection: 'column', zIndex: 51,
-        }}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)', width: '98vw', height: '94vh', display: 'flex', flexDirection: 'column', zIndex: 51 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)', flexShrink: 0,
-        }}>
-          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-            Mockup Preview
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+              Mockup Preview
+            </span>
+            {mockup && (
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                {mockup.brand} {mockup.model} · {mockup.view} · {variant?.name}
+              </span>
+            )}
+          </div>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -156,19 +184,93 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
         {/* ── Body ── */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
-          {/* Mockup area */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          {/* ── Left: Gallery ── */}
+          <div style={{ width: 260, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div style={{ position: 'relative' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-dim)', pointerEvents: 'none' }}>
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search garments..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={{
+                    width: '100%', height: 30, paddingLeft: 28, paddingRight: 8,
+                    fontSize: 11, fontFamily: 'var(--font-mono)',
+                    background: 'var(--surface-2)', border: '1px solid var(--border)',
+                    color: 'var(--text)', outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
 
-            {/* Drag / preview region */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px' }}>
+              {groups.length === 0 && (
+                <div style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', paddingTop: 24 }}>
+                  No garments found
+                </div>
+              )}
+              {groups.map(([groupKey, items]) => (
+                <div key={groupKey} style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 6 }}>
+                    {items[0].brand} · {items[0].model}
+                  </div>
+                  <div style={{ fontSize: 10, fontFamily: 'var(--font-sans)', color: 'var(--text-muted)', marginBottom: 8, marginTop: -4 }}>
+                    {items[0].name}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {items.map((m) => {
+                      const active = m.id === mockupId;
+                      const thumb = m.variants.find(v => v.name === colorName) ?? m.variants[0];
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => setMockupId(m.id)}
+                          style={{
+                            background: active ? 'var(--accent-dim, rgba(255,200,0,0.08))' : 'var(--surface-2)',
+                            border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                            borderRadius: 3, cursor: 'pointer', padding: 0, overflow: 'hidden',
+                            transition: 'border-color 0.15s',
+                          }}
+                        >
+                          <div style={{ background: '#f0f0f0', height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                            <img
+                              src={thumb.file}
+                              alt={`${m.brand} ${m.model} ${m.view}`}
+                              style={{ height: '100%', width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }}
+                            />
+                          </div>
+                          <div style={{ padding: '5px 6px', borderTop: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, background: active ? 'var(--accent-dim, rgba(255,200,0,0.06))' : 'transparent' }}>
+                            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, color: active ? 'var(--accent)' : 'var(--text)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                              {m.view}
+                            </div>
+                            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 1 }}>
+                              {m.category}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <div style={{ marginTop: 8, padding: '10px 8px', borderTop: '1px solid var(--border)', fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.04em', textAlign: 'center' }}>
+                More garments coming soon
+              </div>
+            </div>
+          </div>
+
+          {/* ── Center: Preview ── */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
             <div
               style={{
                 flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: '#0d0d0d', overflow: 'hidden', position: 'relative',
+                background: '#111', overflow: 'hidden', position: 'relative',
                 cursor: !hasArt ? 'default' : isDragging ? 'grabbing' : 'grab',
-                userSelect: 'none',
-                minHeight: 0,
-                padding: 12,
-                touchAction: 'none',
+                userSelect: 'none', minHeight: 0, padding: 16, touchAction: 'none',
               }}
               onPointerDown={onPreviewPointerDown}
               onPointerMove={onPreviewPointerMove}
@@ -176,37 +278,38 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
               onPointerCancel={onPreviewPointerUp}
             >
               {!hasArt ? (
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#444' }}>
-                  Load artwork to preview on mockup
-                </span>
+                <div style={{ textAlign: 'center' }}>
+                  {variant && (
+                    <img
+                      src={variant.file}
+                      alt={mockup?.name}
+                      style={{ maxHeight: 'calc(94vh - 44px - 32px - 32px)', maxWidth: '100%', opacity: 0.5, pointerEvents: 'none' }}
+                    />
+                  )}
+                  <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#555', marginTop: 12 }}>
+                    Load artwork to preview on mockup
+                  </div>
+                </div>
               ) : (
-                // contentRef must wrap the image exactly so % positions map to the shirt
                 <div ref={contentRef} style={{ position: 'relative', lineHeight: 0, flexShrink: 0 }}>
                   <img
-                    ref={imgRef}
-                    key={mockup.id}
-                    src={mockup.file}
-                    // Both axes constrained so the full shirt (including sleeves) is always visible
+                    src={variant?.file}
                     style={{
-                      display: 'block',
-                      height: 'auto',
-                      width: 'auto',
-                      maxHeight: 'calc(94vh - 44px - 32px - 24px)',
-                      maxWidth: 'calc(98vw - 260px - 24px)',
+                      display: 'block', height: 'auto', width: 'auto',
+                      maxHeight: 'calc(94vh - 44px - 32px - 32px)',
+                      maxWidth: 'calc(98vw - 260px - 220px - 32px)',
                       pointerEvents: 'none',
+                      transition: 'opacity 0.15s ease',
                     }}
-                    alt={mockup.name}
-                    onError={() => setImgErrors((prev) => ({ ...prev, [mockup.id]: true }))}
+                    alt={mockup?.name}
                     draggable={false}
                   />
                   <canvas
                     ref={artCanvasRef}
                     style={{
                       position: 'absolute',
-                      left: `${artPos.x}%`,
-                      top: `${artPos.y}%`,
-                      width: `${artScale}%`,
-                      height: 'auto',
+                      left: `${artPos.x}%`, top: `${artPos.y}%`,
+                      width: `${artScale}%`, height: 'auto',
                       transform: 'translate(-50%, -50%)',
                       mixBlendMode: effectiveBlend as React.CSSProperties['mixBlendMode'],
                       pointerEvents: 'none',
@@ -216,83 +319,90 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
               )}
             </div>
 
-            {/* Tooltip bar */}
-            <div style={{
-              height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderTop: '1px solid var(--border)', gap: 6, flexShrink: 0,
-            }}>
+            <div style={{ height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', borderTop: '1px solid var(--border)', gap: 6, flexShrink: 0 }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-dim)', flexShrink: 0 }}>
                 <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>
               </svg>
               <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.04em' }}>
-                Click and drag your artwork anywhere — resize with the scale slider
+                Drag artwork to reposition — resize with the scale slider
               </span>
             </div>
           </div>
 
-          {/* Right: controls */}
-          <div style={{ width: 260, borderLeft: '1px solid var(--border)', padding: 16, display: 'flex', flexDirection: 'column', gap: 20, flexShrink: 0, overflowY: 'auto' }}>
+          {/* ── Right: Controls ── */}
+          <div style={{ width: 220, borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto' }}>
+            <div style={{ padding: '14px 14px 0' }}>
 
-            {/* Garment selector */}
-            <div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
-                Garment
+              {/* Color picker */}
+              <div style={{ marginBottom: 18 }}>
+                <div style={SECTION_LABEL}>Garment Color</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                  {mockup?.variants.map((v) => {
+                    const active = colorName === v.name;
+                    return (
+                      <button
+                        key={v.name}
+                        title={v.name}
+                        onClick={() => setColorName(v.name)}
+                        style={{
+                          width: 28, height: 28, borderRadius: '50%',
+                          background: v.hex,
+                          border: active ? '2.5px solid var(--accent)' : '1.5px solid var(--border-2)',
+                          cursor: 'pointer', padding: 0,
+                          boxShadow: active ? '0 0 0 1px var(--accent)' : 'none',
+                          transition: 'box-shadow 0.12s, border-color 0.12s',
+                          position: 'relative',
+                        }}
+                      >
+                        {active && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"
+                            stroke={hexLuminance(v.hex) < 0.5 ? '#fff' : '#000'}
+                            strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
+                            style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {variant && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: variant.hex, border: '1px solid var(--border-2)', flexShrink: 0 }} />
+                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{variant.name}</span>
+                  </div>
+                )}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {availableMockups.map((m) => {
-                  const active = m.id === mockup?.id;
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => setMockupId(m.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '6px 8px', background: 'none', border: 'none',
-                        borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
-                        cursor: 'pointer',
-                        color: active ? 'var(--accent)' : 'var(--text)',
-                        backgroundColor: active ? 'var(--accent-dim)' : 'transparent',
-                        textAlign: 'left', width: '100%',
-                      }}
-                    >
-                      <div style={{ width: 16, height: 16, flexShrink: 0, borderRadius: 2, background: m.color, border: '1px solid var(--border-2)' }} />
-                      <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)' }}>{m.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
-            {/* Scale */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Scale</span>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{artScale}%</span>
+              {/* Scale */}
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <span style={{ ...SECTION_LABEL, marginBottom: 0 }}>Scale</span>
+                  <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{artScale}%</span>
+                </div>
+                <input type="range" min={5} max={100} value={artScale} style={{ width: '100%' }}
+                  onChange={(e) => setArtScale(Number(e.target.value))} />
               </div>
-              <input type="range" min={5} max={100} value={artScale} style={{ width: '100%' }}
-                onChange={(e) => setArtScale(Number(e.target.value))} />
-            </div>
 
-            {/* Blend mode */}
-            <div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
-                Blend Mode
-              </div>
-              <select className="at-select" value={blendMode} onChange={(e) => setBlendMode(e.target.value as BlendMode)}>
-                {(['auto', 'multiply', 'screen', 'overlay', 'normal'] as BlendMode[]).map((m) => (
-                  <option key={m} value={m}>{blendLabel(m)}</option>
-                ))}
-              </select>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 6, lineHeight: 1.6 }}>
-                {effectiveBlend === 'screen'   && 'Light ink on dark fabric'}
-                {effectiveBlend === 'multiply' && 'Ink blends with fabric texture'}
-                {effectiveBlend === 'overlay'  && 'High-contrast blend'}
-                {effectiveBlend === 'normal'   && 'Flat ink, no blend'}
+              {/* Blend mode */}
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ ...SECTION_LABEL, marginBottom: 6 }}>Blend Mode</div>
+                <select className="at-select" value={blendMode} onChange={(e) => setBlendMode(e.target.value as BlendMode)}>
+                  {(['auto', 'multiply', 'screen', 'overlay', 'normal'] as BlendMode[]).map((m) => (
+                    <option key={m} value={m}>{blendLabel(m)}</option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 5, lineHeight: 1.6 }}>
+                  {effectiveBlend === 'screen'   && 'Light ink on dark fabric'}
+                  {effectiveBlend === 'multiply' && 'Ink blends with fabric texture'}
+                  {effectiveBlend === 'overlay'  && 'High-contrast blend'}
+                  {effectiveBlend === 'normal'   && 'Flat ink, no blend'}
+                </div>
               </div>
             </div>
 
             {/* Download */}
-            <div style={{ marginTop: 'auto', paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            <div style={{ marginTop: 'auto', padding: '14px', borderTop: '1px solid var(--border)' }}>
               <button
                 className="btn btn-primary"
                 onClick={downloadPreview}
@@ -308,6 +418,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
               </button>
             </div>
           </div>
+
         </div>
       </div>
     </div>
