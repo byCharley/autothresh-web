@@ -101,7 +101,7 @@ export async function traceImageToSVG(
   const spliceThreshold = Math.round(15 + smooth * 3);               // sm=1:18, sm=10:45
   // detail=1 → loose/smooth paths; detail=10 → tight/detailed paths
   const lengthThreshold = Math.max(1.0, 8.0 - (detail - 1) * 0.7);  // d=1:8.0, d=10:1.7
-  const cleanPasses     = 1 + Math.floor((10 - smooth) * 0.4);       // sm=1:4, sm=5:3, sm=10:1
+  const cleanPasses     = 2 + Math.floor((10 - smooth) * 0.8);       // sm=1:10, sm=5:6, sm=10:2
 
   const vtBase = {
     // Field names: 'binary' matches GitHub source, 'binarymode' matches compiled WASM strings.
@@ -125,12 +125,18 @@ export async function traceImageToSVG(
     return traceSingleColor(imageData, inkColor, vtBase);
   }
 
+  // Pre-blur merges noisy photographic pixels into clean flat regions before
+  // color assignment. Without this, every pixel becomes its own fragment.
+  // Blur radius scales with smooth: smooth=1 → radius 6, smooth=10 → radius 1.
+  const blurRadius = Math.round(1 + (10 - smooth) * 0.55);  // sm=1:6.5, sm=10:1
+  const blurred = blurRadius >= 2 ? boxBlur(boxBlur(imageData, blurRadius), blurRadius) : imageData;
+
   // Per-layer binary tracing: trace each color as a separate black-on-white
   // binary image and combine the paths. This bypasses VTracer's multi-color
   // code path (binarymode: false) which panics on complex images regardless
   // of hierarchical mode setting.
-  const colors      = kMeansColors(imageData, numColors, 12345, null);
-  const assignments = posterizeAndClean(imageData, colors, cleanPasses);
+  const colors      = kMeansColors(blurred, numColors, 12345, null);
+  const assignments = posterizeAndClean(blurred, colors, cleanPasses);
 
   const { width, height } = imageData;
   const n = width * height;
@@ -333,6 +339,48 @@ function posterizeAndClean(
   assignments.set(tmp);
 
   return assignments;
+}
+
+// ─── Box blur (approximates Gaussian via multiple passes) ────────────────────
+
+function boxBlur(imageData: ImageData, radius: number): ImageData {
+  if (radius < 1) return imageData;
+  const { data, width, height } = imageData;
+  const out = new Uint8ClampedArray(data.length);
+  const r = Math.round(radius);
+  const diam = 2 * r + 1;
+
+  // Horizontal pass
+  const tmp = new Uint8ClampedArray(data.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sr = 0, sg = 0, sb = 0, sa = 0, cnt = 0;
+      for (let dx = -r; dx <= r; dx++) {
+        const nx = Math.min(width - 1, Math.max(0, x + dx));
+        const base = (y * width + nx) * 4;
+        sr += data[base]; sg += data[base + 1]; sb += data[base + 2]; sa += data[base + 3];
+        cnt++;
+      }
+      const base = (y * width + x) * 4;
+      tmp[base] = sr / cnt; tmp[base + 1] = sg / cnt; tmp[base + 2] = sb / cnt; tmp[base + 3] = sa / cnt;
+    }
+  }
+  // Vertical pass
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let sr = 0, sg = 0, sb = 0, sa = 0, cnt = 0;
+      for (let dy = -r; dy <= r; dy++) {
+        const ny = Math.min(height - 1, Math.max(0, y + dy));
+        const base = (ny * width + x) * 4;
+        sr += tmp[base]; sg += tmp[base + 1]; sb += tmp[base + 2]; sa += tmp[base + 3];
+        cnt++;
+      }
+      const base = (y * width + x) * 4;
+      out[base] = sr / cnt; out[base + 1] = sg / cnt; out[base + 2] = sb / cnt; out[base + 3] = sa / cnt;
+    }
+  }
+  void diam; // suppress unused warning
+  return new ImageData(out, width, height);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
