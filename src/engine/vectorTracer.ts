@@ -115,7 +115,7 @@ export async function traceImageToSVG(
     lengthThreshold,
     spliceThreshold,
     filterSpeckle,
-    maxIterations: 10,
+    maxIterations: 20,
     colorPrecision: 6,
     layerDifference: 16,
     pathPrecision: 3,

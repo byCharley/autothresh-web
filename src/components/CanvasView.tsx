@@ -26,6 +26,8 @@ function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerCon
 // Base preview resolution (zoom = 1). High-res cap: beyond this we use nearest-neighbor.
 const MAX_PREVIEW_DIM = 1200;
 const MAX_RENDER_DIM  = 3200;
+// Vector tracing uses a higher base resolution to preserve fine detail.
+const MAX_VECTOR_DIM  = 2400;
 
 function RegMark({ x, y, size }: { x: number; y: number; size: number }) {
   const r = size / 2;
@@ -497,13 +499,22 @@ export function CanvasView() {
         } else if (separationMode === 'vector') {
           setDitherComposite(null);
 
+          // Vector tracing uses a higher-res scale for better path detail.
+          const vectorLayout = computeDocLayout(MAX_VECTOR_DIM);
+          const vectorScaled = vectorLayout
+            ? scaleImageDataExact(originalImage, vectorLayout.artPrevW, vectorLayout.artPrevH)
+            : artScaled;
+          const vectorBgMask = (localBgMask && vectorLayout)
+            ? (() => { const m = computeBackgroundMask(vectorScaled, bgTolerance); return m; })()
+            : localBgMask;
+
           // Build pre-processed imageData with bg pixels made transparent
           const traceData = new ImageData(
-            new Uint8ClampedArray(artScaled.data), artPrevW, artPrevH,
+            new Uint8ClampedArray(vectorScaled.data), vectorScaled.width, vectorScaled.height,
           );
-          if (localBgMask) {
-            for (let i = 0; i < localBgMask.length; i++) {
-              if (localBgMask[i] === 255) traceData.data[i * 4 + 3] = 0;
+          if (vectorBgMask) {
+            for (let i = 0; i < vectorBgMask.length; i++) {
+              if (vectorBgMask[i] === 255) traceData.data[i * 4 + 3] = 0;
             }
           }
 
@@ -1286,6 +1297,16 @@ export function CanvasView() {
               : '1px solid var(--border)',
           }}>
             {documentWidthIn}" × {documentHeightIn}" · {documentDpi} DPI
+            {(() => {
+              const printZoom = 96 / documentDpi;
+              const ratio = zoom / printZoom;
+              if (Math.abs(ratio - 1) < 0.05) return null;
+              return (
+                <span style={{ marginLeft: 6, opacity: 0.55, fontSize: 9 }}>
+                  ({ratio > 1 ? '+' : ''}{Math.round((ratio - 1) * 100)}% vs print)
+                </span>
+              );
+            })()}
           </div>
 
           <div className="canvas-toolbar">
@@ -1314,6 +1335,24 @@ export function CanvasView() {
                 setOffset({ x: (cw - layout.docPrevW * fitZoom) / 2, y: (ch - layout.docPrevH * fitZoom) / 2 });
               }}
             >Fit</button>
+            {originalImage && (
+              <>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: 11, padding: '0 8px' }}
+                  title={`Print size — shows artwork at actual print scale (${documentDpi} DPI ≈ ${Math.round(96 / documentDpi * 100)}% zoom)`}
+                  onClick={() => {
+                    if (!containerRef.current) return;
+                    const layout = computeDocLayout(MAX_PREVIEW_DIM);
+                    if (!layout) return;
+                    const { clientWidth: cw, clientHeight: ch } = containerRef.current;
+                    const printZoom = 96 / documentDpi;
+                    setZoom(printZoom);
+                    setOffset({ x: (cw - layout.docPrevW * printZoom) / 2, y: (ch - layout.docPrevH * printZoom) / 2 });
+                  }}
+                >Print</button>
+              </>
+            )}
             {originalImage && (
               <>
                 <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
