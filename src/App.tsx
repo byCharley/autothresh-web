@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from './auth/useAuth';
 import { LoginPage } from './components/LoginPage';
 import { SubscribePage } from './components/SubscribePage';
-import { MobileBlock } from './components/MobileBlock';
+import { MobileLayout } from './components/MobileLayout';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { writePsd } from 'ag-psd';
@@ -120,7 +120,6 @@ function App() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  if (isMobile) return <MobileBlock />;
 
   if (status === 'loading') {
     return (
@@ -646,6 +645,26 @@ function App() {
 
   const subStatus = session?.subscriptionStatus;
   const isPaused = subStatus === 'paused' || subStatus === 'cancelled' || subStatus === 'canceled';
+
+  if (isMobile) {
+    return (
+      <MobileLayout
+        onExport={() => setShowExport(true)}
+        onMockup={() => setMockupOpen(true)}
+        onLogout={logout}
+        session={session}
+      >
+        {showExport && <ExportModal onClose={() => setShowExport(false)} onExport={handleExport} defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'autothresh'} separationMode={separationMode} />}
+        {mockupOpen && <MockupPreview onClose={() => setMockupOpen(false)} />}
+        {presetsOpen && session?.token && <PresetsModal token={session.token} onClose={() => setPresetsOpen(false)} />}
+        {showFaq      && <FaqModal      onClose={() => setShowFaq(false)} />}
+        {showEula     && <EulaModal     onClose={() => setShowEula(false)} />}
+        {showContact  && <ContactModal  onClose={() => setShowContact(false)} />}
+        {showTutorial && <TutorialOverlay onClose={() => setShowTutorial(false)} />}
+        {showSplash   && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
+      </MobileLayout>
+    );
+  }
 
   return (
     <div className="app">

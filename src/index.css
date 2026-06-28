@@ -914,6 +914,17 @@ input[type='range']::-moz-range-thumb {
   :root { --panel-left-w: 200px; --panel-right-w: 220px; }
 }
 
+/* ─── Mobile sheet: override fixed panel widths so they fill the drawer ──────── */
+.mobile-sheet-content .panel-left,
+.mobile-sheet-content .panel-right {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  border-right: none !important;
+  border-left: none !important;
+  height: 100%;
+}
+
 /* ─── Mode switch animation ─────────────────────────────────────────────────── */
 @keyframes at-mode-enter {
   from { opacity: 0; transform: translateY(5px); }
