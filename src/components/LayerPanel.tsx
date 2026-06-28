@@ -1,5 +1,6 @@
 import { useState, useRef, useLayoutEffect } from 'react';
 import { useStore } from '../store/useStore';
+import { isVectorUnlocked } from '../auth/betaFeatures';
 import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, generateHarmonicPalettes } from '../engine/colorSeparation';
 import { nearestPantone, isShadowColor } from '../engine/pantoneMatch';
 
@@ -1373,24 +1374,37 @@ export function LayerPanel() {
                 zIndex: 0,
               }} />
             )}
-            {(['threshold', 'palette', 'color-sep', 'vector'] as const).map((mode, i) => (
-              <button
-                key={mode}
-                ref={(el) => { modeBtnRefs.current[i] = el; }}
-                onClick={() => setSeparationMode(mode)}
-                style={{
-                  flex: 1, height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
-                  fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
-                  cursor: 'pointer', border: '1px solid var(--border)',
-                  background: 'transparent',
-                  color: separationMode === mode ? '#000' : 'var(--text-muted)',
-                  transition: 'color 0.22s cubic-bezier(0.22, 0.61, 0.36, 1)',
-                  position: 'relative', zIndex: 1,
-                }}
-              >
-                {mode === 'threshold' ? 'Thresh' : mode === 'palette' ? 'Dither' : mode === 'color-sep' ? 'Color' : 'Vector'}
-              </button>
-            ))}
+            {(['threshold', 'palette', 'color-sep', 'vector'] as const).map((mode, i) => {
+              const isLocked = mode === 'vector' && !isVectorUnlocked();
+              return (
+                <button
+                  key={mode}
+                  ref={(el) => { modeBtnRefs.current[i] = el; }}
+                  onClick={() => !isLocked && setSeparationMode(mode)}
+                  disabled={isLocked}
+                  title={isLocked ? 'Vector mode — coming soon' : undefined}
+                  style={{
+                    flex: 1, height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
+                    fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+                    cursor: isLocked ? 'not-allowed' : 'pointer', border: '1px solid var(--border)',
+                    background: 'transparent',
+                    color: isLocked ? 'var(--text-dim)' : separationMode === mode ? '#000' : 'var(--text-muted)',
+                    opacity: isLocked ? 0.45 : 1,
+                    transition: 'color 0.22s cubic-bezier(0.22, 0.61, 0.36, 1)',
+                    position: 'relative', zIndex: 1,
+                  }}
+                >
+                  {mode === 'threshold' ? 'Thresh' : mode === 'palette' ? 'Dither' : mode === 'color-sep' ? 'Color' : (
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                      </svg>
+                      Vector
+                    </span>
+                  )}
+                </button>
+              );
+            })}
             <button
               onClick={() => setModeInfoOpen((v) => !v)}
               title="What does each mode do?"
@@ -1413,16 +1427,19 @@ export function LayerPanel() {
 
           {modeInfoOpen && (
             <div style={{ padding: '0 8px 10px' }}>
-              {MODE_INFO.map(({ mode, label, title, desc }) => (
+              {MODE_INFO.map(({ mode, label, title, desc }) => {
+                const isLocked = mode === 'vector' && !isVectorUnlocked();
+                return (
                 <div
                   key={mode}
                   style={{
                     marginTop: 6, padding: '8px 10px',
                     background: separationMode === mode ? 'color-mix(in srgb, var(--accent) 8%, var(--surface-2))' : 'var(--surface-2)',
                     border: `1px solid ${separationMode === mode ? 'var(--accent)' : 'var(--border)'}`,
-                    cursor: 'pointer',
+                    cursor: isLocked ? 'not-allowed' : 'pointer',
+                    opacity: isLocked ? 0.5 : 1,
                   }}
-                  onClick={() => { setSeparationMode(mode as 'threshold' | 'palette' | 'color-sep' | 'vector'); setModeInfoOpen(false); }}
+                  onClick={() => { if (!isLocked) { setSeparationMode(mode as 'threshold' | 'palette' | 'color-sep' | 'vector'); setModeInfoOpen(false); } }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                     <span style={{
@@ -1435,12 +1452,18 @@ export function LayerPanel() {
                       {label}
                     </span>
                     <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{title}</span>
+                    {isLocked && (
+                      <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', background: 'var(--surface-3)', color: 'var(--text-dim)', padding: '1px 5px', border: '1px solid var(--border)', marginLeft: 2 }}>
+                        Coming Soon
+                      </span>
+                    )}
                   </div>
                   <p style={{ margin: 0, fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.55, fontFamily: 'var(--font-sans, sans-serif)' }}>
                     {desc}
                   </p>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

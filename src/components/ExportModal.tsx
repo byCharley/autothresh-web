@@ -73,6 +73,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
   const [fileName,         setFileName]         = useState(defaultFileName);
   const { underbaseEnabled, underbaseChoke: storeChoke, setUnderbaseEnabled, setUnderbaseChoke } = useStore();
   const [exporting,        setExporting]        = useState(false);
+  const [exportError,      setExportError]      = useState<string | null>(null);
   const [includeColorInfo, setIncludeColorInfo] = useState(false);
   const [usePantoneNames,  setUsePantoneNames]  = useState(false);
   const includeUnderbase = underbaseEnabled;
@@ -82,9 +83,17 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
 
   const handleExport = async () => {
     setExporting(true);
-    await onExport({ mode: isDither ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo, usePantoneNames, underbase: includeUnderbase, underbaseChoke: undChoke });
-    setExporting(false);
-    onClose();
+    setExportError(null);
+    await new Promise(r => setTimeout(r, 60));
+    try {
+      await onExport({ mode: isDither ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo, usePantoneNames, underbase: includeUnderbase, underbaseChoke: undChoke });
+      onClose();
+    } catch (err) {
+      console.error('Export failed:', err);
+      setExportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const d = details(mode, format, isDither);
@@ -316,9 +325,16 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           </div>
         )}
 
+        {/* Export error */}
+        {exportError && (
+          <div style={{ margin: '0 16px 12px', padding: '8px 10px', background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)', fontSize: 11, color: '#ff5050', fontFamily: 'var(--font-mono)' }}>
+            Export failed: {exportError}
+          </div>
+        )}
+
         {/* Actions */}
         <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button className="btn" onClick={onClose} disabled={exporting}>Cancel</button>
+          <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleExport} disabled={exporting}>
             {exporting ? 'Exporting…' : `Export ${fmt.label}`}
           </button>

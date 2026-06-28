@@ -1297,16 +1297,6 @@ export function CanvasView() {
               : '1px solid var(--border)',
           }}>
             {documentWidthIn}" × {documentHeightIn}" · {documentDpi} DPI
-            {(() => {
-              const printZoom = 96 / documentDpi;
-              const ratio = zoom / printZoom;
-              if (Math.abs(ratio - 1) < 0.05) return null;
-              return (
-                <span style={{ marginLeft: 6, opacity: 0.55, fontSize: 9 }}>
-                  ({ratio > 1 ? '+' : ''}{Math.round((ratio - 1) * 100)}% vs print)
-                </span>
-              );
-            })()}
           </div>
 
           <div className="canvas-toolbar">
@@ -1335,24 +1325,6 @@ export function CanvasView() {
                 setOffset({ x: (cw - layout.docPrevW * fitZoom) / 2, y: (ch - layout.docPrevH * fitZoom) / 2 });
               }}
             >Fit</button>
-            {originalImage && (
-              <>
-                <button
-                  className="btn btn-ghost"
-                  style={{ fontSize: 11, padding: '0 8px' }}
-                  title={`Print size — shows artwork at actual print scale (${documentDpi} DPI ≈ ${Math.round(96 / documentDpi * 100)}% zoom)`}
-                  onClick={() => {
-                    if (!containerRef.current) return;
-                    const layout = computeDocLayout(MAX_PREVIEW_DIM);
-                    if (!layout) return;
-                    const { clientWidth: cw, clientHeight: ch } = containerRef.current;
-                    const printZoom = 96 / documentDpi;
-                    setZoom(printZoom);
-                    setOffset({ x: (cw - layout.docPrevW * printZoom) / 2, y: (ch - layout.docPrevH * printZoom) / 2 });
-                  }}
-                >Print</button>
-              </>
-            )}
             {originalImage && (
               <>
                 <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />

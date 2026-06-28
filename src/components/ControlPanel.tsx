@@ -325,7 +325,7 @@ function ImageAdjustmentsSection() {
 
 // ─── Document Setup ───────────────────────────────────────────────────────────
 
-const DPI_OPTIONS = [72, 96, 150, 300, 600] as const;
+const DPI_OPTIONS = [72, 96, 150, 300] as const;
 
 const DOC_PRESETS = [
   { label: '10×10"', w: 10, h: 10 },
@@ -401,7 +401,7 @@ function DocumentSection() {
             onChange={(e) => setDocumentDpi(Number(e.target.value))}>
             {DPI_OPTIONS.map((d) => (
               <option key={d} value={d}>
-                {d} DPI{d === 300 ? ' · standard' : d === 72 ? ' · screen' : d === 600 ? ' · hi-res' : ''}
+                {d} DPI{d === 300 ? ' · standard' : d === 72 ? ' · screen' : ''}
               </option>
             ))}
           </select>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './auth/useAuth';
+import { initBetaFeatures } from './auth/betaFeatures';
 import { LoginPage } from './components/LoginPage';
 import { SubscribePage } from './components/SubscribePage';
 import { MobileLayout } from './components/MobileLayout';
@@ -61,6 +62,44 @@ async function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> 
   const blob = await canvasToBlob(canvas);
   return new Uint8Array(await blob.arrayBuffer());
 }
+
+// Inject a pHYs chunk into PNG bytes so Photoshop/browsers read the correct DPI.
+// The pHYs chunk must come immediately after IHDR (byte 33 in any valid PNG).
+function injectPngDpi(pngBytes: Uint8Array, dpi: number): Uint8Array {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c;
+  }
+  const crc32 = (buf: Uint8Array, off: number, len: number): number => {
+    let c = 0xFFFFFFFF;
+    for (let i = off; i < off + len; i++) c = table[(c ^ buf[i]) & 0xFF]! ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  };
+  const ppm = Math.round(dpi * 39.3701); // pixels per metre
+  const phys = new Uint8Array(21); // 4 length + 4 type + 9 data + 4 CRC
+  const dv = new DataView(phys.buffer);
+  dv.setUint32(0, 9, false);
+  phys[4] = 0x70; phys[5] = 0x48; phys[6] = 0x59; phys[7] = 0x73; // 'pHYs'
+  dv.setUint32(8, ppm, false);
+  dv.setUint32(12, ppm, false);
+  phys[16] = 1; // unit: metre
+  dv.setUint32(17, crc32(phys, 4, 13), false);
+  const out = new Uint8Array(pngBytes.length + 21);
+  out.set(pngBytes.subarray(0, 33));
+  out.set(phys, 33);
+  out.set(pngBytes.subarray(33), 54);
+  return out;
+}
+
+async function canvasToBlobWithDpi(canvas: HTMLCanvasElement, dpi: number): Promise<Blob> {
+  const bytes = await canvasToPngBytes(canvas);
+  const patched = injectPngDpi(bytes, dpi);
+  return new Blob([patched.buffer.slice(patched.byteOffset, patched.byteOffset + patched.byteLength) as ArrayBuffer], { type: 'image/png' });
+}
+
+initBetaFeatures();
 
 function isMobileDevice(): boolean {
   const ua = navigator.userAgent;
@@ -457,6 +496,8 @@ function App() {
       opacity: 1,
     };
 
+    const visibleLayers = artLayers.filter((pl) => pl.visible);
+
     // ── Underbase builder (white ink, all visible masks combined + choke) ──────
     const buildUnderbaseCanvas = (chokePx: number): HTMLCanvasElement => {
       const combined = new Uint8Array(artScaleW * artScaleH);
@@ -506,7 +547,6 @@ function App() {
       top: 0, left: 0, blendMode: 'normal' as const, opacity: 1,
     }] : [];
 
-    const visibleLayers = artLayers.filter((pl) => pl.visible);
     // Helper: get display name — Pantone override takes priority over default names
     const layerName = (pl: ProcessedLayer) => {
       if (usePantoneNames) {
@@ -520,41 +560,41 @@ function App() {
     const layerNameHex = (pl: ProcessedLayer) => `${layerName(pl)} · ${toHex(pl.color)}`;
 
     // ── PNG ──────────────────────────────────────────────────────────────────
+    const pngOf = (c: HTMLCanvasElement) => canvasToBlobWithDpi(c, documentDpi);
     if (format === 'png') {
       if (mode === 'dtg') {
-        const blob = await canvasToBlob(buildCompositeCanvas(true));
-        saveAs(blob, `${baseName}-dtg.png`);
+        saveAs(await pngOf(buildCompositeCanvas(true)), `${baseName}-dtg.png`);
       } else if (separationMode === 'cmyk') {
         // Plates (grayscale positives) + proofs on white and on garment
         const zip    = new JSZip();
         const plates = zip.folder('plates')!;
         for (const pl of visibleLayers) {
-          plates.file(`${layerName(pl).toLowerCase().replace(/\s*·\s*/g, '-')}.png`, await canvasToBlob(buildCmykPlateCanvas(pl)));
+          plates.file(`${layerName(pl).toLowerCase().replace(/\s*·\s*/g, '-')}.png`, await pngOf(buildCmykPlateCanvas(pl)));
         }
-        zip.file('proof-on-garment.png', await canvasToBlob(buildCompositeCanvas(false)));
-        zip.file('proof-on-white.png',   await canvasToBlob(buildCompositeCanvas(false, '#ffffff')));
+        zip.file('proof-on-garment.png', await pngOf(buildCompositeCanvas(false)));
+        zip.file('proof-on-white.png',   await pngOf(buildCompositeCanvas(false, '#ffffff')));
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-cmyk-plates.zip`);
       } else if (separationMode === 'palette') {
         if (underbase) {
           const zip = new JSZip();
-          zip.file('underbase.png',  await canvasToBlob(buildUnderbaseCanvas(underbaseChoke)));
-          zip.file('composite.png',  await canvasToBlob(buildCompositeCanvas(false)));
+          zip.file('underbase.png',  await pngOf(buildUnderbaseCanvas(underbaseChoke)));
+          zip.file('composite.png',  await pngOf(buildCompositeCanvas(false)));
           saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-dither.zip`);
         } else {
-          saveAs(await canvasToBlob(buildCompositeCanvas(false)), `${baseName}-dither.png`);
+          saveAs(await pngOf(buildCompositeCanvas(false)), `${baseName}-dither.png`);
         }
       } else {
         const zip    = new JSZip();
         const folder = zip.folder('screen-print')!;
-        if (underbase) folder.file('underbase.png', await canvasToBlob(buildUnderbaseCanvas(underbaseChoke)));
+        if (underbase) folder.file('underbase.png', await pngOf(buildUnderbaseCanvas(underbaseChoke)));
         for (const pl of visibleLayers) {
-          folder.file(`${layerName(pl).toLowerCase()}.png`, await canvasToBlob(buildLayerCanvas(pl, true)));
+          folder.file(`${layerName(pl).toLowerCase()}.png`, await pngOf(buildLayerCanvas(pl, true)));
         }
-        folder.file('composite.png', await canvasToBlob(buildCompositeCanvas(true)));
+        folder.file('composite.png', await pngOf(buildCompositeCanvas(true)));
         if (includeColorInfo) {
           const refColors: RGB[] = separationMode === 'color-sep' ? csExportColors
             : artLayers.map(l => l.color as RGB);
-          if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors)));
+          if (refColors.length > 0) folder.file('color-reference.png', await pngOf(buildColorRefCanvas(refColors)));
         }
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen.zip`);
       }
@@ -562,10 +602,22 @@ function App() {
     }
 
     // ── PSD ──────────────────────────────────────────────────────────────────
+    const psdRes = {
+      imageResources: {
+        resolutionInfo: {
+          horizontalResolution: documentDpi,
+          horizontalResolutionUnit: 'PPI' as const,
+          widthUnit: 'Inches' as const,
+          verticalResolution: documentDpi,
+          verticalResolutionUnit: 'PPI' as const,
+          heightUnit: 'Inches' as const,
+        },
+      },
+    };
     if (format === 'psd') {
       if (mode === 'dtg') {
         const buffer = writePsd({
-          width: docPxW, height: docPxH,
+          width: docPxW, height: docPxH, ...psdRes,
           children: [
             bgLayer,
             { name: 'Composite', canvas: buildCompositeCanvas(true), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
@@ -600,7 +652,7 @@ function App() {
         }));
 
         const buffer = writePsd({
-          width: docPxW, height: docPxH,
+          width: docPxW, height: docPxH, ...psdRes,
           children: [
             { name: 'Garment',     canvas: garmentCanvas, top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
             ...ubPsdLayer,
@@ -621,7 +673,7 @@ function App() {
           top: 0, left: 0, blendMode: 'normal' as const, opacity: 1,
         }));
         const buffer = writePsd({
-          width: docPxW, height: docPxH,
+          width: docPxW, height: docPxH, ...psdRes,
           children: [
             { name: 'White Paper', canvas: whiteBg,               top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
             ...ubPsdLayer,
@@ -647,7 +699,7 @@ function App() {
           blendMode: 'normal' as const,
           opacity: 1,
         }] : [];
-        const buffer = writePsd({ width: docPxW, height: docPxH, children: [bgLayer, ...ubPsdLayer, ...psdLayers, ...colorRefLayer] });
+        const buffer = writePsd({ width: docPxW, height: docPxH, ...psdRes, children: [bgLayer, ...ubPsdLayer, ...psdLayers, ...colorRefLayer] });
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-screen.psd`);
       }
       return;
