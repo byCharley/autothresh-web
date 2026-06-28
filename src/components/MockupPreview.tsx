@@ -153,6 +153,207 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
 
   const blendLabel = (m: BlendMode) => m === 'auto' ? `Auto (${isDark ? 'Screen' : 'Multiply'})` : m.charAt(0).toUpperCase() + m.slice(1);
 
+  const isMobile = window.innerWidth < 768;
+
+  // ── Mobile layout ──────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 50,
+        background: 'var(--bg)',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{
+          height: 52, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 16px',
+          background: 'var(--surface)', borderBottom: '1px solid var(--border)',
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, overflow: 'hidden', flex: 1, marginRight: 10 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Mockup Preview
+            </span>
+            {mockup && variant && (
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {mockup.brand} {mockup.model} · {mockup.view} · {variant.name}
+              </span>
+            )}
+          </div>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ flexShrink: 0 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Preview area */}
+        <div
+          style={{
+            flex: 1, minHeight: 0,
+            background: '#111',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden', position: 'relative',
+            cursor: !hasArt ? 'default' : isDragging ? 'grabbing' : 'grab',
+            userSelect: 'none', touchAction: 'none',
+          }}
+          onPointerDown={onPreviewPointerDown}
+          onPointerMove={onPreviewPointerMove}
+          onPointerUp={onPreviewPointerUp}
+          onPointerCancel={onPreviewPointerUp}
+        >
+          {!hasArt ? (
+            <div style={{ textAlign: 'center', padding: 20 }}>
+              {variant && (
+                <img
+                  src={variant.file}
+                  alt={mockup?.name}
+                  style={{ maxHeight: 'calc(100dvh - 52px - 290px)', maxWidth: '100%', opacity: 0.5, pointerEvents: 'none' }}
+                />
+              )}
+              <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#555', marginTop: 10 }}>
+                Load artwork first
+              </div>
+            </div>
+          ) : (
+            <div ref={contentRef} style={{ position: 'relative', lineHeight: 0, flexShrink: 0 }}>
+              <img
+                src={variant?.file}
+                style={{
+                  display: 'block', height: 'auto', width: 'auto',
+                  maxHeight: 'calc(100dvh - 52px - 290px)',
+                  maxWidth: '100vw',
+                  pointerEvents: 'none',
+                  transition: 'opacity 0.15s ease',
+                }}
+                alt={mockup?.name}
+                draggable={false}
+              />
+              <canvas
+                ref={artCanvasRef}
+                style={{
+                  position: 'absolute',
+                  left: `${artPos.x}%`, top: `${artPos.y}%`,
+                  width: `${artScale}%`, height: 'auto',
+                  transform: 'translate(-50%, -50%)',
+                  mixBlendMode: effectiveBlend as React.CSSProperties['mixBlendMode'],
+                  pointerEvents: 'none',
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Bottom controls panel */}
+        <div style={{ flexShrink: 0, background: 'var(--surface)', borderTop: '1px solid var(--border)', overflowY: 'auto', maxHeight: '55dvh' }}>
+
+          {/* Garment gallery — horizontal scroll */}
+          <div style={{ padding: '10px 14px 4px', flexShrink: 0 }}>
+            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 8 }}>
+              Garment
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 14px 14px', scrollbarWidth: 'none' }}>
+            {groups.map(([, items]) =>
+              items.map((m) => {
+                const active = m.id === mockupId;
+                const thumb = m.variants.find(v => v.name === colorName) ?? m.variants[0];
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setMockupId(m.id)}
+                    style={{
+                      flexShrink: 0, width: 76,
+                      background: active ? 'color-mix(in srgb, var(--accent) 10%, var(--surface-2))' : 'var(--surface-2)',
+                      border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                      borderRadius: 2, cursor: 'pointer', padding: 0, overflow: 'hidden',
+                      WebkitTapHighlightColor: 'transparent',
+                    } as React.CSSProperties}
+                  >
+                    <div style={{ background: '#f0f0f0', height: 86, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                      <img src={thumb.file} alt={`${m.brand} ${m.view}`} style={{ height: '100%', width: 'auto', maxWidth: '100%', objectFit: 'contain', display: 'block' }} />
+                    </div>
+                    <div style={{ padding: '4px 5px 5px', borderTop: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}` }}>
+                      <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: active ? 'var(--accent)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {m.view}
+                      </div>
+                      <div style={{ fontSize: 7, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 1 }}>
+                        {m.model}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* Color swatches */}
+          <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px 12px' }}>
+            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 8 }}>
+              Color{variant && <span style={{ color: 'var(--text-muted)', marginLeft: 6, textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>· {variant.name}</span>}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {mockup?.variants.map((v) => {
+                const active = colorName === v.name;
+                return (
+                  <button
+                    key={v.name}
+                    title={v.name}
+                    onClick={() => setColorName(v.name)}
+                    style={{
+                      width: 32, height: 32, borderRadius: '50%',
+                      background: v.hex,
+                      border: active ? '2.5px solid var(--accent)' : '1.5px solid var(--border-2)',
+                      cursor: 'pointer', padding: 0, flexShrink: 0,
+                      boxShadow: active ? '0 0 0 1px var(--accent)' : 'none',
+                      position: 'relative',
+                      WebkitTapHighlightColor: 'transparent',
+                    } as React.CSSProperties}
+                  >
+                    {active && (
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+                        stroke={hexLuminance(v.hex) < 0.5 ? '#fff' : '#000'}
+                        strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
+                        style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Scale + Download */}
+          <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Scale</span>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{artScale}%</span>
+            </div>
+            <input type="range" min={5} max={100} value={artScale} style={{ width: '100%', marginBottom: 14 }}
+              onChange={(e) => setArtScale(Number(e.target.value))} />
+            <button
+              className="btn btn-primary"
+              onClick={downloadPreview}
+              disabled={!hasArt}
+              style={{ width: '100%', height: 42, opacity: hasArt ? 1 : 0.4, color: '#1a1a1a', fontSize: 12, fontFamily: 'var(--font-mono)', gap: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Save Mockup PNG
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // ── Desktop layout ─────────────────────────────────────────────────────────
   return (
     <div
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
