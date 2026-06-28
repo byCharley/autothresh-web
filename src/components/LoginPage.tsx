@@ -22,16 +22,25 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: 'var(--bg)',
       backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
       backgroundSize: '28px 28px',
       display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
+      alignItems: 'center',
+      padding: '32px 16px',
+      boxSizing: 'border-box',
       fontFamily: 'var(--font-sans)',
     }}>
+      {/* Centering wrapper — margin:auto centers on tall screens, collapses to 0 so content scrolls on short screens */}
+      <div style={{
+        margin: 'auto',
+        width: '100%', maxWidth: 400,
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+      }}>
+
       {/* Logo */}
-      <div style={{ marginBottom: 40, textAlign: 'center' }}>
+      <div style={{ marginBottom: 40, textAlign: 'center', width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 20, marginBottom: 20 }}>
           <AppIcon size={72} color="#f1f2f2" />
           <span style={{ width: 1, height: 56, background: 'rgba(255,255,255,0.2)', display: 'block', flexShrink: 0 }} />
@@ -44,7 +53,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
         <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
           AutoThresh™ Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
           Professional Color Separation · Trusted By Pros Worldwide
         </div>
       </div>
@@ -52,7 +61,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
       {/* Card */}
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
-        width: 360, maxWidth: '90vw', padding: '32px 28px', textAlign: 'center',
+        width: '100%', padding: '32px 28px', textAlign: 'center',
       }}>
         <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 28 }}>
           Sign in with your{' '}
@@ -130,14 +139,15 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
       </div>
 
       {/* About info toggle */}
-      <div style={{ marginTop: 20, textAlign: 'center', width: 360, maxWidth: '90vw' }}>
+      <div style={{ marginTop: 20, textAlign: 'center', width: '100%' }}>
         <button
           onClick={() => setShowInfo(v => !v)}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', gap: 6,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
             opacity: 0.7, transition: 'opacity 0.15s',
+            maxWidth: '100%', flexWrap: 'wrap',
           }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
           onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.7')}
@@ -176,6 +186,8 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
           </div>
         )}
       </div>
+
+      </div>{/* end centering wrapper */}
 
       <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} />
       {showEula && <EulaModal onClose={() => setShowEula(false)} />}
