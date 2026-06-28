@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useLayoutEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, generateHarmonicPalettes } from '../engine/colorSeparation';
 
@@ -1193,6 +1193,16 @@ export function LayerPanel() {
     colorSepLockedColors, setColorSepLockedColors,
   } = useStore();
 
+  const modeBtnRefs = useRef<(HTMLButtonElement | null)[]>([null, null, null, null]);
+  const [sliderRect, setSliderRect] = useState<{ left: number; width: number } | null>(null);
+  const MODES = ['threshold', 'palette', 'color-sep', 'vector'] as const;
+
+  useLayoutEffect(() => {
+    const idx = MODES.indexOf(separationMode as typeof MODES[number]);
+    const btn = modeBtnRefs.current[idx];
+    if (btn) setSliderRect({ left: btn.offsetLeft, width: btn.offsetWidth });
+  }, [separationMode]);
+
   const handleColorSepColorChange = (ci: number, hex: string) => {
     const base = colorSepLockedColors ?? colorSepColors;
     const updated: RGB[] = base.map((c, i) => i === ci ? hexToRgb(hex) : c);
@@ -1260,18 +1270,34 @@ export function LayerPanel() {
       <div className="left-scroll">
         {/* Mode Switcher */}
         <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }} data-tutorial="tutorial-modes">
-          <div style={{ display: 'flex', padding: '6px 8px', gap: 4 }}>
-            {(['threshold', 'palette', 'color-sep', 'vector'] as const).map((mode) => (
+          <div style={{ display: 'flex', padding: '6px 8px', gap: 4, position: 'relative' }}>
+            {/* Sliding active pill */}
+            {sliderRect && (
+              <div style={{
+                position: 'absolute',
+                top: 6,
+                left: sliderRect.left,
+                width: sliderRect.width,
+                height: 28,
+                background: 'var(--accent)',
+                transition: 'left 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), width 0.22s cubic-bezier(0.22, 0.61, 0.36, 1)',
+                pointerEvents: 'none',
+                zIndex: 0,
+              }} />
+            )}
+            {(['threshold', 'palette', 'color-sep', 'vector'] as const).map((mode, i) => (
               <button
                 key={mode}
+                ref={(el) => { modeBtnRefs.current[i] = el; }}
                 onClick={() => setSeparationMode(mode)}
                 style={{
                   flex: 1, height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
                   fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
                   cursor: 'pointer', border: '1px solid var(--border)',
-                  background: separationMode === mode ? 'var(--accent)' : 'var(--surface-2)',
+                  background: 'var(--surface-2)',
                   color: separationMode === mode ? '#000' : 'var(--text-muted)',
-                  transition: 'background 0.15s, color 0.15s',
+                  transition: 'color 0.18s',
+                  position: 'relative', zIndex: 1,
                 }}
               >
                 {mode === 'threshold' ? 'Thresh' : mode === 'palette' ? 'Dither' : mode === 'color-sep' ? 'Color' : 'Vector'}
