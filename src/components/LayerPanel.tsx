@@ -1331,6 +1331,7 @@ export function LayerPanel() {
           )}
         </div>
 
+        <div key={separationMode} className="at-mode-content">
         {separationMode === 'vector' ? (
           <>
             <VectorColorsSection />
@@ -1680,6 +1681,7 @@ export function LayerPanel() {
             <ArtworkSection />
           </>
         )}
+        </div>
       </div>
 
     </aside>
