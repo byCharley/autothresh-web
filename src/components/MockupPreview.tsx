@@ -12,6 +12,23 @@ function hexLuminance(hex: string) {
   return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
+function closestVariantName(variants: { name: string; hex: string }[], targetHex: string): string {
+  const tr = parseInt(targetHex.slice(1, 3), 16);
+  const tg = parseInt(targetHex.slice(3, 5), 16);
+  const tb = parseInt(targetHex.slice(5, 7), 16);
+  let best = variants[0]?.name ?? '';
+  let bestDist = Infinity;
+  for (const v of variants) {
+    const h = v.hex.replace('#', '');
+    const dr = parseInt(h.slice(0, 2), 16) - tr;
+    const dg = parseInt(h.slice(2, 4), 16) - tg;
+    const db = parseInt(h.slice(4, 6), 16) - tb;
+    const dist = dr * dr + dg * dg + db * db;
+    if (dist < bestDist) { bestDist = dist; best = v.name; }
+  }
+  return best;
+}
+
 const SECTION_LABEL: React.CSSProperties = {
   fontSize: 9, fontWeight: 700, fontFamily: 'var(--font-mono)',
   letterSpacing: '0.1em', textTransform: 'uppercase',
@@ -19,10 +36,12 @@ const SECTION_LABEL: React.CSSProperties = {
 };
 
 export function MockupPreview({ onClose }: { onClose: () => void }) {
-  const { processedLayers, processedLayerDims, ditherComposite, separationMode } = useStore();
+  const { processedLayers, processedLayerDims, ditherComposite, separationMode, canvasColor } = useStore();
 
   const [mockupId, setMockupId]     = useState(MOCKUPS[0]?.id ?? '');
-  const [colorName, setColorName]   = useState(MOCKUPS[0]?.variants[0]?.name ?? '');
+  const [colorName, setColorName]   = useState(() =>
+    closestVariantName(MOCKUPS[0]?.variants ?? [], canvasColor)
+  );
   const [artPos, setArtPos]         = useState({ x: 50, y: 38 });
   const [artScale, setArtScale]     = useState(55);
   const [blendMode, setBlendMode]   = useState<BlendMode>('auto');
@@ -48,11 +67,9 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     }));
   }, []);
 
-  // Reset color selection when switching mockup if current color isn't available
+  // When switching mockups, pick the variant closest to the user's canvas color
   useEffect(() => {
-    if (mockup && !mockup.variants.find(v => v.name === colorName)) {
-      setColorName(mockup.variants[0]?.name ?? '');
-    }
+    if (mockup) setColorName(closestVariantName(mockup.variants, canvasColor));
   }, [mockupId]);
 
   const isDark = hexLuminance(variant?.hex ?? '#FFFFFF') < 0.45;
