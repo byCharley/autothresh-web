@@ -142,13 +142,12 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
       {/* About info toggle */}
       <div style={{ marginTop: 20, textAlign: 'center', width: '100%' }}>
         <button
-          onClick={() => setShowInfo(v => !v)}
+          onClick={() => setShowInfo(true)}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
             opacity: 0.7, transition: 'opacity 0.15s',
-            maxWidth: '100%', flexWrap: 'wrap',
           }}
           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
           onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.7')}
@@ -159,20 +158,43 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
             <line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
           About AutoThresh™ Web
-          <svg
-            width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-            style={{ opacity: 0.5, transform: showInfo ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
-          >
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
         </button>
+      </div>
 
-        {showInfo && (
-          <div style={{
-            marginTop: 12, padding: '16px 18px',
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            textAlign: 'left',
-          }}>
+      {/* About modal overlay */}
+      {showInfo && (
+        <div
+          onClick={() => setShowInfo(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '24px 20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              width: '100%', maxWidth: 420,
+              padding: '20px 20px 24px',
+              position: 'relative',
+              maxHeight: '80dvh', overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>
+                About AutoThresh™ Web
+              </div>
+              <button
+                onClick={() => setShowInfo(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4, display: 'flex', lineHeight: 0 }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
             <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
               Part of the Growing AutoThresh™ Lineup
             </div>
@@ -185,8 +207,8 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
               is designed to deliver the same high-quality results while continuing to add new tools, workflows, and separation technologies.
             </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       </div>{/* end centering wrapper */}
 
