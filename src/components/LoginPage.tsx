@@ -29,6 +29,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
       display: 'flex', flexDirection: 'column',
       alignItems: 'center',
       padding: '32px 16px',
+      paddingBottom: 'max(32px, calc(env(safe-area-inset-bottom, 0px) + 24px))',
       boxSizing: 'border-box',
       fontFamily: 'var(--font-sans)',
     }}>

@@ -159,7 +159,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
   if (isMobile) {
     return (
       <div style={{
-        position: 'fixed', inset: 0, zIndex: 50,
+        position: 'fixed', inset: 0, zIndex: 200,
         background: 'var(--bg)',
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
