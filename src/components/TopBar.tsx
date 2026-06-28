@@ -179,94 +179,60 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
             return (
               <div style={{
                 position: 'absolute', top: 'calc(100% + 4px)', right: 6,
-                width: 232,
+                width: 220,
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
                 zIndex: 200,
               }}>
-                {/* Identity row */}
-                <div style={{ padding: '14px 14px 12px', display: 'flex', alignItems: 'center', gap: 11, borderBottom: '1px solid var(--border)' }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                    background: 'var(--accent)', color: '#111',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)',
-                  }}>
-                    {initial}
+                {/* Identity */}
+                <div style={{ padding: '13px 15px 11px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>
+                    {firstName || userEmail?.split('@')[0]}
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    {firstName && (
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 2 }}>
-                        {firstName}
-                      </div>
-                    )}
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {userEmail}
-                    </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {userEmail}
                   </div>
                 </div>
 
-                {/* Subscription row */}
-                <div style={{ padding: '11px 14px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{
-                        width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                        background: subColor, boxShadow: `0 0 5px ${subColor}99`,
-                      }} />
-                      <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: subColor, fontWeight: 600 }}>
-                        {subLabel}
-                      </span>
-                    </div>
+                {/* Plan */}
+                <div style={{ padding: '11px 15px 12px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: nextBillingFormatted || (daysRemaining !== null && daysRemaining > 0) ? 7 : 0 }}>
+                    <span style={{
+                      fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.07em',
+                      textTransform: 'uppercase', color: '#111',
+                      background: subColor, padding: '2px 7px', borderRadius: 2,
+                    }}>
+                      {subLabel}
+                    </span>
                     {planTitle && (
-                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
                         {planTitle}
                       </span>
                     )}
                   </div>
-
                   {(nextBillingFormatted || (daysRemaining !== null && daysRemaining > 0)) && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 7 }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                        {subscriptionStatus === 'trial' ? 'Trial ends' : 'Next billing'}
-                      </span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {nextBillingFormatted && (
-                          <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{nextBillingFormatted}</span>
-                        )}
-                        {daysRemaining !== null && daysRemaining > 0 && (
-                          <span style={{
-                            fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
-                            color: '#111', background: subscriptionStatus === 'trial' ? '#a78bfa' : 'var(--accent)',
-                            padding: '1px 6px', borderRadius: 2,
-                          }}>
-                            {daysRemaining}d
-                          </span>
-                        )}
-                      </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      {subscriptionStatus === 'trial' ? 'Trial ends' : 'Renews'}{nextBillingFormatted ? ` ${nextBillingFormatted}` : ''}
+                      {daysRemaining !== null && daysRemaining > 0 && (
+                        <span style={{ color: 'var(--text-muted)', marginLeft: 5 }}>· {daysRemaining}d left</span>
+                      )}
                     </div>
                   )}
                 </div>
 
                 {/* Sign out */}
                 {onLogout && (
-                  <div style={{ padding: '6px 14px 10px' }}>
+                  <div style={{ padding: '7px 15px 9px' }}>
                     <button
                       onClick={() => { setMenuOpen(false); onLogout(); }}
                       style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: 7, padding: '4px 0',
+                        background: 'none', border: 'none', cursor: 'pointer', padding: 0,
                         fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
                         transition: 'color 0.12s',
                       }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; }}
                     >
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                        <polyline points="16 17 21 12 16 7"/>
-                        <line x1="21" y1="12" x2="9" y2="12"/>
-                      </svg>
                       Sign out
                     </button>
                   </div>
