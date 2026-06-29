@@ -245,9 +245,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
       {/* ─── Bottom Sheet ────────────────────────────────────── */}
       <div style={{
         position: 'absolute', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
-        height: activeSheet === 'controls'
-          ? 'calc(100dvh - 52px - 64px - env(safe-area-inset-bottom, 0px))'
-          : '68vh',
+        height: 'calc(100dvh - 52px - 64px - env(safe-area-inset-bottom, 0px))',
         background: 'var(--surface)',
         borderTop: '2px solid var(--accent)',
         transform: activeSheet ? 'translateY(0)' : 'translateY(100%)',
@@ -257,42 +255,39 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
         overflow: 'hidden',
         boxShadow: '0 -8px 40px rgba(0,0,0,0.4)',
       }}>
-        {/* Drag handle */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 0', flexShrink: 0 }}>
-          <div style={{ width: 40, height: 3, background: 'var(--border)', borderRadius: 2 }} />
-        </div>
-        {/* Sheet title */}
-        <div style={{
-          padding: '8px 16px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          flexShrink: 0,
-          borderBottom: '1px solid var(--border)',
-        }}>
-          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>
-            {activeSheet === 'layers' ? 'Layers & Modes' : 'Image Controls'}
-          </span>
-          <button
-            onClick={() => setActiveSheet(null)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: '4px', display: 'flex', WebkitTapHighlightColor: 'transparent' } as React.CSSProperties}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-        {/* Live preview strip — Layers and Adjust sheets */}
+        {/* Live preview strip — fills top, title/close overlaid */}
         {(activeSheet === 'layers' || activeSheet === 'controls') && (
           <div style={{ flexShrink: 0, position: 'relative', borderBottom: '1px solid var(--border)', cursor: 'grab', touchAction: 'none' }}>
             <canvas
               ref={previewCanvasRef}
               width={Math.round(window.innerWidth)}
-              height={148}
-              style={{ display: 'block', width: '100%', height: 148 }}
+              height={200}
+              style={{ display: 'block', width: '100%', height: 200 }}
               onPointerDown={onPreviewDown}
               onPointerMove={onPreviewMove}
               onPointerUp={onPreviewUp}
               onPointerCancel={onPreviewUp}
             />
+            {/* Title + close overlaid on preview */}
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 10px',
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, transparent 100%)',
+              pointerEvents: 'none',
+            }}>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, pointerEvents: 'none' }}>
+                {activeSheet === 'layers' ? 'Layers & Modes' : 'Image Controls'}
+              </span>
+              <button
+                onClick={() => setActiveSheet(null)}
+                style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 2, cursor: 'pointer', color: 'rgba(255,255,255,0.7)', padding: '4px 6px', display: 'flex', pointerEvents: 'all', WebkitTapHighlightColor: 'transparent' } as React.CSSProperties}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
             <div style={{
               position: 'absolute', bottom: 6, left: 8,
               fontSize: 8, fontFamily: 'var(--font-mono)', letterSpacing: '0.08em',

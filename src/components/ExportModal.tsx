@@ -110,7 +110,10 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
       <div
         style={{
           background: 'var(--surface)', border: '1px solid var(--border)',
-          width: 480, maxWidth: '90vw', zIndex: 41,
+          width: 480, maxWidth: '92vw', zIndex: 41,
+          maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
+          display: 'flex', flexDirection: 'column',
+          overflowY: 'auto',
         }}
         onClick={(e) => e.stopPropagation()}
       >
