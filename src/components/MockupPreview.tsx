@@ -79,7 +79,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const canvas = artCanvasRef.current;
     if (!canvas) return;
-    if (separationMode === 'palette' && ditherComposite) {
+    if (ditherComposite) {
       const { data, w, h } = ditherComposite;
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d')!.putImageData(data, 0, 0);
@@ -190,7 +190,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     img.src = variant.file;
   };
 
-  const hasArt = separationMode === 'palette'
+  const hasArt = (separationMode === 'palette' || separationMode === 'cmyk-pro')
     ? !!ditherComposite
     : processedLayers.length > 0 && !!processedLayerDims;
 

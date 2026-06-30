@@ -14,6 +14,108 @@ import { buildImportanceMap } from '../engine/analysisPass';
 import { loadAllTextures } from '../engine/textureLoader';
 import { traceImageToSVG } from '../engine/vectorTracer';
 import { isShadowColor, nearestPantoneRgb } from '../engine/pantoneMatch';
+import { separateCmykPro, applyHalftoneToCmykPlates } from '../engine/cmykProEngine';
+import {
+  buildNeugebauerPrimaries, compositeHalftonePlates,
+  upsampleCmykPlates, upsampleMask, areaAverageDownsample,
+} from '../engine/inkSimulator';
+import { generateCmykProUnderbase, chokeWhitePlate } from '../engine/underbaseEngine';
+
+// ── CMYK Inspect Grid ─────────────────────────────────────────────────────────
+// Shows all 4 CMYK halftone plates in a 2×2 grid overlay for inspection mode.
+
+const CMYK_INSPECT_CHANNELS = [
+  { key: 'cmyk-c', label: 'C', angle: 15, r: 0,   g: 174, b: 239 },
+  { key: 'cmyk-m', label: 'M', angle: 75, r: 236, g: 0,   b: 140 },
+  { key: 'cmyk-y', label: 'Y', angle: 0,  r: 200, g: 168, b: 0   },
+  { key: 'cmyk-k', label: 'K', angle: 45, r: 26,  g: 26,  b: 26  },
+] as const;
+
+function CmykInspectGrid() {
+  const { processedLayers, processedLayerDims, proCmykSettings } = useStore();
+  const canvasRefs = [
+    useRef<HTMLCanvasElement>(null),
+    useRef<HTMLCanvasElement>(null),
+    useRef<HTMLCanvasElement>(null),
+    useRef<HTMLCanvasElement>(null),
+  ];
+
+  useEffect(() => {
+    if (!processedLayerDims) return;
+    const { w, h } = processedLayerDims;
+
+    CMYK_INSPECT_CHANNELS.forEach(({ key, r, g, b }, ci) => {
+      const cvs = canvasRefs[ci].current;
+      if (!cvs) return;
+      const layer = processedLayers.find(l => l.id === key);
+      if (!layer) return;
+      const { mask } = layer;
+
+      cvs.width = w;
+      cvs.height = h;
+      const ctx = cvs.getContext('2d');
+      if (!ctx) return;
+
+      const imgData = new ImageData(w, h);
+      const d = imgData.data;
+      for (let i = 0; i < w * h; i++) {
+        const cov = mask[i] / 255;
+        d[i*4]   = Math.round(255*(1-cov) + r*cov);
+        d[i*4+1] = Math.round(255*(1-cov) + g*cov);
+        d[i*4+2] = Math.round(255*(1-cov) + b*cov);
+        d[i*4+3] = 255;
+      }
+      ctx.putImageData(imgData, 0, 0);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processedLayers, processedLayerDims]);
+
+  if (!processedLayerDims) return null;
+
+  const halftones = [
+    proCmykSettings.halftoneC,
+    proCmykSettings.halftoneM,
+    proCmykSettings.halftoneY,
+    proCmykSettings.halftoneK,
+  ];
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'none',
+      display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr',
+      gap: 3, background: '#111111', padding: 3,
+    }}>
+      {CMYK_INSPECT_CHANNELS.map(({ key, label, r, g, b }, ci) => {
+        const ht = halftones[ci];
+        const angle = ht?.angle ?? CMYK_INSPECT_CHANNELS[ci].angle;
+        const color = key === 'cmyk-k' ? '#1a1a1a' : `rgb(${r},${g},${b})`;
+        return (
+          <div key={key} style={{
+            position: 'relative', background: '#ffffff', overflow: 'hidden',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <canvas
+              ref={canvasRefs[ci]}
+              style={{
+                maxWidth: '100%', maxHeight: '100%',
+                width: 'auto', height: 'auto',
+                display: 'block', imageRendering: 'auto',
+              }}
+            />
+            <div style={{
+              position: 'absolute', bottom: 4, left: 4,
+              fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
+              color, letterSpacing: '0.05em',
+              textShadow: key === 'cmyk-k' ? 'none' : '0 0 3px rgba(0,0,0,0.5)',
+            }}>
+              {label} {angle}°
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerConfig[] {
   return layers.map((l) =>
@@ -70,7 +172,7 @@ export function CanvasView() {
   } | null>(null);
 
   const {
-    originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, pantonePreviewActive,
+    originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     globalPattern,
     bgRemovalEnabled, bgTolerance,
     showRegistrationMarks, regMarkPadding, documentBleed,
@@ -84,6 +186,7 @@ export function CanvasView() {
     paletteAnalyzeKey,
     setPaletteColors,
     paintMasks, paintMode, brushSize, selectedLayerId,
+    processedLayers, processedLayerDims,
     isProcessing, setOriginalImage, setProcessedLayers, setProcessedLayerDims, setDitherComposite, setIsProcessing, setCanvasColor, setImageAdjustment,
     setPaintMask, setPaintMode, setBrushSize, clearPaintMask,
     soloLayerId, setCmykQuality,
@@ -92,7 +195,26 @@ export function CanvasView() {
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, setColorSepColors,
     colorSepLockedColors,
     splitView, setSplitView,
+    proCmykSettings, setProCmykPlates,
+    printSimActive, setPrintSimLoading, viewingDistance,
   } = useStore();
+
+  // Cached CMYK Pro pipeline output — lets halftone/visibility/sim changes rebuild
+  // the composite without re-calling the expensive separateCmykPro() API.
+  const cmykProCacheRef = useRef<{
+    plates: import('../engine/cmykProEngine').CmykProPlates;
+    bgMask: Uint8Array | null;
+    artPrevW: number; artPrevH: number;
+    artPrevOffX: number; artPrevOffY: number;
+    docPrevW: number; docPrevH: number;
+  } | null>(null);
+  // Fingerprint of the settings that produced the cached plates.
+  // Only separation-affecting fields (profile, GCR, densities, bg mask).
+  // Halftone settings (LPI/angle/shape/gain) are client-side — they never invalidate the cache.
+  const cmykProApiKeyRef = useRef('');
+  // Ref mirror of printSimActive so the .then() closure always reads the live value.
+  const printSimActiveRef = useRef(printSimActive);
+  useEffect(() => { printSimActiveRef.current = printSimActive; }, [printSimActive]);
 
   // Increments when real texture PNGs finish loading so the processing effect reruns.
   const [textureVersion, setTextureVersion] = useState(0);
@@ -259,6 +381,7 @@ export function CanvasView() {
     if (!originalImage) return;
     let cancelled = false;
     let vectorTraceRunning = false;
+    let cmykProRunning = false;
     let rafId: number | undefined;
     const tid = setTimeout(() => {
       setIsProcessing(true);
@@ -314,6 +437,168 @@ export function CanvasView() {
           }
           const score = computeCmykQuality(artScaled, cmykParams);
           setCmykQuality(score);
+        } else if (separationMode === 'cmyk-pro') {
+          // ── CMYK Pro: ICC-based separation via server-side LittleCMS ─────
+          //
+          // Separation fingerprint: only fields that affect the server-side ICC transform.
+          // Halftone settings (LPI/angle/shape/gain) are applied client-side on the plates —
+          // they do NOT invalidate the cache, so changing them skips the API entirely.
+          const apiKey = JSON.stringify([
+            proCmykSettings.cmykProfile, proCmykSettings.blackGeneration,
+            proCmykSettings.totalInkLimit, proCmykSettings.preservePureBlack,
+            proCmykSettings.densityC, proCmykSettings.densityM,
+            proCmykSettings.densityY, proCmykSettings.densityK,
+            proCmykSettings.grayBalance,
+            bgRemovalEnabled, bgTolerance,
+            artPrevW, artPrevH,
+          ]);
+          const cached = cmykProCacheRef.current;
+          if (cached && cmykProApiKeyRef.current === apiKey) {
+            // Separation settings unchanged — rebuild composite from cached plates.
+            // This handles LPI/angle/shape/dotGain changes without an API round-trip.
+            const { plates, bgMask: cachedBgMask } = cached;
+            const primaries = buildNeugebauerPrimaries(proCmykSettings.cmykProfile);
+            const hexVal = canvasColor.replace('#', '');
+            const garmentRgb: [number, number, number] = [
+              parseInt(hexVal.slice(0, 2), 16),
+              parseInt(hexVal.slice(2, 4), 16),
+              parseInt(hexVal.slice(4, 6), 16),
+            ];
+            const garmentLum = showFabricBg
+              ? (garmentRgb[0] * 0.299 + garmentRgb[1] * 0.587 + garmentRgb[2] * 0.114) / 255
+              : 1;
+            const simActive = printSimActiveRef.current;
+            const garmentMode = (simActive && garmentLum < 0.5) ? 'dark' : 'light';
+            const vis = {
+              c: cmykVisibility['cmyk-c'], m: cmykVisibility['cmyk-m'],
+              y: cmykVisibility['cmyk-y'], k: cmykVisibility['cmyk-k'],
+            };
+            // Dot View uses documentDpi so halftone cells are at true document scale
+            // (visible dots when zoomed in). Print Sim uses previewDpi × 4× upsample
+            // then area-averages back down to simulate optical ink blending.
+            const previewDpi = artPrevW / documentWidthIn;
+            let whitePlate: Uint8Array | undefined;
+            if (underbaseEnabled) {
+              const raw = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
+              whitePlate = chokeWhitePlate(raw, plates.width, plates.height, underbaseChoke);
+            }
+            const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, documentDpi, cachedBgMask, whitePlate);
+            const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
+            setProcessedLayers(allLayers.filter(l => visibleIds.includes(l.id)));
+            setProcessedLayerDims({ w: artPrevW, h: artPrevH });
+            let composite: ImageData;
+            if (simActive) {
+              const SCALE = 4;
+              const plates4x = upsampleCmykPlates(plates, SCALE);
+              const bgMask4x = cachedBgMask ? upsampleMask(cachedBgMask, artPrevW, artPrevH, SCALE) : null;
+              const whitePlate4x = whitePlate ? upsampleMask(whitePlate, plates.width, plates.height, SCALE) : undefined;
+              const layers4x = applyHalftoneToCmykPlates(plates4x, proCmykSettings, previewDpi * SCALE, bgMask4x, whitePlate4x);
+              const hi = compositeHalftonePlates(layers4x, artPrevW * SCALE, artPrevH * SCALE, primaries, bgMask4x, vis, garmentMode, garmentRgb);
+              composite = areaAverageDownsample(hi, artPrevW, artPrevH);
+            } else {
+              composite = compositeHalftonePlates(allLayers, artPrevW, artPrevH, primaries, cachedBgMask, vis, garmentMode, garmentRgb);
+            }
+            setDitherComposite({ data: composite, w: artPrevW, h: artPrevH });
+            // Let the main effect's sync draw path render `artComposite` to the canvas.
+            artComposite = composite;
+          } else {
+          // ── API call needed: separation settings or image changed ───────────
+          setDitherComposite(null);
+          // Kick off async API call; cancel token prevents stale results
+          cmykProRunning = true;
+          const abortCtrl = new AbortController();
+          separateCmykPro(artScaled, proCmykSettings, abortCtrl.signal)
+            .then((plates) => {
+              if (cancelled) return;
+              setProCmykPlates(plates);
+              cmykProApiKeyRef.current = apiKey;
+              // Cache plates + layout dims for fast rebuilds on subsequent changes
+              cmykProCacheRef.current = { plates, bgMask: localBgMask, artPrevW, artPrevH, artPrevOffX, artPrevOffY, docPrevW, docPrevH };
+              const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
+              const previewDpi = artPrevW / documentWidthIn;
+              // Physical Neugebauer ink simulation.
+              // Look up the 16-entry primary table (derived from ICC profile Lab primaries)
+              // for realistic process-ink colors instead of ideal 0/255 binary values.
+              const primaries = buildNeugebauerPrimaries(proCmykSettings.cmykProfile);
+              const hexVal2 = canvasColor.replace('#', '');
+              const garmentRgb2: [number, number, number] = [
+                parseInt(hexVal2.slice(0, 2), 16),
+                parseInt(hexVal2.slice(2, 4), 16),
+                parseInt(hexVal2.slice(4, 6), 16),
+              ];
+              const garmentLum2 = showFabricBg
+                ? (garmentRgb2[0] * 0.299 + garmentRgb2[1] * 0.587 + garmentRgb2[2] * 0.114) / 255
+                : 1;
+              // Use ref to read current printSimActive value without it being in dep array
+              const simActive = printSimActiveRef.current;
+              const garmentMode = (simActive && garmentLum2 < 0.5) ? 'dark' : 'light';
+              const vis = {
+                c: cmykVisibility['cmyk-c'], m: cmykVisibility['cmyk-m'],
+                y: cmykVisibility['cmyk-y'], k: cmykVisibility['cmyk-k'],
+              };
+              let whitePlate2: Uint8Array | undefined;
+              if (underbaseEnabled) {
+                const raw2 = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
+                whitePlate2 = chokeWhitePlate(raw2, plates.width, plates.height, underbaseChoke);
+              }
+              const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, documentDpi, localBgMask, whitePlate2);
+              const visibleLayers = allLayers.filter(l => visibleIds.includes(l.id));
+              setProcessedLayers(visibleLayers);
+              setProcessedLayerDims({ w: artPrevW, h: artPrevH });
+
+              let composite: ImageData;
+              if (simActive) {
+                // Print Simulation: raster halftone at 4× preview DPI for fine optical blending.
+                const SCALE = 4;
+                const plates4x   = upsampleCmykPlates(plates, SCALE);
+                const bgMask4x   = localBgMask ? upsampleMask(localBgMask, artPrevW, artPrevH, SCALE) : null;
+                const whitePlate4x2 = whitePlate2 ? upsampleMask(whitePlate2, plates.width, plates.height, SCALE) : undefined;
+                const layers4x   = applyHalftoneToCmykPlates(plates4x, proCmykSettings, previewDpi * SCALE, bgMask4x, whitePlate4x2);
+                const hi = compositeHalftonePlates(
+                  layers4x, artPrevW * SCALE, artPrevH * SCALE,
+                  primaries, bgMask4x, vis, garmentMode, garmentRgb2,
+                );
+                composite = areaAverageDownsample(hi, artPrevW, artPrevH);
+              } else {
+                // Dot View: halftone at display resolution — dots remain visible for inspection
+                composite = compositeHalftonePlates(
+                  allLayers, artPrevW, artPrevH, primaries, localBgMask, vis, garmentMode, garmentRgb2,
+                );
+              }
+              // Pass to MockupPreview so the shirt preview also uses physical ink colors
+              setDitherComposite({ data: composite, w: artPrevW, h: artPrevH });
+
+              // Build full docCanvas with fabric bg (mirrors the main rendering pipeline)
+              const asyncDoc = document.createElement('canvas');
+              asyncDoc.width = docPrevW; asyncDoc.height = docPrevH;
+              const aCtx = asyncDoc.getContext('2d')!;
+              if (showFabricBg) { aCtx.fillStyle = canvasColor; aCtx.fillRect(0, 0, docPrevW, docPrevH); }
+              const artC = document.createElement('canvas');
+              artC.width = artPrevW; artC.height = artPrevH;
+              artC.getContext('2d')!.putImageData(composite, 0, 0);
+              aCtx.drawImage(artC, artPrevOffX, artPrevOffY);
+
+              const canvas = canvasRef.current;
+              if (canvas) {
+                canvas.width = docPrevW; canvas.height = docPrevH;
+                canvas.getContext('2d')!.drawImage(asyncDoc, 0, 0);
+                setCanvasDims({ w: docPrevW, h: docPrevH });
+                setRenderedAtDim(MAX_PREVIEW_DIM);
+                setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
+              }
+              setIsProcessing(false);
+            })
+            .catch((err) => {
+              if (!cancelled && err?.name !== 'AbortError') {
+                console.error('[cmyk-pro]', err);
+              }
+              if (!cancelled) setIsProcessing(false);
+            });
+
+          // Show original image while API call is in flight
+          artComposite = artScaled;
+          } // end else (API call path)
+
         } else if (separationMode === 'palette') {
           // ── Auto-analyze new images to find optimal exposure/contrast ─────
           // Runs once per image load. Computes p2/p98 percentile luminance of
@@ -642,7 +927,7 @@ export function CanvasView() {
 
         // Build underbase mask (shared for both normal draw and solo view)
         const underbaseSolo = soloLayerId === '__underbase__';
-        const shouldDrawUnderbase = underbaseEnabled && separationMode !== 'vector' && separationMode !== 'cmyk'
+        const shouldDrawUnderbase = underbaseEnabled && separationMode !== 'vector' && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro'
           && (!soloLayerId || underbaseSolo);
 
         let ubCanvas: HTMLCanvasElement | null = null;
@@ -707,7 +992,7 @@ export function CanvasView() {
           setRenderedAtDim(MAX_PREVIEW_DIM);
           setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
         }
-        if (!vectorTraceRunning) setIsProcessing(false);
+        if (!vectorTraceRunning && !cmykProRunning) setIsProcessing(false);
       });
     }, 40);
     return () => { cancelled = true; clearTimeout(tid); if (rafId !== undefined) cancelAnimationFrame(rafId); };
@@ -727,9 +1012,94 @@ export function CanvasView() {
     vectorNumColors, vectorDetail, vectorSmooth, vectorInkColor, vectorPathMode, vectorMinSpeckle,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, colorSepLockedColors,
-    underbaseEnabled, underbaseChoke, underbaseIncludeShadows, pantonePreviewActive,
+    underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
+    proCmykSettings,
+    // printSimActive excluded — handled by separate composite-rebuild effect (no API re-call)
     // renderDim excluded — zoom is a pure CSS transform, never triggers a reprocess
   ]);
+
+  // Lightweight composite-rebuild effect for printSimActive toggle.
+  // Reuses cached plates from cmykProCacheRef — no API call.
+  // Uses setTimeout to yield to the browser paint cycle first so the loading
+  // indicator renders before the synchronous computation blocks the thread.
+  useEffect(() => {
+    if (separationMode !== 'cmyk-pro') return;
+    const cached = cmykProCacheRef.current;
+    if (!cached) { setPrintSimLoading(false); return; }
+
+    let cancelled = false;
+    // Capture live values before the deferred call
+    const simActive = printSimActive;
+    const { plates, bgMask: localBgMask, artPrevW, artPrevH, artPrevOffX, artPrevOffY, docPrevW, docPrevH } = cached;
+    const capturedSettings = proCmykSettings;
+    const capturedDocDpi = documentDpi;
+
+    const tid = setTimeout(() => {
+      if (cancelled) return;
+
+      const primaries = buildNeugebauerPrimaries(capturedSettings.cmykProfile);
+      const hexValSim = canvasColor.replace('#', '');
+      const garmentRgbSim: [number, number, number] = [
+        parseInt(hexValSim.slice(0, 2), 16),
+        parseInt(hexValSim.slice(2, 4), 16),
+        parseInt(hexValSim.slice(4, 6), 16),
+      ];
+      const garmentLum = showFabricBg
+        ? (garmentRgbSim[0] * 0.299 + garmentRgbSim[1] * 0.587 + garmentRgbSim[2] * 0.114) / 255
+        : 1;
+      const garmentMode = (simActive && garmentLum < 0.5) ? 'dark' : 'light';
+      const vis = {
+        c: cmykVisibility['cmyk-c'], m: cmykVisibility['cmyk-m'],
+        y: cmykVisibility['cmyk-y'], k: cmykVisibility['cmyk-k'],
+      };
+
+      const previewDpi = artPrevW / documentWidthIn;
+      let whitePlateSim: Uint8Array | undefined;
+      if (underbaseEnabled) {
+        const rawSim = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
+        whitePlateSim = chokeWhitePlate(rawSim, plates.width, plates.height, underbaseChoke);
+      }
+      const allLayers = applyHalftoneToCmykPlates(plates, capturedSettings, capturedDocDpi, localBgMask, whitePlateSim);
+      const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
+      setProcessedLayers(allLayers.filter(l => visibleIds.includes(l.id)));
+      setProcessedLayerDims({ w: artPrevW, h: artPrevH });
+
+      let composite: ImageData;
+      if (simActive) {
+        const SCALE = 4;
+        const plates4x = upsampleCmykPlates(plates, SCALE);
+        const bgMask4x = localBgMask ? upsampleMask(localBgMask, artPrevW, artPrevH, SCALE) : null;
+        const whitePlateSim4x = whitePlateSim ? upsampleMask(whitePlateSim, plates.width, plates.height, SCALE) : undefined;
+        const layers4x = applyHalftoneToCmykPlates(plates4x, capturedSettings, previewDpi * SCALE, bgMask4x, whitePlateSim4x);
+        const hi = compositeHalftonePlates(layers4x, artPrevW * SCALE, artPrevH * SCALE, primaries, bgMask4x, vis, garmentMode, garmentRgbSim);
+        composite = areaAverageDownsample(hi, artPrevW, artPrevH);
+      } else {
+        composite = compositeHalftonePlates(allLayers, artPrevW, artPrevH, primaries, localBgMask, vis, garmentMode, garmentRgbSim);
+      }
+      setDitherComposite({ data: composite, w: artPrevW, h: artPrevH });
+
+      const asyncDoc = document.createElement('canvas');
+      asyncDoc.width = docPrevW; asyncDoc.height = docPrevH;
+      const aCtx = asyncDoc.getContext('2d')!;
+      if (showFabricBg) { aCtx.fillStyle = canvasColor; aCtx.fillRect(0, 0, docPrevW, docPrevH); }
+      const artC = document.createElement('canvas');
+      artC.width = artPrevW; artC.height = artPrevH;
+      artC.getContext('2d')!.putImageData(composite, 0, 0);
+      aCtx.drawImage(artC, artPrevOffX, artPrevOffY);
+
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = docPrevW; canvas.height = docPrevH;
+        canvas.getContext('2d')!.drawImage(asyncDoc, 0, 0);
+        setCanvasDims({ w: docPrevW, h: docPrevH });
+        setRenderedAtDim(MAX_PREVIEW_DIM);
+        setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
+      }
+      setPrintSimLoading(false);
+    }, 0);
+
+    return () => { cancelled = true; clearTimeout(tid); };
+  }, [printSimActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fit-to-view on image load. Uses zoom-independent base dims.
   useEffect(() => {
@@ -1008,6 +1378,18 @@ export function CanvasView() {
   // zooming in doesn't produce visible pixel blocks on the 1200px canvas.
   const isPixelated = separationMode === 'palette';
 
+  // Viewing distance blur — CSS filter applied to the canvas display.
+  // Simulates optical dot blending at distance without altering print data.
+  // sigma = (distanceFt / 6) × one_dot_css_px; dots at 45 LPI on a 12" print
+  // fully blend optically at ~6 ft, so 6ft gives ~1 dot-width sigma.
+  const canvasBlur = (() => {
+    if (viewingDistance === 'raw' || separationMode !== 'cmyk-pro') return 0;
+    const distFt = viewingDistance === '1ft' ? 1 : viewingDistance === '3ft' ? 3 : 6;
+    const lpi = proCmykSettings.halftoneC?.lpi ?? 45;
+    const dotSizePx = (canvasDims.w * cssScale) / (documentWidthIn * lpi);
+    return Math.max(0.2, (distFt / 6) * dotSizePx);
+  })();
+
   // Artboard box style for empty state.
   const artboardBoxStyle: React.CSSProperties = artboardSize.w > 0
     ? {
@@ -1191,7 +1573,10 @@ export function CanvasView() {
           >
             {/* image-rendering: auto when canvas size ≥ display (downscale or 1:1 = smooth/sharp).
                 image-rendering: pixelated when canvas is CSS-upscaled past MAX_RENDER_DIM (nearest-neighbor). */}
-            <canvas ref={canvasRef} style={{ imageRendering: isPixelated ? 'pixelated' : 'auto' }} />
+            <canvas ref={canvasRef} style={{
+              imageRendering: isPixelated ? 'pixelated' : 'auto',
+              filter: canvasBlur > 0 ? `blur(${canvasBlur.toFixed(2)}px)` : undefined,
+            }} />
             <canvas
               ref={paintOverlayRef}
               width={canvasDims.w || 1}
@@ -1240,6 +1625,11 @@ export function CanvasView() {
               />
             )}
           </div>
+
+          {/* CMYK Inspect Grid — 2×2 channel overlay for Inspect mode */}
+          {separationMode === 'cmyk-pro' && !printSimActive && viewingDistance !== 'raw' && processedLayers.length >= 4 && processedLayerDims && (
+            <CmykInspectGrid />
+          )}
 
           {isProcessing && (
             <div className="processing-overlay">

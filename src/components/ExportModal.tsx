@@ -63,9 +63,10 @@ function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean
 }
 
 export function ExportModal({ onClose, onExport, defaultFileName, separationMode }: Props) {
-  const isDither = separationMode === 'palette';
-  const isVector = separationMode === 'vector';
-  const isCmyk   = separationMode === 'cmyk';
+  const isDither  = separationMode === 'palette';
+  const isVector  = separationMode === 'vector';
+  const isCmyk    = separationMode === 'cmyk';
+  const isCmykPro = separationMode === 'cmyk-pro';
   const FORMATS  = isVector ? [{ value: 'svg' as ExportFormat, label: 'SVG', ext: '.svg' }] : isDither ? FORMATS_DITHER : FORMATS_ALL;
 
   const [mode,             setMode]             = useState<'screen' | 'dtg'>(isDither ? 'dtg' : 'screen');
@@ -123,7 +124,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)',
         }}>
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-            {isVector ? 'Export — Vector' : isDither ? 'Export — Dither' : 'Export'}
+            {isVector ? 'Export — Vector' : isDither ? 'Export — Dither' : isCmykPro ? 'Export — CMYK Pro' : 'Export'}
           </span>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -132,8 +133,8 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           </button>
         </div>
 
-        {/* Mode selector — hidden for Dither and Vector */}
-        {!isDither && !isVector && (
+        {/* Mode selector — hidden for Dither, Vector, and CMYK Pro */}
+        {!isDither && !isVector && !isCmykPro && (
           <div style={{ padding: '14px 16px 0', borderBottom: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
               Export Mode
@@ -249,7 +250,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
         )}
 
         {/* Pantone names toggle — not applicable for vector or CMYK */}
-        {!isVector && !isCmyk && (
+        {!isVector && !isCmyk && !isCmykPro && (
           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>

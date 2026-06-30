@@ -5,6 +5,9 @@ import type { RGB } from '../engine/colorSeparation';
 import { defaultPaletteColors } from '../engine/colorSeparation';
 export type { CmykParams };
 import type { TextureType } from '../engine/textureGenerator';
+import type { ProCmykSettings, CmykProPlates } from '../engine/cmykProEngine';
+import { DEFAULT_PRO_CMYK_SETTINGS } from '../engine/cmykProEngine';
+export type { ProCmykSettings, CmykProPlates };
 
 export interface PresetData {
   mode: SeparationMode;
@@ -50,6 +53,8 @@ export interface PresetData {
   cmykViewMode?: 'composite' | 'plates';
   cmykQuality?: number | null;
   cmykVisibility?: Record<string, boolean>;
+  // CMYK Pro fields
+  proCmykSettings?: ProCmykSettings;
 }
 
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
@@ -183,6 +188,7 @@ export interface HistorySnapshot {
   vectorInkColor: string;
   vectorPathMode: 'spline' | 'polygon';
   vectorMinSpeckle: number;
+  proCmykSettings: ProCmykSettings;
 }
 
 export function captureSnapshot(s: AppState): HistorySnapshot {
@@ -235,6 +241,7 @@ export function captureSnapshot(s: AppState): HistorySnapshot {
     vectorInkColor: s.vectorInkColor,
     vectorPathMode: s.vectorPathMode,
     vectorMinSpeckle: s.vectorMinSpeckle,
+    proCmykSettings: { ...s.proCmykSettings },
   };
 }
 
@@ -251,6 +258,7 @@ interface AppState {
   underbaseEnabled: boolean;
   underbaseChoke: 0 | 1 | 2;
   underbaseIncludeShadows: boolean;
+  underbaseDensity: number;
   pantonePreviewActive: boolean;
   splitView: boolean;
 
@@ -308,6 +316,10 @@ interface AppState {
   paletteSoftness:     number;
   paletteAnalyzeKey:   number; // increment to force re-analysis
 
+  // CMYK Pro mode
+  proCmykSettings: ProCmykSettings;
+  proCmykPlates: CmykProPlates | null;
+
   // Vector mode
   vectorNumColors: number;
   vectorDetail: number;
@@ -335,6 +347,9 @@ interface AppState {
   isProcessing: boolean;
   soloLayerId: string | null;
   mockupOpen: boolean;
+  printSimActive: boolean;
+  printSimLoading: boolean;
+  viewingDistance: 'raw' | '1ft' | '3ft' | '6ft';
 
   historyStack: HistorySnapshot[];
   pushHistory: () => void;
@@ -350,6 +365,7 @@ interface AppState {
   setUnderbaseEnabled: (v: boolean) => void;
   setUnderbaseChoke: (v: 0 | 1 | 2) => void;
   setUnderbaseIncludeShadows: (v: boolean) => void;
+  setUnderbaseDensity: (v: number) => void;
   setPantonePreviewActive: (v: boolean) => void;
   setSplitView: (v: boolean) => void;
   updateGlobalPattern: (updates: Partial<PatternConfig>) => void;
@@ -409,6 +425,9 @@ interface AppState {
   setPaletteSoftness:     (v: number) => void;
   triggerPaletteReanalyze: () => void;
 
+  setProCmykSettings: (s: Partial<ProCmykSettings>) => void;
+  setProCmykPlates: (p: CmykProPlates | null) => void;
+
   setVectorNumColors: (v: number) => void;
   setVectorDetail: (v: number) => void;
   setVectorSmooth: (v: number) => void;
@@ -434,6 +453,9 @@ interface AppState {
   setIsProcessing: (v: boolean) => void;
   setSoloLayerId: (id: string | null) => void;
   setMockupOpen: (v: boolean) => void;
+  setPrintSimActive: (v: boolean) => void;
+  setPrintSimLoading: (v: boolean) => void;
+  setViewingDistance: (v: 'raw' | '1ft' | '3ft' | '6ft') => void;
   presetsOpen: boolean;
   setPresetsOpen: (v: boolean) => void;
   loadPreset: (data: PresetData) => void;
@@ -451,10 +473,11 @@ export const useStore = create<AppState>((set, get) => ({
   underbaseEnabled: false,
   underbaseChoke: 1,
   underbaseIncludeShadows: false,
+  underbaseDensity: 85,
   pantonePreviewActive: false,
   splitView: false,
   globalPattern: DEFAULT_GLOBAL_PATTERN,
-  bgRemovalEnabled: true,
+  bgRemovalEnabled: ((localStorage.getItem('at-mode') as string | null) === 'cmyk-pro') ? false : true,
   bgTolerance: 30,
   bgMask: null,
   showRegistrationMarks: false,
@@ -499,6 +522,9 @@ export const useStore = create<AppState>((set, get) => ({
   paletteSoftness:     0,
   paletteAnalyzeKey:   0,
 
+  proCmykSettings: { ...DEFAULT_PRO_CMYK_SETTINGS },
+  proCmykPlates: null,
+
   vectorNumColors: 8,
   vectorDetail: 3,
   vectorSmooth: 5,
@@ -524,6 +550,9 @@ export const useStore = create<AppState>((set, get) => ({
   isProcessing: false,
   soloLayerId: null,
   mockupOpen: false,
+  printSimActive: false,
+  printSimLoading: false,
+  viewingDistance: 'raw',
   presetsOpen: false,
 
   historyStack: [],
@@ -553,6 +582,8 @@ export const useStore = create<AppState>((set, get) => ({
       colorSepColors: [],
       colorSepLockedColors: null,
       colorSepVisibility: {},
+      proCmykPlates: null,
+      canvasColor: '#000000',
     })),
   updateLayer: (id, updates) =>
     set((s) => ({ layers: s.layers.map((l) => (l.id === id ? { ...l, ...updates } : l)) })),
@@ -561,6 +592,7 @@ export const useStore = create<AppState>((set, get) => ({
   setUnderbaseEnabled: (underbaseEnabled) => set({ underbaseEnabled }),
   setUnderbaseChoke: (underbaseChoke) => set({ underbaseChoke }),
   setUnderbaseIncludeShadows: (underbaseIncludeShadows) => set({ underbaseIncludeShadows }),
+  setUnderbaseDensity: (underbaseDensity) => set({ underbaseDensity }),
   setPantonePreviewActive: (pantonePreviewActive) => set({ pantonePreviewActive }),
   setSplitView: (splitView) => set({ splitView }),
   updateGlobalPattern: (updates) =>
@@ -598,7 +630,7 @@ export const useStore = create<AppState>((set, get) => ({
     layers: DEFAULT_LAYERS,
     globalPattern: DEFAULT_GLOBAL_PATTERN,
     knockoutEnabled: true,
-    bgRemovalEnabled: true,
+    bgRemovalEnabled: s.separationMode === 'cmyk-pro' ? false : true,
     bgTolerance: 30,
     imageAdjustments: { ...DEFAULT_IMAGE_ADJ },
     imageAdjustmentsPerMode: {},
@@ -637,6 +669,8 @@ export const useStore = create<AppState>((set, get) => ({
     vectorDetail: 3,
     vectorSmooth: 5,
     vectorInkColor: '#ffffff',
+    proCmykSettings: { ...DEFAULT_PRO_CMYK_SETTINGS },
+    proCmykPlates: null,
     paintMasks: {},
     soloLayerId: null,
     bgMask: null,
@@ -724,10 +758,15 @@ export const useStore = create<AppState>((set, get) => ({
     // Always reset image adjustments on mode switch — each mode starts from the original image
     imageAdjustments: { ...DEFAULT_IMAGE_ADJ },
     imageAdjustmentsPerMode: {},
-    // When entering CMYK mode, show all plates composite by default
-    cmykVisibility: separationMode === 'cmyk'
+    // When entering CMYK or CMYK Pro mode, show all plates composite by default
+    cmykVisibility: (separationMode === 'cmyk' || separationMode === 'cmyk-pro')
       ? { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true }
       : s.cmykVisibility,
+    // Clear stale plates when leaving cmyk-pro
+    proCmykPlates: separationMode === 'cmyk-pro' ? s.proCmykPlates : null,
+    // BG removal is off by default in CMYK Pro — ICC separation composites onto
+    // white substrate internally; a cut-out mask produces incorrect ink values.
+    bgRemovalEnabled: separationMode === 'cmyk-pro' ? false : s.bgRemovalEnabled,
   })); },
   setCmykLpi: (cmykLpi) => set({ cmykLpi }),
   setCmykLayerVisible: (id, v) => set((s) => ({ cmykVisibility: { ...s.cmykVisibility, [id]: v } })),
@@ -757,6 +796,9 @@ export const useStore = create<AppState>((set, get) => ({
   setPaletteSoftness:     (paletteSoftness) => set({ paletteSoftness }),
   triggerPaletteReanalyze: () => set((s) => ({ paletteAnalyzeKey: s.paletteAnalyzeKey + 1 })),
 
+  setProCmykSettings: (updates) => set((s) => ({ proCmykSettings: { ...s.proCmykSettings, ...updates } })),
+  setProCmykPlates: (proCmykPlates) => set({ proCmykPlates }),
+
   setVectorNumColors: (vectorNumColors) => set({ vectorNumColors }),
   setVectorDetail: (vectorDetail) => set({ vectorDetail }),
   setVectorSmooth: (vectorSmooth) => set({ vectorSmooth }),
@@ -782,6 +824,9 @@ export const useStore = create<AppState>((set, get) => ({
   setIsProcessing: (isProcessing) => set({ isProcessing }),
   setSoloLayerId: (soloLayerId) => set({ soloLayerId }),
   setMockupOpen: (mockupOpen) => set({ mockupOpen }),
+  setPrintSimActive: (printSimActive) => set({ printSimActive }),
+  setPrintSimLoading: (printSimLoading) => set({ printSimLoading }),
+  setViewingDistance: (viewingDistance) => set({ viewingDistance }),
   setPresetsOpen: (presetsOpen) => set({ presetsOpen }),
   loadPreset: (data) => set((s) => {
     const base = {
@@ -829,7 +874,10 @@ export const useStore = create<AppState>((set, get) => ({
       cmykQuality:    data.cmykQuality    !== undefined ? data.cmykQuality    : s.cmykQuality,
       cmykVisibility: data.cmykVisibility ?? s.cmykVisibility,
     } : {};
-    return { ...base, ...dither, ...colorSep, ...cmyk };
+    const proCmyk = data.mode === 'cmyk-pro' ? {
+      proCmykSettings: data.proCmykSettings ?? s.proCmykSettings,
+    } : {};
+    return { ...base, ...dither, ...colorSep, ...cmyk, ...proCmyk };
   }),
   capturePreset: (): PresetData => {
     const s = get();
@@ -879,6 +927,9 @@ export const useStore = create<AppState>((set, get) => ({
       base.cmykViewMode   = s.cmykViewMode;
       base.cmykQuality    = s.cmykQuality;
       base.cmykVisibility = s.cmykVisibility;
+    }
+    if (s.separationMode === 'cmyk-pro') {
+      base.proCmykSettings = { ...s.proCmykSettings };
     }
     return base;
   },
