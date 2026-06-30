@@ -369,23 +369,6 @@ function DocumentSection() {
             {p.label}
           </button>
         ))}
-        {originalImage && (
-          <button
-            className="btn btn-ghost"
-            title="Set document size to match uploaded image aspect ratio at current DPI"
-            style={{ fontSize: 10, padding: '2px 7px', height: 22 }}
-            onClick={() => {
-              const rawW = originalImage.width / documentDpi;
-              const rawH = originalImage.height / documentDpi;
-              const maxDim = Math.max(rawW, rawH);
-              const scale = maxDim > 24 ? 24 / maxDim : 1;
-              setDocumentWidth(Math.max(0.5, parseFloat((rawW * scale).toFixed(2))));
-              setDocumentHeight(Math.max(0.5, parseFloat((rawH * scale).toFixed(2))));
-            }}
-          >
-            Adapt
-          </button>
-        )}
       </div>
 
       {/* Width × Height */}
@@ -406,6 +389,28 @@ function DocumentSection() {
             onChange={(e) => setDocumentHeight(parseFloat(e.target.value) || documentHeightIn)}
           />
           <span style={{ color: 'var(--text-dim)', fontSize: 11, flexShrink: 0 }}>in</span>
+          {originalImage && (
+            <button
+              title="Fit document to image aspect ratio at current DPI"
+              style={{
+                fontSize: 9, padding: '3px 7px', height: 22, flexShrink: 0,
+                fontFamily: 'var(--font-mono)', fontWeight: 600, letterSpacing: '0.04em',
+                background: 'transparent', cursor: 'pointer',
+                border: '1px solid rgba(128,128,128,0.35)',
+                color: 'var(--text-dim)',
+              }}
+              onClick={() => {
+                const rawW = originalImage.width / documentDpi;
+                const rawH = originalImage.height / documentDpi;
+                const maxDim = Math.max(rawW, rawH);
+                const scale = maxDim > 24 ? 24 / maxDim : 1;
+                setDocumentWidth(Math.max(0.5, parseFloat((rawW * scale).toFixed(2))));
+                setDocumentHeight(Math.max(0.5, parseFloat((rawH * scale).toFixed(2))));
+              }}
+            >
+              Adapt
+            </button>
+          )}
         </div>
       </div>
 
