@@ -19,7 +19,7 @@ export function MobileBlock() {
       {/* Branding */}
       <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', color: '#fff', marginBottom: 4 }}>
         AutoThresh Web{' '}
-        <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
+        <span style={{ color: 'var(--accent)' }}>Beta 1.0.1</span>
       </div>
 
       {/* Divider */}

@@ -34,7 +34,7 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
           <AppIcon size={56} color="var(--accent)" />
         </div>
         <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-          AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
+          AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.1</span>
         </div>
       </div>
 

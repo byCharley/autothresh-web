@@ -53,7 +53,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
     <header className="topbar">
       <div className="topbar-logo" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <AppIcon size={22} color="var(--accent)" />
-        <span>AutoThresh Web </span><span style={{ color: 'var(--accent)' }}>Beta 1.0.0</span>
+        <span>AutoThresh Web </span><span style={{ color: 'var(--accent)' }}>Beta 1.0.1</span>
       </div>
 
       <div className="topbar-divider" />

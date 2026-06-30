@@ -15,6 +15,18 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-06-30',
+    label: 'CMYK Pro Fixes',
+    improved: [
+      'Adapt now instantly updates the canvas aspect ratio — switching preview modes (Raw, Inspect, Print Sim) no longer reverts to the previous document size.',
+      'Print Sim loading bar reliably clears after processing completes and no longer gets stuck when switching modes.',
+      'Clicking Inspect auto-clears any isolated (soloed) layer so the full composite is always visible.',
+    ],
+    added: [
+      'Subscribe modal — choose Monthly ($11.99/mo) or Annual ($115.10/yr) plans with a 3-day free trial, accessible from the login screen.',
+    ],
+  },
+  {
     date: '2026-06-26',
     label: 'Performance & Export',
     added: [
