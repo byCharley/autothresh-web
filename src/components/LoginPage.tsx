@@ -311,6 +311,9 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                   <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
                     3-day free trial<br />Cancel anytime
                   </div>
+                  <div style={{ marginTop: 8, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', opacity: 0.6, lineHeight: 1.5 }}>
+                    $11.99 charged after trial
+                  </div>
                 </div>
 
                 {/* Annual */}
@@ -346,6 +349,9 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                   <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 2, opacity: 0.7 }}>$115.10 billed yearly</div>
                   <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
                     3-day free trial<br />Best value
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', opacity: 0.6, lineHeight: 1.5 }}>
+                    $115.10 charged after trial
                   </div>
                 </div>
 

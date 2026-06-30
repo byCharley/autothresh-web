@@ -958,6 +958,7 @@ function CmykProLayerSection() {
     printSimActive, setPrintSimActive, printSimLoading, setPrintSimLoading,
     canvasColor, showFabricBg,
     viewingDistance, setViewingDistance, proCmykSettings, setProCmykSettings,
+    soloLayerId, setSoloLayerId,
   } = useStore();
 
   const [iccOpen, setIccOpen] = useState(true);
@@ -1139,6 +1140,7 @@ function CmykProLayerSection() {
                       togglePrintSim();
                     } else {
                       if (printSimActive) setPrintSimActive(false);
+                      if (id === 'inspect' && soloLayerId) setSoloLayerId(null);
                       setViewingDistance(id === 'inspect' ? '1ft' : 'raw');
                     }
                   }}

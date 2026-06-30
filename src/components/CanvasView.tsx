@@ -218,6 +218,15 @@ export function CanvasView() {
   const printSimActiveRef = useRef(printSimActive);
   useEffect(() => { printSimActiveRef.current = printSimActive; }, [printSimActive]);
 
+  // Bumped by the main async effect after it updates the cache with new dims.
+  // The lightweight print-sim effect subscribes to this so it re-fires once fresh
+  // plates are available (e.g. after the user clicks Adapt then switches preview mode).
+  const [printSimBump, setPrintSimBump] = useState(0);
+
+  // Always-current ref to computeDocLayout — updated synchronously each render
+  // so stale-closure effects can call it to get expected canvas dims.
+  const computeDocLayoutRef = useRef<((dim?: number) => ReturnType<typeof computeDocLayout>) | null>(null);
+
   // Increments when real texture PNGs finish loading so the processing effect reruns.
   const [textureVersion, setTextureVersion] = useState(0);
 
@@ -292,6 +301,9 @@ export function CanvasView() {
       artScaleH: artInDocH,
     };
   }
+
+  // Keep computeDocLayoutRef current every render so stale-closure effects can use it.
+  computeDocLayoutRef.current = computeDocLayout;
 
   // ── Effects ───────────────────────────────────────────────────────────────────
 
@@ -573,6 +585,9 @@ export function CanvasView() {
               cmykProApiKeyRef.current = apiKey;
               // Cache plates + layout dims for fast rebuilds on subsequent changes
               cmykProCacheRef.current = { plates, bgMask: localBgMask, artPrevW, artPrevH, artPrevOffX, artPrevOffY, docPrevW, docPrevH };
+              // If print sim is active but its lightweight rebuild was skipped due to
+              // stale cache (user clicked Adapt before this API call finished), re-trigger it.
+              if (printSimActiveRef.current) setPrintSimBump((b) => b + 1);
               const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
               const previewDpi = artPrevW / documentWidthIn;
               // Physical Neugebauer ink simulation.
@@ -1093,6 +1108,19 @@ export function CanvasView() {
     let cancelled = false;
     // Capture live values before the deferred call
     const simActive = printSimActive;
+
+    // Stale-cache guard: if cache dims don't match current layout (user clicked Adapt
+    // while async was in flight), skip the rebuild entirely — the main effect will
+    // finish and draw the canvas at the correct dims, then bump printSimBump to re-trigger.
+    const expectedLayout = computeDocLayoutRef.current?.(1200);
+    const dimsMismatch = !!expectedLayout && (
+      Math.abs(cached.docPrevW - expectedLayout.docPrevW) > 2 ||
+      Math.abs(cached.docPrevH - expectedLayout.docPrevH) > 2
+    );
+    if (dimsMismatch) {
+      if (!simActive) setPrintSimLoading(false);
+      return;
+    }
     const { plates, bgMask: localBgMask, artPrevW, artPrevH, artPrevOffX, artPrevOffY, docPrevW, docPrevH } = cached;
     const capturedSettings = proCmykSettings;
 
@@ -1165,7 +1193,7 @@ export function CanvasView() {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(tid); };
-  }, [printSimActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [printSimActive, printSimBump]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fit-to-view on image load. Uses zoom-independent base dims.
   useEffect(() => {
