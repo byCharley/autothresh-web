@@ -924,23 +924,6 @@ function CmykScreenSection() {
 
 // ─── CMYK Pro Section ─────────────────────────────────────────────────────────
 
-const CMYK_PRO_PROFILES = [
-  { value: 'USWebCoatedSWOP',      label: 'US Web Coated (SWOP)' },
-  { value: 'CoatedFOGRA39',        label: 'Coated FOGRA 39' },
-  { value: 'WebCoatedFOGRA28',     label: 'Web Coated FOGRA 28' },
-  { value: 'JapanColor2001Coated', label: 'Japan Color 2001 Coated' },
-] as const;
-
-const CMYK_PRO_BG = [
-  { value: 'adaptive',     label: 'Adaptive (Recommended)' },
-  { value: 'photo',        label: 'Photo' },
-  { value: 'illustration', label: 'Illustration' },
-  { value: 'poster',       label: 'Poster' },
-  { value: 'vintage',      label: 'Vintage' },
-  { value: 'screenPrint',  label: 'Screen Print' },
-  { value: 'maxInkSaving', label: 'Maximum Ink Saving' },
-] as const;
-
 const QUALITY_PRESETS = [
   { label: 'Ultra Fine', lpi: 80 },
   { label: 'Fine',       lpi: 70 },
@@ -1006,12 +989,13 @@ const HALFTONE_CHANNELS = [
 
 function CmykProSection() {
   const {
-    separationMode, proCmykSettings, setProCmykSettings, documentDpi, isProcessing,
+    separationMode, proCmykSettings, setProCmykSettings, documentDpi,
   } = useStore();
+  const [toneOpen, setToneOpen] = useState<Record<string, boolean>>({});
   if (separationMode !== 'cmyk-pro') return null;
   const s = proCmykSettings;
 
-  // Update a single channel's halftone settings; if lockLpi, sync LPI across all channels
+  // Update a single channel's halftone settings; if lockLpi/lockAngle, sync across all channels
   function updateChannel(
     key: 'halftoneC' | 'halftoneM' | 'halftoneY' | 'halftoneK',
     patch: Partial<import('../engine/cmykProEngine').ChannelHalftone>,
@@ -1019,67 +1003,22 @@ function CmykProSection() {
     const current = s[key];
     const updated = { ...current, ...patch };
     const allKeys = ['halftoneC', 'halftoneM', 'halftoneY', 'halftoneK'] as const;
+    let extra: Record<string, unknown> = {};
     if (s.lockLpi && patch.lpi !== undefined) {
-      const lpiUpdates = Object.fromEntries(
-        allKeys.map(k => [k, { ...s[k], lpi: patch.lpi! }])
-      );
-      setProCmykSettings({ ...lpiUpdates, [key]: updated });
-    } else {
-      setProCmykSettings({ [key]: updated });
+      extra = Object.fromEntries(allKeys.map(k => [k, { ...s[k], lpi: patch.lpi! }]));
     }
+    if (s.lockAngle && patch.angle !== undefined) {
+      const delta = patch.angle - s[key].angle;
+      const angleUpdates = Object.fromEntries(
+        allKeys.map(k => [k, { ...(extra[k] as object ?? s[k]), angle: ((s[k].angle + delta) % 180 + 180) % 180 }])
+      );
+      extra = { ...extra, ...angleUpdates };
+    }
+    setProCmykSettings({ ...extra, [key]: updated });
   }
 
   return (
     <>
-      <Section title="ICC Separation">
-        {isProcessing && (
-          <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', marginBottom: 8, lineHeight: 1.5 }}>
-            Separating via ICC profile…
-          </div>
-        )}
-        <div className="field">
-          <span className="field-label">Profile</span>
-          <select
-            className="at-select"
-            value={s.cmykProfile}
-            onChange={(e) => setProCmykSettings({ cmykProfile: e.target.value as typeof s.cmykProfile })}
-          >
-            {CMYK_PRO_PROFILES.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
-        </div>
-        <div className="field" style={{ marginTop: 6 }}>
-          <span className="field-label">Black Gen</span>
-          <select
-            className="at-select"
-            value={s.blackGeneration}
-            onChange={(e) => setProCmykSettings({ blackGeneration: e.target.value as typeof s.blackGeneration })}
-          >
-            {CMYK_PRO_BG.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-        </div>
-        <Slider label="Total Ink Limit" value={s.totalInkLimit} min={200} max={400} step={5}
-          onChange={(v) => setProCmykSettings({ totalInkLimit: v })} unit="%" />
-        <SwitchRow label="Preserve Pure Black" checked={s.preservePureBlack}
-          onChange={(v) => setProCmykSettings({ preservePureBlack: v })} />
-        <Slider label="Gray Balance" value={s.grayBalance} min={-50} max={50} step={1}
-          onChange={(v) => setProCmykSettings({ grayBalance: v })} />
-      </Section>
-
-      <Section title="Density" defaultOpen={false}>
-        <Slider label="Cyan"    value={s.densityC} min={50} max={150} step={1}
-          onChange={(v) => setProCmykSettings({ densityC: v })} unit="%" />
-        <Slider label="Magenta" value={s.densityM} min={50} max={150} step={1}
-          onChange={(v) => setProCmykSettings({ densityM: v })} unit="%" />
-        <Slider label="Yellow"  value={s.densityY} min={50} max={150} step={1}
-          onChange={(v) => setProCmykSettings({ densityY: v })} unit="%" />
-        <Slider label="Black"   value={s.densityK} min={50} max={150} step={1}
-          onChange={(v) => setProCmykSettings({ densityK: v })} unit="%" />
-      </Section>
-
       <Section title="Halftone Screen" defaultOpen={true}>
         {/* Quality preset: sets LPI for all channels at once */}
         {(() => {
@@ -1114,6 +1053,8 @@ function CmykProSection() {
 
         <SwitchRow label="Lock LPI" checked={s.lockLpi ?? true}
           onChange={(v) => setProCmykSettings({ lockLpi: v })} />
+        <SwitchRow label="Lock Angle" checked={s.lockAngle ?? false}
+          onChange={(v) => setProCmykSettings({ lockAngle: v })} />
 
         {/* Angle preset: sets all 4 channel angles at once */}
         {(() => {
@@ -1191,9 +1132,9 @@ function CmykProSection() {
           const ht = s[key];
           const dotPx = (documentDpi / Math.max(1, ht.lpi)).toFixed(1);
           return (
-            <div key={key} style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+            <div key={key} style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Channel header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{
                   width: 8, height: 8, borderRadius: '50%',
                   background: dot, flexShrink: 0, display: 'inline-block',
@@ -1207,8 +1148,8 @@ function CmykProSection() {
               </div>
 
               {/* LPI + Angle row */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
-                <div className="field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div className="field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
                   <span className="field-label" style={{ fontSize: 9 }}>LPI</span>
                   <input
                     type="number"
@@ -1221,12 +1162,12 @@ function CmykProSection() {
                     onBlur={(e) => updateChannel(key, { lpi: Math.max(25, Math.min(200, +e.target.value || 65)) })}
                     style={{
                       width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border)',
-                      color: 'var(--text)', borderRadius: 4, padding: '3px 6px',
+                      color: 'var(--text)', borderRadius: 4, padding: '4px 6px',
                       fontSize: 12, fontFamily: 'var(--font-mono)',
                     }}
                   />
                 </div>
-                <div className="field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+                <div className="field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
                   <span className="field-label" style={{ fontSize: 9 }}>Angle</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
                     <input
@@ -1236,7 +1177,7 @@ function CmykProSection() {
                       onChange={(e) => updateChannel(key, { angle: Math.max(0, Math.min(180, +e.target.value || 0)) })}
                       style={{
                         flex: 1, background: 'var(--input-bg)', border: '1px solid var(--border)',
-                        color: 'var(--text)', borderRadius: 4, padding: '3px 6px',
+                        color: 'var(--text)', borderRadius: 4, padding: '4px 6px',
                         fontSize: 12, fontFamily: 'var(--font-mono)',
                       }}
                     />
@@ -1246,7 +1187,7 @@ function CmykProSection() {
               </div>
 
               {/* Shape */}
-              <div className="field" style={{ marginBottom: 4 }}>
+              <div className="field">
                 <span className="field-label">Shape</span>
                 <select
                   className="at-select"
@@ -1266,17 +1207,37 @@ function CmykProSection() {
               <Slider label="Dot Gain" value={ht.dotGain} min={0} max={30} step={1}
                 onChange={(v) => updateChannel(key, { dotGain: v })} unit="%" />
 
-              {/* Highlight cleanup */}
-              <Slider label="HL Clip" value={ht.highlightClip ?? 3} min={0} max={10} step={0.5}
-                onChange={(v) => updateChannel(key, { highlightClip: v })} unit="%" />
-              <Slider label="HL Fade" value={ht.highlightFade ?? 5} min={0} max={15} step={0.5}
-                onChange={(v) => updateChannel(key, { highlightFade: v })} unit="%" />
+              {/* Tone curve — collapsed by default */}
+              <button
+                onClick={() => setToneOpen(prev => ({ ...prev, [key]: !(prev[key] ?? false) }))}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-dim)', fontSize: 9, fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.08em', textTransform: 'uppercase', padding: 0,
+                }}
+              >
+                <span style={{
+                  display: 'inline-block',
+                  transform: (toneOpen[key] ?? false) ? 'rotate(90deg)' : 'none',
+                  transition: 'transform 0.15s',
+                  fontSize: 8,
+                }}>▶</span>
+                Tone Curve
+              </button>
 
-              {/* Shadow cleanup — fill tiny holes in heavy shadows to prevent mesh clog */}
-              <Slider label="SH Clip" value={ht.shadowClip ?? 0} min={0} max={10} step={0.5}
-                onChange={(v) => updateChannel(key, { shadowClip: v })} unit="%" />
-              <Slider label="SH Fade" value={ht.shadowFade ?? 0} min={0} max={15} step={0.5}
-                onChange={(v) => updateChannel(key, { shadowFade: v })} unit="%" />
+              {(toneOpen[key] ?? false) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingLeft: 4, borderLeft: '2px solid var(--border)' }}>
+                  <Slider label="HL Clip" value={ht.highlightClip ?? 3} min={0} max={10} step={0.5}
+                    onChange={(v) => updateChannel(key, { highlightClip: v })} unit="%" />
+                  <Slider label="HL Fade" value={ht.highlightFade ?? 5} min={0} max={15} step={0.5}
+                    onChange={(v) => updateChannel(key, { highlightFade: v })} unit="%" />
+                  <Slider label="SH Clip" value={ht.shadowClip ?? 0} min={0} max={10} step={0.5}
+                    onChange={(v) => updateChannel(key, { shadowClip: v })} unit="%" />
+                  <Slider label="SH Fade" value={ht.shadowFade ?? 0} min={0} max={15} step={0.5}
+                    onChange={(v) => updateChannel(key, { shadowFade: v })} unit="%" />
+                </div>
+              )}
             </div>
           );
         })}
@@ -1295,7 +1256,6 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
   if (!originalImage) {
     return (
       <aside className="panel-right" data-tutorial="tutorial-controls">
-        <div className="panel-header"><span className="panel-title">Controls</span></div>
         <div className="control-scroll">
           <DocumentSection />
           <RegistrationSection />
@@ -1306,25 +1266,6 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
 
   return (
     <aside className="panel-right" data-tutorial="tutorial-controls">
-      <div className="panel-header">
-        {separationMode === 'cmyk' ? (
-          <span className="panel-title">CMYK</span>
-        ) : separationMode === 'cmyk-pro' ? (
-          <span className="panel-title">CMYK Pro</span>
-        ) : separationMode === 'palette' ? (
-          <span className="panel-title">Dither</span>
-        ) : separationMode === 'vector' ? (
-          <span className="panel-title">Vector</span>
-        ) : layer ? (
-          <>
-            <span className="panel-title">{layer.name}</span>
-            <div style={{ width: 14, height: 14, background: layer.color, border: '1px solid var(--border-2)' }} />
-          </>
-        ) : (
-          <span className="panel-title">Controls</span>
-        )}
-      </div>
-
       <div className="control-scroll">
         <DocumentSection />
         <RegistrationSection />

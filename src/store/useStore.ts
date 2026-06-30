@@ -384,6 +384,12 @@ interface AppState {
 
   setCanvasColor: (color: string) => void;
   setShowFabricBg: (v: boolean) => void;
+  fabricTexture: 'none' | 'light' | 'dark';
+  setFabricTexture: (v: 'none' | 'light' | 'dark') => void;
+  fabricBlendStrength: number;
+  setFabricBlendStrength: (v: number) => void;
+  fabricTextureDepth: number;
+  setFabricTextureDepth: (v: number) => void;
   setDocumentDpi: (dpi: number) => void;
   setDocumentWidth: (v: number) => void;
   setDocumentHeight: (v: number) => void;
@@ -492,6 +498,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   canvasColor: '#000000',
   showFabricBg: true,
+  fabricTexture: 'none' as const,
+  fabricBlendStrength: 0.25,
+  fabricTextureDepth: 1.0,
   documentDpi: 300,
   documentWidthIn: 12,
   documentHeightIn: 14,
@@ -612,6 +621,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   setCanvasColor: (canvasColor) => set({ canvasColor }),
   setShowFabricBg: (showFabricBg) => set({ showFabricBg }),
+  setFabricTexture: (fabricTexture) => set({ fabricTexture }),
+  setFabricBlendStrength: (fabricBlendStrength) => set({ fabricBlendStrength: Math.max(0, Math.min(1, fabricBlendStrength)) }),
+  setFabricTextureDepth: (fabricTextureDepth) => set({ fabricTextureDepth: Math.max(0, Math.min(1, fabricTextureDepth)) }),
   setDocumentDpi: (documentDpi) => set({ documentDpi }),
   setDocumentWidth: (documentWidthIn) => set({ documentWidthIn: Math.max(0.5, documentWidthIn) }),
   setDocumentHeight: (documentHeightIn) => set({ documentHeightIn: Math.max(0.5, documentHeightIn) }),

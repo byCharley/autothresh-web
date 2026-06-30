@@ -20,6 +20,8 @@ import {
   upsampleCmykPlates, upsampleMask, areaAverageDownsample,
 } from '../engine/inkSimulator';
 import { generateCmykProUnderbase, chokeWhitePlate } from '../engine/underbaseEngine';
+import { applyFabricBlend } from '../engine/fabricBlend';
+
 
 // ── CMYK Inspect Grid ─────────────────────────────────────────────────────────
 // Shows all 4 CMYK halftone plates in a 2×2 grid overlay for inspection mode.
@@ -177,7 +179,7 @@ export function CanvasView() {
     bgRemovalEnabled, bgTolerance,
     showRegistrationMarks, regMarkPadding, documentBleed,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
-    canvasColor, showFabricBg,
+    canvasColor, showFabricBg, fabricTexture, fabricBlendStrength, fabricTextureDepth,
     imageAdjustments,
     documentDpi, documentWidthIn, documentHeightIn,
     separationMode, cmykLpi, cmykVisibility, cmykAngles, cmykParams, cmykViewMode,
@@ -218,6 +220,12 @@ export function CanvasView() {
 
   // Increments when real texture PNGs finish loading so the processing effect reruns.
   const [textureVersion, setTextureVersion] = useState(0);
+
+  // Fabric blend engine — cached ImageData for the current texture so the
+  // per-pixel blend can run synchronously after each canvas draw.
+  const fabricImgDataRef = useRef<ImageData | null>(null);
+  const fabricLoadKeyRef = useRef('');
+  const [fabricVersion, setFabricVersion] = useState(0);
 
   const [zoom, setZoom]         = useState(1);
   const [offset, setOffset]     = useState({ x: 0, y: 0 });
@@ -315,6 +323,30 @@ export function CanvasView() {
     load('/textures/Noise_Texture.png', 'noise-texture');
   }, []);
 
+  // Load fabric texture into ImageData cache when the texture selection changes.
+  // Bumps fabricVersion so the main render effect reapplies the blend.
+  useEffect(() => {
+    if (fabricTexture === 'none') {
+      fabricImgDataRef.current = null;
+      fabricLoadKeyRef.current = '';
+      return;
+    }
+    const path = fabricTexture === 'light'
+      ? '/textures/White_Fabric_ATW.png'
+      : '/textures/Black_Fabric_ATW.png';
+    if (fabricLoadKeyRef.current === path) return; // already loaded
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      c.getContext('2d')!.drawImage(img, 0, 0);
+      fabricImgDataRef.current = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+      fabricLoadKeyRef.current = path;
+      setFabricVersion((v) => v + 1);
+    };
+    img.src = path;
+  }, [fabricTexture]);
+
   // Keep zoomRef in sync so pinch handlers can read current zoom without stale closures.
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
@@ -374,6 +406,30 @@ export function CanvasView() {
     return result;
   }
 
+  // Apply the procedural fabric blend to a fully-drawn canvas element.
+  // Reads fabric ImageData from the cache ref (loaded by the separate effect above)
+  // and applies the per-pixel Blend If engine in-place.
+  function applyFabricBlendToCanvas(canvas: HTMLCanvasElement) {
+    const fabData = fabricImgDataRef.current;
+    if (!fabData || fabricTexture === 'none') return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const artData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const hex = canvasColor.replace('#', '');
+    const canvasRgb: [number, number, number] = [
+      parseInt(hex.slice(0, 2), 16),
+      parseInt(hex.slice(2, 4), 16),
+      parseInt(hex.slice(4, 6), 16),
+    ];
+    applyFabricBlend(artData, fabData, {
+      garmentType: fabricTexture,
+      blendStrength: fabricBlendStrength,
+      textureDepth: fabricTextureDepth,
+      canvasRgb,
+    });
+    ctx.putImageData(artData, 0, 0);
+  }
+
   // Main processing effect.
   // Runs when settings change — zoom is a pure CSS transform and never triggers a reprocess.
   // Always renders at MAX_PREVIEW_DIM; bilinear CSS upscaling gives clean results at any zoom.
@@ -418,7 +474,7 @@ export function CanvasView() {
           const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
           const ALL_VIS = { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true };
 
-          const cellSize = Math.max(3, documentDpi / cmykLpi);
+          const cellSize = Math.max(3, (artPrevW / documentWidthIn * 4) / cmykLpi);
           const allLayers = cmykSeparate(artScaled, cellSize, localBgMask, cmykAngles, 1, cmykParams);
           const visibleLayers = allLayers.filter(l => visibleIds.includes(l.id));
           setProcessedLayers(visibleLayers);
@@ -473,26 +529,29 @@ export function CanvasView() {
               c: cmykVisibility['cmyk-c'], m: cmykVisibility['cmyk-m'],
               y: cmykVisibility['cmyk-y'], k: cmykVisibility['cmyk-k'],
             };
-            // Dot View uses documentDpi so halftone cells are at true document scale
-            // (visible dots when zoomed in). Print Sim uses previewDpi × 4× upsample
-            // then area-averages back down to simulate optical ink blending.
             const previewDpi = artPrevW / documentWidthIn;
             let whitePlate: Uint8Array | undefined;
             if (underbaseEnabled) {
               const raw = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
               whitePlate = chokeWhitePlate(raw, plates.width, plates.height, underbaseChoke);
             }
-            const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, documentDpi, cachedBgMask, whitePlate);
+            // Dot View: render at 1× using a 150 DPI reference floor so cells are ~2.3px at 65 LPI.
+            // previewDpi (~85 DPI) gives 1.3px cells — sub-pixel for the ss=4 hole test,
+            // causing K holes to be noise-level (K≈191 not 0) → colored speckles in composite.
+            // 150/lpi ≈ 2.31px: K hole diameter = 1.24px → 2.07px at 167% zoom → visible rosette.
+            const dotViewDpi = Math.max(150, previewDpi);
+            const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, dotViewDpi, cachedBgMask, whitePlate, 4);
             const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
             setProcessedLayers(allLayers.filter(l => visibleIds.includes(l.id)));
             setProcessedLayerDims({ w: artPrevW, h: artPrevH });
             let composite: ImageData;
             if (simActive) {
+              // Print Sim: 4× upsample → Neugebauer composite → area-downsample
               const SCALE = 4;
               const plates4x = upsampleCmykPlates(plates, SCALE);
               const bgMask4x = cachedBgMask ? upsampleMask(cachedBgMask, artPrevW, artPrevH, SCALE) : null;
-              const whitePlate4x = whitePlate ? upsampleMask(whitePlate, plates.width, plates.height, SCALE) : undefined;
-              const layers4x = applyHalftoneToCmykPlates(plates4x, proCmykSettings, previewDpi * SCALE, bgMask4x, whitePlate4x);
+              const wp4x = whitePlate ? upsampleMask(whitePlate, plates.width, plates.height, SCALE) : undefined;
+              const layers4x = applyHalftoneToCmykPlates(plates4x, proCmykSettings, previewDpi * SCALE, bgMask4x, wp4x);
               const hi = compositeHalftonePlates(layers4x, artPrevW * SCALE, artPrevH * SCALE, primaries, bgMask4x, vis, garmentMode, garmentRgb);
               composite = areaAverageDownsample(hi, artPrevW, artPrevH);
             } else {
@@ -541,26 +600,27 @@ export function CanvasView() {
                 const raw2 = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
                 whitePlate2 = chokeWhitePlate(raw2, plates.width, plates.height, underbaseChoke);
               }
-              const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, documentDpi, localBgMask, whitePlate2);
+              // Dot View: 150 DPI floor gives ~2.3px cells — visible rosette, clean K holes
+              const dotViewDpi2 = Math.max(150, previewDpi);
+              const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, dotViewDpi2, localBgMask, whitePlate2, 4);
               const visibleLayers = allLayers.filter(l => visibleIds.includes(l.id));
               setProcessedLayers(visibleLayers);
               setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
               let composite: ImageData;
               if (simActive) {
-                // Print Simulation: raster halftone at 4× preview DPI for fine optical blending.
+                // Print Sim: 4× upsample → Neugebauer composite → area-downsample
                 const SCALE = 4;
-                const plates4x   = upsampleCmykPlates(plates, SCALE);
-                const bgMask4x   = localBgMask ? upsampleMask(localBgMask, artPrevW, artPrevH, SCALE) : null;
-                const whitePlate4x2 = whitePlate2 ? upsampleMask(whitePlate2, plates.width, plates.height, SCALE) : undefined;
-                const layers4x   = applyHalftoneToCmykPlates(plates4x, proCmykSettings, previewDpi * SCALE, bgMask4x, whitePlate4x2);
+                const plates4x2   = upsampleCmykPlates(plates, SCALE);
+                const bgMask4x2   = localBgMask ? upsampleMask(localBgMask, artPrevW, artPrevH, SCALE) : null;
+                const wp4x2 = whitePlate2 ? upsampleMask(whitePlate2, plates.width, plates.height, SCALE) : undefined;
+                const layers4x2   = applyHalftoneToCmykPlates(plates4x2, proCmykSettings, previewDpi * SCALE, bgMask4x2, wp4x2);
                 const hi = compositeHalftonePlates(
-                  layers4x, artPrevW * SCALE, artPrevH * SCALE,
-                  primaries, bgMask4x, vis, garmentMode, garmentRgb2,
+                  layers4x2, artPrevW * SCALE, artPrevH * SCALE,
+                  primaries, bgMask4x2, vis, garmentMode, garmentRgb2,
                 );
                 composite = areaAverageDownsample(hi, artPrevW, artPrevH);
               } else {
-                // Dot View: halftone at display resolution — dots remain visible for inspection
                 composite = compositeHalftonePlates(
                   allLayers, artPrevW, artPrevH, primaries, localBgMask, vis, garmentMode, garmentRgb2,
                 );
@@ -582,6 +642,7 @@ export function CanvasView() {
               if (canvas) {
                 canvas.width = docPrevW; canvas.height = docPrevH;
                 canvas.getContext('2d')!.drawImage(asyncDoc, 0, 0);
+                applyFabricBlendToCanvas(canvas);
                 setCanvasDims({ w: docPrevW, h: docPrevH });
                 setRenderedAtDim(MAX_PREVIEW_DIM);
                 setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
@@ -988,6 +1049,7 @@ export function CanvasView() {
           canvas.width  = docPrevW;
           canvas.height = docPrevH;
           canvas.getContext('2d')!.drawImage(docCanvas, 0, 0);
+          applyFabricBlendToCanvas(canvas);
           setCanvasDims({ w: docPrevW, h: docPrevH });
           setRenderedAtDim(MAX_PREVIEW_DIM);
           setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
@@ -1014,6 +1076,7 @@ export function CanvasView() {
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, colorSepLockedColors,
     underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     proCmykSettings,
+    fabricTexture, fabricBlendStrength, fabricTextureDepth, fabricVersion,
     // printSimActive excluded — handled by separate composite-rebuild effect (no API re-call)
     // renderDim excluded — zoom is a pure CSS transform, never triggers a reprocess
   ]);
@@ -1032,7 +1095,6 @@ export function CanvasView() {
     const simActive = printSimActive;
     const { plates, bgMask: localBgMask, artPrevW, artPrevH, artPrevOffX, artPrevOffY, docPrevW, docPrevH } = cached;
     const capturedSettings = proCmykSettings;
-    const capturedDocDpi = documentDpi;
 
     const tid = setTimeout(() => {
       if (cancelled) return;
@@ -1059,19 +1121,22 @@ export function CanvasView() {
         const rawSim = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
         whitePlateSim = chokeWhitePlate(rawSim, plates.width, plates.height, underbaseChoke);
       }
-      const allLayers = applyHalftoneToCmykPlates(plates, capturedSettings, capturedDocDpi, localBgMask, whitePlateSim);
+      // Dot View: 150 DPI floor gives ~2.3px cells — visible rosette, clean K holes
+      const dotViewDpiSim = Math.max(150, previewDpi);
+      const allLayers = applyHalftoneToCmykPlates(plates, capturedSettings, dotViewDpiSim, localBgMask, whitePlateSim, 4);
       const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
       setProcessedLayers(allLayers.filter(l => visibleIds.includes(l.id)));
       setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
       let composite: ImageData;
       if (simActive) {
+        // Print Sim: 4× upsample → Neugebauer composite → area-downsample
         const SCALE = 4;
-        const plates4x = upsampleCmykPlates(plates, SCALE);
-        const bgMask4x = localBgMask ? upsampleMask(localBgMask, artPrevW, artPrevH, SCALE) : null;
-        const whitePlateSim4x = whitePlateSim ? upsampleMask(whitePlateSim, plates.width, plates.height, SCALE) : undefined;
-        const layers4x = applyHalftoneToCmykPlates(plates4x, capturedSettings, previewDpi * SCALE, bgMask4x, whitePlateSim4x);
-        const hi = compositeHalftonePlates(layers4x, artPrevW * SCALE, artPrevH * SCALE, primaries, bgMask4x, vis, garmentMode, garmentRgbSim);
+        const platesSim4x = upsampleCmykPlates(plates, SCALE);
+        const bgMask4xSim = localBgMask ? upsampleMask(localBgMask, artPrevW, artPrevH, SCALE) : null;
+        const wp4xSim = whitePlateSim ? upsampleMask(whitePlateSim, plates.width, plates.height, SCALE) : undefined;
+        const layers4xSim = applyHalftoneToCmykPlates(platesSim4x, capturedSettings, previewDpi * SCALE, bgMask4xSim, wp4xSim);
+        const hi = compositeHalftonePlates(layers4xSim, artPrevW * SCALE, artPrevH * SCALE, primaries, bgMask4xSim, vis, garmentMode, garmentRgbSim);
         composite = areaAverageDownsample(hi, artPrevW, artPrevH);
       } else {
         composite = compositeHalftonePlates(allLayers, artPrevW, artPrevH, primaries, localBgMask, vis, garmentMode, garmentRgbSim);
@@ -1091,6 +1156,7 @@ export function CanvasView() {
       if (canvas) {
         canvas.width = docPrevW; canvas.height = docPrevH;
         canvas.getContext('2d')!.drawImage(asyncDoc, 0, 0);
+        applyFabricBlendToCanvas(canvas);
         setCanvasDims({ w: docPrevW, h: docPrevH });
         setRenderedAtDim(MAX_PREVIEW_DIM);
         setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
@@ -1376,7 +1442,7 @@ export function CanvasView() {
   // Dither/palette mode uses nearest-neighbor: bilinear blends adjacent ink dots
   // (e.g. red + blue → purple). All other modes use smooth bilinear upscaling so
   // zooming in doesn't produce visible pixel blocks on the 1200px canvas.
-  const isPixelated = separationMode === 'palette';
+  const isPixelated = separationMode === 'palette' || viewingDistance === 'raw';
 
   // Viewing distance blur — CSS filter applied to the canvas display.
   // Simulates optical dot blending at distance without altering print data.
@@ -1571,8 +1637,8 @@ export function CanvasView() {
             className={`canvas-wrap${!showFabricBg ? ' no-bg' : ''}`}
             style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${cssScale})` }}
           >
-            {/* image-rendering: auto when canvas size ≥ display (downscale or 1:1 = smooth/sharp).
-                image-rendering: pixelated when canvas is CSS-upscaled past MAX_RENDER_DIM (nearest-neighbor). */}
+            {/* Fabric blend is applied procedurally in-canvas via applyFabricBlendToCanvas —
+                no CSS mix-blend-mode or separate fabric div needed. */}
             <canvas ref={canvasRef} style={{
               imageRendering: isPixelated ? 'pixelated' : 'auto',
               filter: canvasBlur > 0 ? `blur(${canvasBlur.toFixed(2)}px)` : undefined,
@@ -1582,7 +1648,7 @@ export function CanvasView() {
               width={canvasDims.w || 1}
               height={canvasDims.h || 1}
               style={{
-                position: 'absolute', top: 0, left: 0,
+                position: 'absolute', top: 0, left: 0, zIndex: 2,
                 pointerEvents: 'none',
                 opacity: 0.85,
               }}

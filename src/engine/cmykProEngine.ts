@@ -30,6 +30,7 @@ export interface ProCmykSettings {
   densityK:          number;
   grayBalance:       number;   // -50 to +50
   lockLpi:           boolean;
+  lockAngle:         boolean;
   halftoneC:         ChannelHalftone;
   halftoneM:         ChannelHalftone;
   halftoneY:         ChannelHalftone;
@@ -57,6 +58,7 @@ export const DEFAULT_PRO_CMYK_SETTINGS: ProCmykSettings = {
   densityK:          100,
   grayBalance:       0,
   lockLpi:           true,
+  lockAngle:         false,
   halftoneC:         mkHalftone(15),
   halftoneM:         mkHalftone(75),
   halftoneY:         mkHalftone(0),
@@ -277,38 +279,48 @@ function resolveHalftone(
   return { lpi: s.lpi ?? 65, angle: legacyAngle, shape: 'round', dotGain: s.dotGain ?? 15, highlightClip: 5, highlightFade: 8, shadowClip: 0, shadowFade: 0 };
 }
 
+// ss=1  → single sample with 1.2px AA ramp  (fast; used for export)
+// ss=4  → 4×4 supersampled binary coverage  (16 samples/px; used for canvas preview)
 function rasterizeHalftoneChannel(
   chan: Uint8Array,
   w: number, h: number,
   ht: ChannelHalftone,
   documentDpi: number,
   bgMask: Uint8Array | null,
+  ss = 1,
 ): Uint8Array {
-  const cs   = Math.max(1, documentDpi / ht.lpi);
-  const dg   = ht.dotGain / 100;
-  const rad  = ht.angle * Math.PI / 180;
-  const cosA = Math.cos(rad);
-  const sinA = Math.sin(rad);
+  const cs    = Math.max(1, documentDpi / ht.lpi);
+  const dg    = ht.dotGain / 100;
+  const rad   = ht.angle * Math.PI / 180;
+  const cosA  = Math.cos(rad);
+  const sinA  = Math.sin(rad);
   const mask  = new Uint8Array(w * h);
-
-  // Constants hoisted out of the pixel loop
-  const AA    = 1.2;
-  const AA_H  = AA * 0.5;
   const maxR  = cs * 0.5;
+
+  // AA ramp constants — ss=1 path only
+  const AA   = 1.2;
+  const AA_H = AA * 0.5;
+
   const hClip = ht.highlightClip / 100;
   const hFade = ht.highlightFade / 100;
   const sClip = (ht.shadowClip ?? 0) / 100;
   const sFade = (ht.shadowFade ?? 0) / 100;
 
+  // Supersampling grid: jittered offsets inside [-0.5, +0.5] pixel
+  // For ss=4 these are -0.375, -0.125, +0.125, +0.375
+  const ss2 = ss * ss;
+  const sso: number[] = [];
+  for (let i = 0; i < ss; i++) sso.push((i + 0.5) / ss - 0.5);
+
   // Per-cell cache — recomputed only when the halftone cell changes.
-  // Bilinear sample + clip/fade/gain + shape math amortised over ~cs² pixels.
   let prevCX = Number.MIN_SAFE_INTEGER, prevCY = Number.MIN_SAFE_INTEGER;
-  let cellR = 0, cellR2 = 0, cellAaOut2 = 0, cellAaIn2 = 0;
-  let cellInv = false;                       // euclidean / diamond: shrinking hole
-  let cellEllA2 = 0, cellEllB2 = 0, cellEllAMin = 0, cellEllInv = false;
-  let cellHs = 0;                            // square half-side
-  let cellLinMax = 0;                        // line max half-width
-  let cellDiamT = 0;                         // diamond threshold (Manhattan space)
+  let cellR = 0, cellR2 = 0;
+  let cellAaOut2 = 0, cellAaIn2 = 0;          // ss=1 path only
+  let cellInv    = false;                       // euclidean / diamond: shrinking hole
+  let cellEllA2  = 0, cellEllB2 = 0, cellEllAMin = 0, cellEllInv = false;
+  let cellHs     = 0;
+  let cellLinMax = 0;
+  let cellDiamT  = 0;
 
   for (let py = 0; py < h; py++) {
     const pyS = py * sinA, pyC = py * cosA;
@@ -325,10 +337,11 @@ function rasterizeHalftoneChannel(
       // ── Cell cache refresh ────────────────────────────────────────────────
       if (cellX !== prevCX || cellY !== prevCY) {
         prevCX = cellX; prevCY = cellY;
+
         const cu = (cellX + 0.5) * cs;
         const cv = (cellY + 0.5) * cs;
 
-        // Bilinear sample at rotated cell center
+        // Bilinear sample at rotated cell center → ink value [0, 1]
         const fx = Math.max(0, Math.min(w - 1, cu * cosA - cv * sinA));
         const fy = Math.max(0, Math.min(h - 1, cu * sinA + cv * cosA));
         const x0 = Math.floor(fx), x1 = Math.min(w - 1, x0 + 1);
@@ -339,109 +352,177 @@ function rasterizeHalftoneChannel(
           chan[y1*w+x0]*(1-tx)*ty     + chan[y1*w+x1]*tx*ty
         ) / 255;
 
-        // Highlight clip + smooth fade
-        let fI = rawInk <= hClip ? 0 : rawInk < hClip+hFade ? rawInk*((rawInk-hClip)/hFade) : rawInk;
-        // Shadow clip + smooth fade
+        // Highlight clip/fade → shadow clip/fade → dot-gain compensation
+        let fI = rawInk <= hClip ? 0
+               : rawInk < hClip + hFade ? rawInk * ((rawInk - hClip) / hFade)
+               : rawInk;
         if (sClip > 0) {
           const gap = 1 - fI;
-          if (gap <= sClip) fI = 1;
-          else if (gap < sClip+sFade) fI = 1 - gap*((gap-sClip)/sFade);
+          if      (gap <= sClip)        fI = 1;
+          else if (gap < sClip + sFade) fI = 1 - gap * ((gap - sClip) / sFade);
         }
-        const ink = Math.max(0, fI - dg*fI*(1-fI)*4);
+        const ink = Math.max(0, fI - dg * fI * (1 - fI) * 4);
 
-        // Precompute shape-specific values for O(1) per-pixel lookup
+        // Shape-specific radius / threshold precomputation
         switch (ht.shape) {
           case 'round': {
-            cellR = maxR * Math.sqrt(ink / (Math.PI / 4));
+            // Growing circular dot. At 2.31px cells (150/lpi reference), corner gaps at
+            // dark tones are <0.8px on screen — sub-pixel and invisible. Euclidean inversion
+            // (hole at cell center) creates visible 1px K holes that show as colored clusters.
+            cellR  = maxR * Math.sqrt(ink / (Math.PI / 4));
             cellR2 = cellR * cellR;
-            const ro = cellR + AA_H, ri = Math.max(0, cellR - AA_H);
-            cellAaOut2 = ro*ro; cellAaIn2 = ri*ri;
+            if (ss === 1) {
+              const ro = cellR + AA_H, ri = Math.max(0, cellR - AA_H);
+              cellAaOut2 = ro * ro; cellAaIn2 = ri * ri;
+            }
             break;
           }
           case 'euclidean': {
-            const er = maxR * Math.sqrt(Math.min(ink, 1-ink) / (Math.PI / 4));
-            cellR = er; cellR2 = er*er; cellInv = ink > 0.5;
-            const ro = er + AA_H, ri = Math.max(0, er - AA_H);
-            cellAaOut2 = ro*ro; cellAaIn2 = ri*ri;
+            cellInv = ink > 0.5;
+            const er = maxR * Math.sqrt(Math.min(ink, 1 - ink) / (Math.PI / 4));
+            cellR = er; cellR2 = er * er;
+            if (ss === 1) {
+              const ro = er + AA_H, ri = Math.max(0, er - AA_H);
+              cellAaOut2 = ro * ro; cellAaIn2 = ri * ri;
+            }
             break;
           }
           case 'ellipse': {
             cellEllInv = ink >= Math.PI / 4;
             const baseR = cellEllInv
-              ? maxR * Math.sqrt((1-ink) / (Math.PI/4))
-              : maxR * Math.sqrt(ink / (Math.PI/4));
+              ? maxR * Math.sqrt((1 - ink) / (Math.PI / 4))
+              : maxR * Math.sqrt(ink / (Math.PI / 4));
             const a = baseR * 1.4, b = baseR / 1.4;
-            cellEllA2 = a*a; cellEllB2 = b*b; cellEllAMin = b;
+            cellEllA2 = a * a; cellEllB2 = b * b; cellEllAMin = b;
             break;
           }
-          case 'line':
-            cellLinMax = ink * maxR;
+          case 'line':    cellLinMax = ink * maxR; break;
+          case 'square':  cellHs = maxR * Math.sqrt(ink); break;
+          case 'diamond': {
+            cellInv   = ink >= 0.5;
+            cellDiamT = maxR * Math.sqrt(2 * Math.min(ink, 1 - ink));
             break;
-          case 'square':
-            cellHs = maxR * Math.sqrt(ink);
-            break;
-          case 'diamond':
-            cellDiamT = maxR * Math.sqrt(2 * Math.min(ink, 1-ink));
-            cellInv = ink >= 0.5;
-            break;
+          }
         }
       }
 
-      // ── Per-pixel signed-distance coverage ───────────────────────────────
       const du = su - (cellX + 0.5) * cs;
       const dv = sv - (cellY + 0.5) * cs;
       let cov: number;
 
-      switch (ht.shape) {
-        case 'round': {
-          const d2 = du*du + dv*dv;
-          if (d2 >= cellAaOut2) { cov = 0; break; }
-          if (d2 <= cellAaIn2)  { cov = 255; break; }
-          cov = Math.round(Math.max(0, Math.min(1, 0.5 - (Math.sqrt(d2) - cellR) / AA)) * 255);
-          break;
-        }
-        case 'euclidean': {
-          const d2 = du*du + dv*dv;
-          if (!cellInv) {
-            if (d2 >= cellAaOut2) { cov = 0; break; }
-            if (d2 <= cellAaIn2)  { cov = 255; break; }
-            cov = Math.round(Math.max(0, Math.min(1, 0.5 - (Math.sqrt(d2) - cellR) / AA)) * 255);
-          } else {
-            if (d2 >= cellAaOut2) { cov = 255; break; }
-            if (d2 <= cellAaIn2)  { cov = 0; break; }
-            cov = Math.round(Math.max(0, Math.min(1, 0.5 - (cellR - Math.sqrt(d2)) / AA)) * 255);
+      if (ss > 1) {
+        // ── Supersampled path: ss×ss binary samples averaged ─────────────
+        // Each sub-pixel is offset within the current pixel by (dxo, dyo).
+        // The rotated-space sub-pixel offset is:
+        //   subDu = du + dxo·cosA + dyo·sinA
+        //   subDv = dv − dxo·sinA + dyo·cosA
+        const shape = ht.shape;
+        let sum = 0;
+        for (let ssy = 0; ssy < ss; ssy++) {
+          const dyo = sso[ssy];
+          for (let ssx = 0; ssx < ss; ssx++) {
+            const dxo = sso[ssx];
+            const subDu = du + dxo * cosA + dyo * sinA;
+            const subDv = dv - dxo * sinA + dyo * cosA;
+
+            let inside: boolean;
+            switch (shape) {
+              case 'round': {
+                const d2r = subDu * subDu + subDv * subDv;
+                inside = cellInv ? d2r >= cellR2 : d2r <= cellR2;
+                break;
+              }
+              case 'euclidean': {
+                const d2 = subDu * subDu + subDv * subDv;
+                // ink ≤ 50%: growing dot (inside circle = ink)
+                // ink > 50%: shrinking hole (outside hole = ink)
+                inside = cellInv ? d2 >= cellR2 : d2 <= cellR2;
+                break;
+              }
+              case 'ellipse': {
+                const rhoSq = subDu * subDu / Math.max(1e-6, cellEllA2)
+                            + subDv * subDv / Math.max(1e-6, cellEllB2);
+                // ink < π/4: growing ellipse; ink ≥ π/4: shrinking elliptical hole
+                inside = cellEllInv ? rhoSq > 1 : rhoSq <= 1;
+                break;
+              }
+              case 'line': {
+                inside = Math.abs(subDv) <= cellLinMax;
+                break;
+              }
+              case 'square': {
+                inside = Math.max(Math.abs(subDu), Math.abs(subDv)) <= cellHs;
+                break;
+              }
+              case 'diamond': {
+                const ml = (Math.abs(subDu) + Math.abs(subDv)) / Math.SQRT2;
+                const thresh = cellDiamT / Math.SQRT2;
+                inside = cellInv ? ml > thresh : ml <= thresh;
+                break;
+              }
+              default: inside = false;
+            }
+            if (inside) sum++;
           }
-          break;
         }
-        case 'ellipse': {
-          const rho = Math.sqrt(du*du/Math.max(1e-6, cellEllA2) + dv*dv/Math.max(1e-6, cellEllB2));
-          const dist = cellEllInv ? (1 - rho) * cellEllAMin : (rho - 1) * cellEllAMin;
-          cov = Math.round(Math.max(0, Math.min(1, 0.5 - dist / AA)) * 255);
-          break;
+        cov = (sum / ss2 * 255 + 0.5) | 0;
+
+      } else {
+        // ── Single-sample AA ramp path (fast; used for export) ───────────
+        switch (ht.shape) {
+          case 'round': {
+            const d2 = du * du + dv * dv;
+            if (!cellInv) {
+              if (d2 >= cellAaOut2) { cov = 0; break; }
+              if (d2 <= cellAaIn2)  { cov = 255; break; }
+              cov = Math.round(Math.max(0, Math.min(1, 0.5 - (Math.sqrt(d2) - cellR) / AA)) * 255);
+            } else {
+              if (d2 >= cellAaOut2) { cov = 255; break; }
+              if (d2 <= cellAaIn2)  { cov = 0; break; }
+              cov = Math.round(Math.max(0, Math.min(1, 0.5 - (cellR - Math.sqrt(d2)) / AA)) * 255);
+            }
+            break;
+          }
+          case 'euclidean': {
+            const d2 = du * du + dv * dv;
+            if (!cellInv) {
+              if (d2 >= cellAaOut2) { cov = 0; break; }
+              if (d2 <= cellAaIn2)  { cov = 255; break; }
+              cov = Math.round(Math.max(0, Math.min(1, 0.5 - (Math.sqrt(d2) - cellR) / AA)) * 255);
+            } else {
+              if (d2 >= cellAaOut2) { cov = 255; break; }
+              if (d2 <= cellAaIn2)  { cov = 0; break; }
+              cov = Math.round(Math.max(0, Math.min(1, 0.5 - (cellR - Math.sqrt(d2)) / AA)) * 255);
+            }
+            break;
+          }
+          case 'ellipse': {
+            const rho  = Math.sqrt(du*du/Math.max(1e-6, cellEllA2) + dv*dv/Math.max(1e-6, cellEllB2));
+            const dist = cellEllInv ? (1 - rho) * cellEllAMin : (rho - 1) * cellEllAMin;
+            cov = Math.round(Math.max(0, Math.min(1, 0.5 - dist / AA)) * 255);
+            break;
+          }
+          case 'line': {
+            cov = Math.round(Math.max(0, Math.min(1, 0.5 - (Math.abs(dv) - cellLinMax) / AA)) * 255);
+            break;
+          }
+          case 'square': {
+            cov = Math.round(Math.max(0, Math.min(1, 0.5 - (Math.max(Math.abs(du), Math.abs(dv)) - cellHs) / AA)) * 255);
+            break;
+          }
+          case 'diamond': {
+            const ml   = (Math.abs(du) + Math.abs(dv)) / Math.SQRT2;
+            const dist = cellInv ? cellDiamT / Math.SQRT2 - ml : ml - cellDiamT / Math.SQRT2;
+            cov = Math.round(Math.max(0, Math.min(1, 0.5 - dist / AA)) * 255);
+            break;
+          }
+          default: cov = 0;
         }
-        case 'line': {
-          cov = Math.round(Math.max(0, Math.min(1, 0.5 - (Math.abs(dv) - cellLinMax) / AA)) * 255);
-          break;
-        }
-        case 'square': {
-          cov = Math.round(Math.max(0, Math.min(1, 0.5 - (Math.max(Math.abs(du), Math.abs(dv)) - cellHs) / AA)) * 255);
-          break;
-        }
-        case 'diamond': {
-          const ml = (Math.abs(du) + Math.abs(dv)) / Math.SQRT2;
-          const dist = cellInv ? cellDiamT/Math.SQRT2 - ml : ml - cellDiamT/Math.SQRT2;
-          cov = Math.round(Math.max(0, Math.min(1, 0.5 - dist / AA)) * 255);
-          break;
-        }
-        default:
-          cov = 0;
       }
 
       if (cov > 0) mask[pi] = cov;
     }
   }
-  // suppress unused variable warnings for cellR2
-  void cellR2;
   return mask;
 }
 
@@ -451,6 +532,7 @@ export function applyHalftoneToCmykPlates(
   documentDpi: number,
   bgMask:      Uint8Array | null,
   whitePlate?: Uint8Array,  // optional white underbase (pre-choked)
+  ss = 1,                   // supersampling factor (1 = AA ramp, 4 = 4×4 subsamples)
 ): ProcessedLayer[] {
   const { width: w, height: h } = plates;
   const channelData = [plates.C, plates.M, plates.Y, plates.K];
@@ -463,7 +545,7 @@ export function applyHalftoneToCmykPlates(
   ];
 
   const layers: ProcessedLayer[] = CMYK_CHANNEL_INFO.map(({ id, name, color }, ci) => {
-    const mask = rasterizeHalftoneChannel(channelData[ci], w, h, halftones[ci], documentDpi, bgMask);
+    const mask = rasterizeHalftoneChannel(channelData[ci], w, h, halftones[ci], documentDpi, bgMask, ss);
     return { id, name, color, mask, visible: true } satisfies ProcessedLayer;
   });
 
@@ -471,7 +553,7 @@ export function applyHalftoneToCmykPlates(
   if (whitePlate) {
     const kHt = resolveHalftone(settings.halftoneK, settings.angleK ?? 45, settings);
     const whiteHt: ChannelHalftone = { ...kHt, angle: 22.5 };
-    const whiteMask = rasterizeHalftoneChannel(whitePlate, w, h, whiteHt, documentDpi, bgMask);
+    const whiteMask = rasterizeHalftoneChannel(whitePlate, w, h, whiteHt, documentDpi, bgMask, ss);
     layers.push({ id: 'cmyk-w', name: 'White', color: [255, 255, 255], mask: whiteMask, visible: true });
   }
 

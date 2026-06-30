@@ -438,7 +438,11 @@ function App() {
           data.data[pi] = 0; data.data[pi + 1] = 0; data.data[pi + 2] = 0; data.data[pi + 3] = 255;
         }
       }
-      return canvasFromImageData(data);
+      const c = canvasFromImageData(data);
+      if (showRegistrationMarks) {
+        drawRegistrationMarks(c.getContext('2d')!, docPxW, docPxH, regPaddingPx, '#000000');
+      }
+      return c;
     };
 
     // Helper: derive garment hex string from cmykParams.garmentColor (0-100)
@@ -641,9 +645,7 @@ function App() {
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-dtg.psd`);
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         if (separationMode === 'cmyk-pro') {
-          // CMYK Pro PSD: no background layer.
-          // Layer order (bottom → top): White Underbase, C, M, Y, K, Color Proof.
-          // All plate layers are hidden by default; proof is visible.
+          // CMYK Pro PSD layer order (bottom → top): Garment Substrate, plate layers (hidden), Color Proof.
           const cmykOrder = ['cmyk-w', 'cmyk-y', 'cmyk-m', 'cmyk-c', 'cmyk-k'];
           const sorted = [...visibleLayers].sort((a, b) => {
             const ai = cmykOrder.indexOf(a.id);
@@ -656,23 +658,22 @@ function App() {
             top: 0, left: 0, blendMode: 'normal' as const, opacity: 1, hidden: true,
           }));
 
-          // Build proof via Neugebauer ink simulation — same path as the in-app preview
-          const [gR, gG, gB] = (canvasColor.match(/[\da-f]{2}/gi) ?? ['00','00','00'])
-            .map(h => parseInt(h, 16)) as [number, number, number];
-          const proofGarmentMode: 'dark' | 'light' =
-            gR * 0.299 + gG * 0.587 + gB * 0.114 < 128 ? 'dark' : 'light';
+          // Proof rendered in 'light' mode (ink on neutral paper) so all channels —
+          // including K — are clearly visible against the proof background.
+          // The Garment Substrate layer below provides garment-color context.
           const proofData = compositeHalftonePlates(
             artLayers, artScaleW, artScaleH,
             buildNeugebauerPrimaries(proCmykSettings.cmykProfile),
             artBgMask, { c: true, m: true, y: true, k: true },
-            proofGarmentMode, [gR, gG, gB],
+            'light',
           );
           const proofCanvas = document.createElement('canvas');
           proofCanvas.width = docPxW; proofCanvas.height = docPxH;
           const pCtx = proofCanvas.getContext('2d')!;
-          pCtx.fillStyle = canvasColor;
-          pCtx.fillRect(0, 0, docPxW, docPxH);
           pCtx.drawImage(canvasFromImageData(proofData), artOffX, artOffY);
+          if (showRegistrationMarks) {
+            drawRegistrationMarks(pCtx, docPxW, docPxH, regPaddingPx, '#000000');
+          }
 
           const buffer = writePsd({
             width: docPxW, height: docPxH, ...psdRes,

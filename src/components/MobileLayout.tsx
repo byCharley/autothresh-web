@@ -5,6 +5,7 @@ import { LayerPanel } from './LayerPanel';
 import { ControlPanel } from './ControlPanel';
 import { AppIcon } from './AppIcon';
 import { renderComposite } from '../engine/imageProcessor';
+import { compositeHalftonePlates, buildNeugebauerPrimaries } from '../engine/inkSimulator';
 
 interface Session {
   firstName?: string;
@@ -32,7 +33,8 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewDragRef = useRef({ active: false, sx: 0, sy: 0, cx: 0.5, cy: 0.5 });
   const { originalImage, imageFileName, separationMode, cmykQuality,
-          processedLayers, processedLayerDims, ditherComposite } = useStore();
+          processedLayers, processedLayerDims, ditherComposite,
+          canvasColor, proCmykSettings } = useStore();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -46,6 +48,11 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
   const toggleSheet = (tab: 'layers' | 'controls') =>
     setActiveSheet(prev => prev === tab ? null : tab);
 
+  const isCmykPro = separationMode === 'cmyk-pro';
+  // CMYK Pro gets ~45% of screen height so the full image is visible in the preview strip.
+  // Other modes use a compact 200px strip since they zoom into dot detail.
+  const previewH = isCmykPro ? Math.min(Math.round(window.innerHeight * 0.45), 420) : 200;
+
   // ── Live preview strip ────────────────────────────────────────────────────
   useEffect(() => {
     if (activeSheet !== 'controls' && activeSheet !== 'layers') return;
@@ -53,7 +60,31 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
     if (!canvas) return;
 
     let srcCanvas: HTMLCanvasElement | null = null;
-    if (separationMode === 'palette' && ditherComposite) {
+
+    if (isCmykPro && processedLayers.length && processedLayerDims) {
+      // Neugebauer ink simulation — matches in-app Print Sim preview
+      const { w, h } = processedLayerDims;
+      const [gR, gG, gB] = (canvasColor.match(/[\da-f]{2}/gi) ?? ['00','00','00'])
+        .map(x => parseInt(x, 16)) as [number, number, number];
+      const garmentMode: 'dark' | 'light' =
+        gR * 0.299 + gG * 0.587 + gB * 0.114 < 128 ? 'dark' : 'light';
+      const composite = compositeHalftonePlates(
+        processedLayers, w, h,
+        buildNeugebauerPrimaries(proCmykSettings.cmykProfile),
+        null, { c: true, m: true, y: true, k: true },
+        garmentMode, [gR, gG, gB],
+      );
+      // Layer garment bg + composite (composite has alpha=0 for transparent areas)
+      const tmp = document.createElement('canvas');
+      tmp.width = w; tmp.height = h;
+      tmp.getContext('2d')!.putImageData(composite, 0, 0);
+      srcCanvas = document.createElement('canvas');
+      srcCanvas.width = w; srcCanvas.height = h;
+      const sCtx = srcCanvas.getContext('2d')!;
+      sCtx.fillStyle = canvasColor;
+      sCtx.fillRect(0, 0, w, h);
+      sCtx.drawImage(tmp, 0, 0);
+    } else if (separationMode === 'palette' && ditherComposite) {
       srcCanvas = document.createElement('canvas');
       srcCanvas.width  = ditherComposite.w;
       srcCanvas.height = ditherComposite.h;
@@ -67,21 +98,26 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
     }
 
     const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = isCmykPro ? canvasColor : '#111';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (!srcCanvas) return;
 
-    // Show ~35% of the artwork width — close-up but with spatial context
-    const zoom = canvas.width / (srcCanvas.width * 0.35);
+    // CMYK Pro: fit full image width (dots become sub-pixel, image reads as the actual photo).
+    // Others: show 35% of width so individual dot patterns are inspectable.
+    const zoomFraction = isCmykPro ? 1.0 : 0.35;
+    const zoom = canvas.width / (srcCanvas.width * zoomFraction);
     const viewW = canvas.width  / zoom;
     const viewH = canvas.height / zoom;
 
     const cx = Math.min(Math.max(previewCenter.x * srcCanvas.width,  viewW / 2), srcCanvas.width  - viewW / 2);
     const cy = Math.min(Math.max(previewCenter.y * srcCanvas.height, viewH / 2), srcCanvas.height - viewH / 2);
 
-    ctx.imageSmoothingEnabled = false;
+    // CMYK Pro downsamples a large source to a small canvas → smooth filter looks better.
+    // Other modes zoom in to inspect dots → pixelated keeps hard edges.
+    ctx.imageSmoothingEnabled = isCmykPro;
+    if (isCmykPro) ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(srcCanvas, cx - viewW / 2, cy - viewH / 2, viewW, viewH, 0, 0, canvas.width, canvas.height);
-  }, [activeSheet, processedLayers, processedLayerDims, ditherComposite, separationMode, previewCenter]);
+  }, [activeSheet, processedLayers, processedLayerDims, ditherComposite, separationMode, previewCenter, canvasColor, proCmykSettings, isCmykPro]);
 
   const onPreviewDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -92,7 +128,8 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
     if (!d.active || !previewCanvasRef.current) return;
     const srcW = (separationMode === 'palette' && ditherComposite) ? ditherComposite.w : (processedLayerDims?.w ?? 1);
     const srcH = (separationMode === 'palette' && ditherComposite) ? ditherComposite.h : (processedLayerDims?.h ?? 1);
-    const zoom  = previewCanvasRef.current.width / (srcW * 0.35);
+    const panFraction = isCmykPro ? 1.0 : 0.35;
+    const zoom  = previewCanvasRef.current.width / (srcW * panFraction);
     const dxN = -(e.clientX - d.sx) / zoom / srcW;
     const dyN = -(e.clientY - d.sy) / zoom / srcH;
     setPreviewCenter({
@@ -261,8 +298,8 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
             <canvas
               ref={previewCanvasRef}
               width={Math.round(window.innerWidth)}
-              height={200}
-              style={{ display: 'block', width: '100%', height: 200 }}
+              height={previewH}
+              style={{ display: 'block', width: '100%', height: previewH }}
               onPointerDown={onPreviewDown}
               onPointerMove={onPreviewMove}
               onPointerUp={onPreviewUp}

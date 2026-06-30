@@ -53,7 +53,55 @@ function ChevronIcon({ open }: { open: boolean }) {
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
-function SectionHeader({ title, open, onToggle }: { title: string; open: boolean; onToggle: () => void }) {
+function HoverTip({ hint }: { hint: string }) {
+  const [show, setShow] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  return (
+    <>
+      <span
+        ref={ref}
+        onMouseEnter={() => {
+          if (ref.current) {
+            const iconR = ref.current.getBoundingClientRect();
+            const btnR = ref.current.closest('button')?.getBoundingClientRect() ?? iconR;
+            const tooltipW = 210;
+            setPos({
+              top: iconR.bottom + 4,
+              left: Math.max(8, btnR.left + btnR.width / 2 - tooltipW / 2),
+            });
+          }
+          setShow(true);
+        }}
+        onMouseLeave={() => setShow(false)}
+        style={{
+          width: 13, height: 13, borderRadius: '50%',
+          border: '1px solid currentColor', opacity: 0.55,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 9, fontFamily: 'serif', fontStyle: 'italic', fontWeight: 400,
+          letterSpacing: 0, textTransform: 'none', flexShrink: 0, cursor: 'default',
+        }}
+      >
+        i
+      </span>
+      {show && (
+        <div style={{
+          position: 'fixed', top: pos.top, left: pos.left, zIndex: 9999,
+          width: 210, padding: '7px 10px',
+          background: 'var(--surface-3)', border: '1px solid var(--border-2)',
+          borderRadius: 5, boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
+          fontSize: 10, color: 'var(--text)', fontFamily: 'var(--font-sans)',
+          lineHeight: 1.55, fontWeight: 400, pointerEvents: 'none',
+        }}>
+          {hint}
+        </div>
+      )}
+    </>
+  );
+}
+
+function SectionHeader({ title, open, onToggle, hint }: { title: string; open: boolean; onToggle: () => void; hint?: string }) {
   return (
     <button
       onClick={onToggle}
@@ -64,8 +112,11 @@ function SectionHeader({ title, open, onToggle }: { title: string; open: boolean
         cursor: 'pointer', color: 'var(--text-muted)',
       }}
     >
-      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-        {title}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+          {title}
+        </span>
+        {hint && <HoverTip hint={hint} />}
       </span>
       <ChevronIcon open={open} />
     </button>
@@ -647,17 +698,64 @@ function InksSection() {
 function FabricSection() {
   const [open, setOpen] = useState(true);
   const [brand, setBrand] = useState('LA Apparel');
-  const { canvasColor, setCanvasColor, showFabricBg, setShowFabricBg } = useStore();
+  const {
+    canvasColor, setCanvasColor, showFabricBg, setShowFabricBg,
+    fabricTexture, setFabricTexture,
+    fabricBlendStrength, setFabricBlendStrength,
+    fabricTextureDepth, setFabricTextureDepth,
+  } = useStore();
 
   const palette = BRAND_PALETTES.find((b) => b.brand === brand)?.colors ?? [];
   const matchedColor = palette.find((c) => c.hex.toLowerCase() === canvasColor.toLowerCase());
+  const realisticOn = fabricTexture !== 'none';
 
   return (
     <>
-      <SectionHeader title="Fabric" open={open} onToggle={() => setOpen(!open)} />
+      <SectionHeader title="Fabric (BG Color)" open={open} onToggle={() => setOpen(!open)} />
       {open && (
         <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <SwitchRow label="Show Background" checked={showFabricBg} onChange={setShowFabricBg} />
+
+          {/* Realistic fabric view */}
+          <SwitchRow
+            label="Realistic View"
+            checked={realisticOn}
+            onChange={(v) => setFabricTexture(v ? 'light' : 'none')}
+          />
+          {realisticOn && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                {(['light', 'dark'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setFabricTexture(t)}
+                    style={{
+                      padding: '5px 4px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: fabricTexture === t ? 'var(--accent)' : 'var(--surface-2)',
+                      color: fabricTexture === t ? '#000' : 'var(--text-dim)',
+                      border: `1px solid ${fabricTexture === t ? 'var(--accent)' : 'var(--border)'}`,
+                      borderRadius: 3, cursor: 'pointer', fontWeight: fabricTexture === t ? 700 : 400,
+                    }}
+                  >
+                    {t === 'light' ? 'Light Shirt' : 'Dark Shirt'}
+                  </button>
+                ))}
+              </div>
+              <Slider
+                label="Blend Strength"
+                value={Math.round(fabricBlendStrength * 100)}
+                min={0} max={100} step={1} unit="%"
+                onChange={(v) => setFabricBlendStrength(v / 100)}
+              />
+              <Slider
+                label="Texture Depth"
+                value={Math.round(fabricTextureDepth * 100)}
+                min={0} max={100} step={1} unit="%"
+                onChange={(v) => setFabricTextureDepth(v / 100)}
+              />
+            </div>
+          )}
 
           <div style={{ opacity: showFabricBg ? 1 : 0.45, pointerEvents: showFabricBg ? 'auto' : 'none', transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: 8 }}>
 
@@ -837,13 +935,33 @@ function MoireWarning({ channelId, proCmykSettings }: {
   );
 }
 
+const CMYK_PRO_PROFILES = [
+  { value: 'USWebCoatedSWOP',      label: 'US Web Coated (SWOP)' },
+  { value: 'CoatedFOGRA39',        label: 'Coated FOGRA 39' },
+  { value: 'WebCoatedFOGRA28',     label: 'Web Coated FOGRA 28' },
+  { value: 'JapanColor2001Coated', label: 'Japan Color 2001 Coated' },
+] as const;
+
+const CMYK_PRO_BG = [
+  { value: 'adaptive',     label: 'Adaptive (Recommended)' },
+  { value: 'photo',        label: 'Photo' },
+  { value: 'illustration', label: 'Illustration' },
+  { value: 'poster',       label: 'Poster' },
+  { value: 'vintage',      label: 'Vintage' },
+  { value: 'screenPrint',  label: 'Screen Print' },
+  { value: 'maxInkSaving', label: 'Maximum Ink Saving' },
+] as const;
+
 function CmykProLayerSection() {
   const {
     cmykVisibility, setCmykLayerVisible, proCmykPlates, isProcessing,
     printSimActive, setPrintSimActive, printSimLoading, setPrintSimLoading,
     canvasColor, showFabricBg,
-    viewingDistance, setViewingDistance, proCmykSettings,
+    viewingDistance, setViewingDistance, proCmykSettings, setProCmykSettings,
   } = useStore();
+
+  const [iccOpen, setIccOpen] = useState(true);
+  const [densityOpen, setDensityOpen] = useState(true);
 
   // Detect dark garment for simulation label (same threshold as CanvasView)
   const hex = canvasColor.replace('#', '');
@@ -867,21 +985,146 @@ function CmykProLayerSection() {
   };
 
   const allChannelsOn = ['cmyk-c','cmyk-m','cmyk-y','cmyk-k'].every(id => cmykVisibility[id] ?? false);
+  const s = proCmykSettings;
 
   return (
-    <div style={{ padding: '8px 8px 0px' }}>
+    <>
+      {/* ── ICC Separation ─────────────────────────────── */}
+      <SectionHeader title="ICC Separation" open={iccOpen} onToggle={() => setIccOpen(!iccOpen)} />
+      {iccOpen && (
+        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {isProcessing && (
+            <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>
+              Separating via ICC profile…
+            </div>
+          )}
+          <div className="field">
+            <span className="field-label">Profile</span>
+            <select
+              className="at-select"
+              value={s.cmykProfile}
+              onChange={(e) => setProCmykSettings({ cmykProfile: e.target.value as typeof s.cmykProfile })}
+            >
+              {CMYK_PRO_PROFILES.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <span className="field-label">Black Gen</span>
+            <select
+              className="at-select"
+              value={s.blackGeneration}
+              onChange={(e) => setProCmykSettings({ blackGeneration: e.target.value as typeof s.blackGeneration })}
+            >
+              {CMYK_PRO_BG.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <Slider label="Total Ink Limit" value={s.totalInkLimit} min={200} max={400} step={5}
+            onChange={(v) => setProCmykSettings({ totalInkLimit: v })} unit="%" />
+          <SwitchRow label="Preserve Pure Black" checked={s.preservePureBlack}
+            onChange={(v) => setProCmykSettings({ preservePureBlack: v })} />
+          <Slider label="Gray Balance" value={s.grayBalance} min={-50} max={50} step={1}
+            onChange={(v) => setProCmykSettings({ grayBalance: v })} />
+        </div>
+      )}
 
-      {/* ── Preview mode toggle ───────────────────────── */}
+      {/* ── Channel cards ─────────────────────────────── */}
+      <div style={{ padding: '8px 8px 0px' }}>
+        <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 6, lineHeight: 1.5 }}>
+          {isProcessing ? 'Separating via LittleCMS…' : proCmykPlates ? 'Solo a plate to inspect its screen.' : 'Load an image to begin ICC separation.'}
+        </div>
+
+        {[...CMYK_CARD_DEFS].reverse().map(({ id, name, color }) => {
+          const visible = cmykVisibility[id] ?? false;
+          const visCount = Object.values(cmykVisibility).filter(Boolean).length;
+          const isSolo = visible && visCount === 1;
+          return (
+            <div
+              key={id}
+              className="layer-card"
+              style={{ marginBottom: 4, outline: isSolo ? '1px solid var(--accent)' : 'none' }}
+            >
+              <div className="layer-swatch" style={{ cursor: 'default' }}>
+                <div className="layer-swatch-inner" style={{ background: color }} />
+              </div>
+              <div className="layer-card-info" style={{ minWidth: 0 }}>
+                <div className="layer-card-name">{name}</div>
+                {proCmykSettings && (
+                  <MoireWarning channelId={id} proCmykSettings={proCmykSettings} />
+                )}
+              </div>
+              <div className="layer-card-actions" style={{ gap: 4 }}>
+                <button
+                  className="vis-btn"
+                  title={isSolo ? 'Show all plates' : 'Solo this plate'}
+                  style={{ color: isSolo ? 'var(--accent)' : 'var(--text-dim)', opacity: isSolo ? 1 : 0.6 }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isSolo) {
+                      ['cmyk-k','cmyk-c','cmyk-m','cmyk-y'].forEach(k => setCmykLayerVisible(k, true));
+                    } else {
+                      ['cmyk-k','cmyk-c','cmyk-m','cmyk-y'].forEach(k => setCmykLayerVisible(k, k === id));
+                    }
+                  }}
+                >
+                  <SoloIcon active={isSolo} />
+                </button>
+                <button
+                  className={`vis-btn ${!visible ? 'hidden-layer' : ''}`}
+                  title={visible ? 'Hide plate' : 'Show plate'}
+                  onClick={(e) => { e.stopPropagation(); setCmykLayerVisible(id, !visible); }}
+                >
+                  <EyeIcon visible={visible} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {proCmykPlates && (
+          <button
+            className="btn btn-ghost"
+            style={{ width: '100%', fontSize: 9, fontFamily: 'var(--font-mono)', marginTop: 2, height: 22, opacity: 0.6 }}
+            onClick={() => ['cmyk-k','cmyk-c','cmyk-m','cmyk-y'].forEach(k => setCmykLayerVisible(k, !allChannelsOn))}
+          >
+            {allChannelsOn ? 'Hide all' : 'Show all'}
+          </button>
+        )}
+      </div>
+
+      {/* ── Density ───────────────────────────────────────── */}
+      <SectionHeader
+        title="Density"
+        open={densityOpen}
+        onToggle={() => setDensityOpen(!densityOpen)}
+        hint="Scales ink coverage per channel. Lower = less ink / lighter. Higher = more coverage / richer. Also shifts color balance."
+      />
+      {densityOpen && (
+        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <Slider label="Cyan"    value={s.densityC} min={50} max={150} step={1}
+            onChange={(v) => setProCmykSettings({ densityC: v })} unit="%" />
+          <Slider label="Magenta" value={s.densityM} min={50} max={150} step={1}
+            onChange={(v) => setProCmykSettings({ densityM: v })} unit="%" />
+          <Slider label="Yellow"  value={s.densityY} min={50} max={150} step={1}
+            onChange={(v) => setProCmykSettings({ densityY: v })} unit="%" />
+          <Slider label="Black"   value={s.densityK} min={50} max={150} step={1}
+            onChange={(v) => setProCmykSettings({ densityK: v })} unit="%" />
+        </div>
+      )}
+
+      {/* ── Preview Mode — below channel cards, above Fabric ── */}
       {proCmykPlates && !isProcessing && (
-        <div style={{ marginBottom: 8 }}>
-          {/* 3-mode selector: Raw Halftone / Dot Inspection / Print Sim */}
+        <div style={{ padding: '8px 8px', borderTop: '1px solid var(--border)' }}>
           <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
             Preview Mode
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3, marginBottom: 6 }}>
             {([
-              { id: 'raw',     label: 'Raw',     title: 'Raw halftone dots at document resolution' },
-              { id: 'inspect', label: 'Inspect', title: 'Dot inspection — zoom in to examine individual halftone cells' },
+              { id: 'raw',     label: 'Raw',       title: 'Raw halftone dots at document resolution' },
+              { id: 'inspect', label: 'Inspect',   title: 'Dot inspection — zoom in to examine individual halftone cells' },
               { id: 'sim',     label: 'Print Sim', title: 'Simulate physical ink on substrate — optical blending at viewing distance' },
             ] as const).map(({ id, label, title }) => {
               const isActive =
@@ -915,7 +1158,6 @@ function CmykProLayerSection() {
             })}
           </div>
 
-          {/* Loading bar while Print Sim computation runs */}
           {printSimLoading && (
             <div style={{ marginBottom: 6 }}>
               <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginBottom: 3 }}>
@@ -931,7 +1173,6 @@ function CmykProLayerSection() {
             </div>
           )}
 
-          {/* Garment mode label shown when Print Sim is active */}
           {printSimActive && !printSimLoading && (
             <div style={{
               fontSize: 9, fontFamily: 'var(--font-mono)', padding: '3px 6px',
@@ -946,72 +1187,7 @@ function CmykProLayerSection() {
           )}
         </div>
       )}
-
-      <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 6, lineHeight: 1.5 }}>
-        {isProcessing ? 'Separating via LittleCMS…' : proCmykPlates ? 'Solo a plate to inspect its screen.' : 'Load an image to begin ICC separation.'}
-      </div>
-
-      {/* ── Channel cards ─────────────────────────────── */}
-      {[...CMYK_CARD_DEFS].reverse().map(({ id, name, color }) => {
-        const visible = cmykVisibility[id] ?? false;
-        const visCount = Object.values(cmykVisibility).filter(Boolean).length;
-        const isSolo = visible && visCount === 1;
-        return (
-          <div
-            key={id}
-            className="layer-card"
-            style={{ marginBottom: 4, outline: isSolo ? '1px solid var(--accent)' : 'none' }}
-          >
-            <div className="layer-swatch" style={{ cursor: 'default' }}>
-              <div className="layer-swatch-inner" style={{ background: color }} />
-            </div>
-            <div className="layer-card-info" style={{ minWidth: 0 }}>
-              <div className="layer-card-name">{name}</div>
-              {proCmykSettings && (
-                <MoireWarning channelId={id} proCmykSettings={proCmykSettings} />
-              )}
-            </div>
-            <div className="layer-card-actions" style={{ gap: 4 }}>
-              {/* Solo button */}
-              <button
-                className="vis-btn"
-                title={isSolo ? 'Show all plates' : 'Solo this plate'}
-                style={{ color: isSolo ? 'var(--accent)' : 'var(--text-dim)', opacity: isSolo ? 1 : 0.6 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isSolo) {
-                    ['cmyk-k','cmyk-c','cmyk-m','cmyk-y'].forEach(k => setCmykLayerVisible(k, true));
-                  } else {
-                    ['cmyk-k','cmyk-c','cmyk-m','cmyk-y'].forEach(k => setCmykLayerVisible(k, k === id));
-                  }
-                }}
-              >
-                <SoloIcon active={isSolo} />
-              </button>
-              {/* Visibility toggle */}
-              <button
-                className={`vis-btn ${!visible ? 'hidden-layer' : ''}`}
-                title={visible ? 'Hide plate' : 'Show plate'}
-                onClick={(e) => { e.stopPropagation(); setCmykLayerVisible(id, !visible); }}
-              >
-                <EyeIcon visible={visible} />
-              </button>
-            </div>
-          </div>
-        );
-      })}
-
-      {/* All channels toggle */}
-      {proCmykPlates && (
-        <button
-          className="btn btn-ghost"
-          style={{ width: '100%', fontSize: 9, fontFamily: 'var(--font-mono)', marginTop: 2, height: 22, opacity: 0.6 }}
-          onClick={() => ['cmyk-k','cmyk-c','cmyk-m','cmyk-y'].forEach(k => setCmykLayerVisible(k, !allChannelsOn))}
-        >
-          {allChannelsOn ? 'Hide all' : 'Show all'}
-        </button>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -1520,14 +1696,6 @@ export function LayerPanel() {
 
   return (
     <aside className="panel-left" data-tutorial="tutorial-layers">
-      <div className="panel-header">
-        <span className="panel-title">Layers</span>
-        {separationMode === 'threshold' && (
-          <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-            {layers.filter(l => l.visible).length}/{layers.length}
-          </span>
-        )}
-      </div>
 
       {/* Single scrollable column */}
       <div className="left-scroll">

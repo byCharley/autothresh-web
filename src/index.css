@@ -635,7 +635,6 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0,0,0,0.4);
   z-index: 20;
   pointer-events: none;
 }
@@ -645,10 +644,10 @@ html, body, #root {
   font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent);
-  padding: 8px 16px;
-  background: var(--surface);
-  border: 1px solid var(--accent);
+  color: #fff;
+  padding: 8px 18px;
+  background: rgba(0, 0, 0, 0.98);
+  border-radius: 4px;
 }
 
 /* ─── Right Panel ────────────────────────────────────────────────────────────── */
@@ -696,17 +695,17 @@ html, body, #root {
 }
 
 .control-section-body {
-  padding: 12px 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
 }
 
 /* ─── Form Controls ──────────────────────────────────────────────────────────── */
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .field-row {
@@ -736,7 +735,7 @@ html, body, #root {
 .slider-track {
   flex: 1;
   position: relative;
-  height: 20px;
+  height: 26px;
   display: flex;
   align-items: center;
 }
@@ -751,8 +750,8 @@ input[type='range'] {
 }
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   background: var(--accent);
   cursor: pointer;
   border: none;
