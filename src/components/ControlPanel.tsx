@@ -373,7 +373,7 @@ function DocumentSection() {
           <button
             className="btn btn-ghost"
             title="Set document size to match uploaded image aspect ratio at current DPI"
-            style={{ fontSize: 10, padding: '2px 7px', height: 22, color: 'var(--accent)', borderColor: 'var(--accent)' }}
+            style={{ fontSize: 10, padding: '2px 7px', height: 22 }}
             onClick={() => {
               const rawW = originalImage.width / documentDpi;
               const rawH = originalImage.height / documentDpi;

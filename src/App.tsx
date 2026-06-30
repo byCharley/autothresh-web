@@ -40,6 +40,7 @@ import { encodeTiff } from './engine/exportFormats';
 import { isShadowColor, nearestPantone } from './engine/pantoneMatch';
 import { separateCmykPro, applyHalftoneToCmykPlates } from './engine/cmykProEngine';
 import { generateCmykProUnderbase, chokeWhitePlate } from './engine/underbaseEngine';
+import { compositeHalftonePlates, buildNeugebauerPrimaries } from './engine/inkSimulator';
 
 function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerConfig[] {
   return layers.map((l) =>
@@ -654,11 +655,30 @@ function App() {
             canvas: buildCmykPlateCanvas(pl),
             top: 0, left: 0, blendMode: 'normal' as const, opacity: 1, hidden: true,
           }));
+
+          // Build proof via Neugebauer ink simulation — same path as the in-app preview
+          const [gR, gG, gB] = (canvasColor.match(/[\da-f]{2}/gi) ?? ['00','00','00'])
+            .map(h => parseInt(h, 16)) as [number, number, number];
+          const proofGarmentMode: 'dark' | 'light' =
+            gR * 0.299 + gG * 0.587 + gB * 0.114 < 128 ? 'dark' : 'light';
+          const proofData = compositeHalftonePlates(
+            artLayers, artScaleW, artScaleH,
+            buildNeugebauerPrimaries(proCmykSettings.cmykProfile),
+            artBgMask, { c: true, m: true, y: true, k: true },
+            proofGarmentMode, [gR, gG, gB],
+          );
+          const proofCanvas = document.createElement('canvas');
+          proofCanvas.width = docPxW; proofCanvas.height = docPxH;
+          const pCtx = proofCanvas.getContext('2d')!;
+          pCtx.fillStyle = canvasColor;
+          pCtx.fillRect(0, 0, docPxW, docPxH);
+          pCtx.drawImage(canvasFromImageData(proofData), artOffX, artOffY);
+
           const buffer = writePsd({
             width: docPxW, height: docPxH, ...psdRes,
             children: [
               ...plateLayers,
-              { name: 'Color Proof', canvas: buildCompositeCanvas(false), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+              { name: 'Color Proof', canvas: proofCanvas, top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
             ],
           });
           saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk-pro.psd`);
