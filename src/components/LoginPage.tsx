@@ -15,7 +15,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
   const [showFaq, setShowFaq]               = useState(false);
   const [showInfo, setShowInfo]             = useState(false);
   const [showSubscribe, setShowSubscribe]   = useState(false);
-  const [selectedPlan, setSelectedPlan]     = useState<'monthly' | 'yearly'>('monthly');
+  const [selectedPlan, setSelectedPlan]     = useState<'monthly' | 'yearly'>('yearly');
 
   const handleSignIn = () => {
     setLoading(true);
