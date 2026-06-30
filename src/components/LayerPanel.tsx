@@ -1368,7 +1368,6 @@ export function LayerPanel() {
   const [showPantonePanel, setShowPantonePanel] = useState(false);
   const [showCmykDisclaimer, setShowCmykDisclaimer] = useState(false);
   const [cmykDisclaimerNeverShow, setCmykDisclaimerNeverShow] = useState(false);
-  const [pendingCmykSwitch, setPendingCmykSwitch] = useState(false);
   const MODES = ['threshold', 'palette', 'color-sep', 'cmyk-pro'] as const;
 
   function UnderbaseSection() {
@@ -1555,12 +1554,10 @@ export function LayerPanel() {
                 key={mode}
                 ref={(el) => { modeBtnRefs.current[i] = el; }}
                 onClick={() => {
+                  setSeparationMode(mode);
                   if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
-                    setPendingCmykSwitch(true);
                     setCmykDisclaimerNeverShow(false);
-                    setShowCmykDisclaimer(true);
-                  } else {
-                    setSeparationMode(mode);
+                    setTimeout(() => setShowCmykDisclaimer(true), 0);
                   }
                 }}
                 style={{
@@ -1608,14 +1605,11 @@ export function LayerPanel() {
                     cursor: 'pointer',
                   }}
                   onClick={() => {
+                    setSeparationMode(mode as 'threshold' | 'palette' | 'color-sep' | 'cmyk-pro');
+                    setModeInfoOpen(false);
                     if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
-                      setPendingCmykSwitch(true);
                       setCmykDisclaimerNeverShow(false);
-                      setShowCmykDisclaimer(true);
-                      setModeInfoOpen(false);
-                    } else {
-                      setSeparationMode(mode as 'threshold' | 'palette' | 'color-sep' | 'cmyk-pro');
-                      setModeInfoOpen(false);
+                      setTimeout(() => setShowCmykDisclaimer(true), 0);
                     }
                   }}
                 >
@@ -2038,22 +2032,11 @@ export function LayerPanel() {
                 Don't show this again
               </span>
             </label>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-              <button
-                onClick={() => setShowCmykDisclaimer(false)}
-                style={{
-                  padding: '7px 14px', fontSize: 11, fontFamily: 'var(--font-mono)',
-                  background: 'transparent', border: '1px solid var(--border)',
-                  color: 'var(--text-dim)', cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
               <button
                 onClick={() => {
                   if (cmykDisclaimerNeverShow) localStorage.setItem('cmyk-disclaimer-dismissed', '1');
                   setShowCmykDisclaimer(false);
-                  if (pendingCmykSwitch) { setSeparationMode('cmyk-pro'); setPendingCmykSwitch(false); }
                 }}
                 style={{
                   padding: '7px 16px', fontSize: 11, fontFamily: 'var(--font-mono)',
