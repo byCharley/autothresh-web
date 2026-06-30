@@ -1998,7 +1998,7 @@ export function LayerPanel() {
       {showCmykDisclaimer && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
-          background: 'var(--bg)',
+          background: 'rgba(0,0,0,0.85)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <div style={{
