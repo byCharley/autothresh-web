@@ -369,6 +369,23 @@ function DocumentSection() {
             {p.label}
           </button>
         ))}
+        {originalImage && (
+          <button
+            className="btn btn-ghost"
+            title="Set document size to match uploaded image aspect ratio at current DPI"
+            style={{ fontSize: 10, padding: '2px 7px', height: 22, color: 'var(--accent)', borderColor: 'var(--accent)' }}
+            onClick={() => {
+              const rawW = originalImage.width / documentDpi;
+              const rawH = originalImage.height / documentDpi;
+              const maxDim = Math.max(rawW, rawH);
+              const scale = maxDim > 24 ? 24 / maxDim : 1;
+              setDocumentWidth(Math.max(0.5, parseFloat((rawW * scale).toFixed(2))));
+              setDocumentHeight(Math.max(0.5, parseFloat((rawH * scale).toFixed(2))));
+            }}
+          >
+            Adapt
+          </button>
+        )}
       </div>
 
       {/* Width × Height */}
