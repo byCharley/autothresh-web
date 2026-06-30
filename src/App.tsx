@@ -39,6 +39,7 @@ import { buildImportanceMap } from './engine/analysisPass';
 import { encodeTiff } from './engine/exportFormats';
 import { isShadowColor, nearestPantone } from './engine/pantoneMatch';
 import { separateCmykPro, applyHalftoneToCmykPlates } from './engine/cmykProEngine';
+import { generateCmykProUnderbase, chokeWhitePlate } from './engine/underbaseEngine';
 
 function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerConfig[] {
   return layers.map((l) =>
@@ -154,7 +155,7 @@ function App() {
     colorSepPatternDensity, colorSepPatternAngle, colorSepLockedColors, colorSepVisibility,
     paintMasks,
     vectorSvg,
-    underbaseIncludeShadows,
+    underbaseIncludeShadows, underbaseEnabled, underbaseDensity, underbaseChoke: storeUnderbaseChoke,
   } = useStore();
 
   useEffect(() => {
@@ -306,7 +307,12 @@ function App() {
     } else if (separationMode === 'cmyk-pro') {
       // ICC-based separation + per-channel halftone screening
       const plates = await separateCmykPro(artImageData, proCmykSettings);
-      artLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, documentDpi, artBgMask);
+      let exportWhitePlate: Uint8Array | undefined;
+      if (underbaseEnabled) {
+        const raw = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
+        exportWhitePlate = chokeWhitePlate(raw, plates.width, plates.height, storeUnderbaseChoke);
+      }
+      artLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, documentDpi, artBgMask, exportWhitePlate);
     } else if (separationMode === 'palette') {
       artLayers = paletteSeparate(
         artImageData, paletteColors, artBgMask,
@@ -633,38 +639,50 @@ function App() {
         });
         saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-dtg.psd`);
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
-        // True separation PSD:
-        // • Bottom: Substrate fill
-        // • Middle: Color Proof
-        // • Top group: Grayscale halftone plates (hidden by default)
-
-        const substrateCanvas = document.createElement('canvas');
-        substrateCanvas.width = docPxW; substrateCanvas.height = docPxH;
-        substrateCanvas.getContext('2d')!.fillStyle = separationMode === 'cmyk' ? garmentHex : canvasColor;
-        substrateCanvas.getContext('2d')!.fillRect(0, 0, docPxW, docPxH);
-
-        const proofCanvas = buildCompositeCanvas(false);
-
-        const plateLayers = visibleLayers.map((pl) => ({
-          name:    layerName(pl) + ' [Plate]',
-          canvas:  buildCmykPlateCanvas(pl),
-          top: 0, left: 0,
-          blendMode: 'normal' as const,
-          opacity: 1,
-          hidden: true,
-        }));
-
-        const buffer = writePsd({
-          width: docPxW, height: docPxH, ...psdRes,
-          children: [
-            { name: 'Substrate',   canvas: substrateCanvas, top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
-            ...ubPsdLayer,
-            { name: 'Color Proof', canvas: proofCanvas,     top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
-            ...plateLayers,
-          ],
-        });
-        const psdSuffix = separationMode === 'cmyk-pro' ? 'cmyk-pro' : 'cmyk';
-        saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-${psdSuffix}.psd`);
+        if (separationMode === 'cmyk-pro') {
+          // CMYK Pro PSD: no background layer.
+          // Layer order (bottom → top): White Underbase, C, M, Y, K, Color Proof.
+          // All plate layers are hidden by default; proof is visible.
+          const cmykOrder = ['cmyk-w', 'cmyk-y', 'cmyk-m', 'cmyk-c', 'cmyk-k'];
+          const sorted = [...visibleLayers].sort((a, b) => {
+            const ai = cmykOrder.indexOf(a.id);
+            const bi = cmykOrder.indexOf(b.id);
+            return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+          });
+          const plateLayers = sorted.map((pl) => ({
+            name:   layerName(pl) + (pl.id === 'cmyk-w' ? ' [White Underbase]' : ' [Plate]'),
+            canvas: buildCmykPlateCanvas(pl),
+            top: 0, left: 0, blendMode: 'normal' as const, opacity: 1, hidden: true,
+          }));
+          const buffer = writePsd({
+            width: docPxW, height: docPxH, ...psdRes,
+            children: [
+              ...plateLayers,
+              { name: 'Color Proof', canvas: buildCompositeCanvas(false), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+            ],
+          });
+          saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk-pro.psd`);
+        } else {
+          // Legacy CMYK mode PSD
+          const substrateCanvas = document.createElement('canvas');
+          substrateCanvas.width = docPxW; substrateCanvas.height = docPxH;
+          substrateCanvas.getContext('2d')!.fillStyle = garmentHex;
+          substrateCanvas.getContext('2d')!.fillRect(0, 0, docPxW, docPxH);
+          const plateLayers = visibleLayers.map((pl) => ({
+            name: layerName(pl) + ' [Plate]',
+            canvas: buildCmykPlateCanvas(pl),
+            top: 0, left: 0, blendMode: 'normal' as const, opacity: 1, hidden: true,
+          }));
+          const buffer = writePsd({
+            width: docPxW, height: docPxH, ...psdRes,
+            children: [
+              { name: 'Substrate', canvas: substrateCanvas, top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+              { name: 'Color Proof', canvas: buildCompositeCanvas(false), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+              ...plateLayers,
+            ],
+          });
+          saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk.psd`);
+        }
       } else if (separationMode === 'palette') {
         // PSD: White background + colored dithered ink layers
         const whiteBg = document.createElement('canvas');

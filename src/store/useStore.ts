@@ -256,7 +256,7 @@ interface AppState {
   selectedLayerId: string | null;
   knockoutEnabled: boolean;
   underbaseEnabled: boolean;
-  underbaseChoke: 0 | 1 | 2;
+  underbaseChoke: number;
   underbaseIncludeShadows: boolean;
   underbaseDensity: number;
   pantonePreviewActive: boolean;
@@ -363,7 +363,7 @@ interface AppState {
   selectLayer: (id: string | null) => void;
   setKnockoutEnabled: (v: boolean) => void;
   setUnderbaseEnabled: (v: boolean) => void;
-  setUnderbaseChoke: (v: 0 | 1 | 2) => void;
+  setUnderbaseChoke: (v: number) => void;
   setUnderbaseIncludeShadows: (v: boolean) => void;
   setUnderbaseDensity: (v: number) => void;
   setPantonePreviewActive: (v: boolean) => void;

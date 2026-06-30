@@ -10,7 +10,7 @@ export interface ExportConfig {
   includeColorInfo: boolean;
   usePantoneNames:  boolean;
   underbase:        boolean;
-  underbaseChoke:   0 | 1 | 2;
+  underbaseChoke:   number;
 }
 
 interface Props {
@@ -303,23 +303,20 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
                 <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Choke (shrink inward)
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {([0, 1, 2] as const).map((n) => (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[0, 1, 2, 3, 4].map((n) => (
                     <button
                       key={n}
                       onClick={() => setUndChoke(n)}
                       style={{
-                        flex: 1, padding: '8px 6px',
+                        flex: 1, padding: '7px 4px',
                         border: `1px solid ${undChoke === n ? 'var(--accent)' : 'var(--border)'}`,
                         background: undChoke === n ? 'var(--accent-dim)' : 'var(--surface-2)',
                         cursor: 'pointer', textAlign: 'center', transition: 'all 0.1s',
                       }}
                     >
-                      <div style={{ fontSize: 12, fontWeight: 700, color: undChoke === n ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>
-                        {n === 0 ? 'None' : `${n}px`}
-                      </div>
-                      <div style={{ fontSize: 9, color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font-mono)' }}>
-                        {n === 0 ? 'No choke' : n === 1 ? 'Standard' : 'Heavy'}
+                      <div style={{ fontSize: 11, fontWeight: 700, color: undChoke === n ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                        {n === 0 ? 'Off' : `${n}px`}
                       </div>
                     </button>
                   ))}

@@ -1396,11 +1396,10 @@ export function LayerPanel() {
         </div>
         {underbaseEnabled && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {([0, 1, 2] as const).map((n) => (
-                <button key={n} onClick={() => setUnderbaseChoke(n)} style={{ flex: 1, padding: '4px 4px', border: `1px solid ${underbaseChoke === n ? 'var(--accent)' : 'var(--border)'}`, background: underbaseChoke === n ? 'var(--accent-dim)' : 'var(--surface-2)', cursor: 'pointer', textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: underbaseChoke === n ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>{n === 0 ? 'None' : `${n}px`}</div>
-                  <div style={{ fontSize: 8, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{n === 0 ? 'No choke' : n === 1 ? 'Standard' : 'Heavy'}</div>
+            <div style={{ display: 'flex', gap: 3 }}>
+              {[0, 1, 2, 3, 4].map((n) => (
+                <button key={n} onClick={() => setUnderbaseChoke(n)} style={{ flex: 1, padding: '4px 2px', border: `1px solid ${underbaseChoke === n ? 'var(--accent)' : 'var(--border)'}`, background: underbaseChoke === n ? 'var(--accent-dim)' : 'var(--surface-2)', cursor: 'pointer', textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: underbaseChoke === n ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>{n === 0 ? 'Off' : `${n}px`}</div>
                 </button>
               ))}
             </div>

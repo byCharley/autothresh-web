@@ -2,31 +2,23 @@ import type { CmykProPlates } from './cmykProEngine';
 
 export interface UnderbaseOptions {
   density: number;        // 0–100
-  includeShadows: boolean;
+  includeShadows: boolean; // kept for non-CMYK underbase path; ignored here
 }
 
+// White underbase from total CMYK ink coverage.
+// White only exists where CMYK inks print; transparent areas stay 0.
 export function generateCmykProUnderbase(
   plates: CmykProPlates,
   opts: UnderbaseOptions,
 ): Uint8Array {
   const { C, M, Y, K, width: w, height: h } = plates;
-  const result = new Uint8Array(w * h);
   const scale = opts.density / 100;
+  const result = new Uint8Array(w * h);
 
   for (let i = 0; i < w * h; i++) {
-    const c = C[i]/255, m = M[i]/255, y = Y[i]/255, k = K[i]/255;
-    const r = 1 - Math.min(1, c + k);
-    const g = 1 - Math.min(1, m + k);
-    const b = 1 - Math.min(1, y + k);
-    const lum = r * 0.2126 + g * 0.7152 + b * 0.0722;
-    const maxRGB = Math.max(r, g, b);
-    const minRGB = Math.min(r, g, b);
-    const sat = maxRGB > 0.01 ? (maxRGB - minRGB) / maxRGB : 0;
-    if (lum > 0.96) { result[i] = 0; continue; }
-    let wVal = lum * 0.60 + sat * 0.40;
-    if (k > 0.65 && sat < 0.12) wVal *= Math.max(0, 1 - (k - 0.65) / 0.35);
-    if (!opts.includeShadows && lum < 0.22 && sat < 0.18) wVal *= 0.08;
-    result[i] = Math.round(Math.max(0, Math.min(1, wVal * scale)) * 255);
+    // Sum all ink channels (0–1020), cap at 255 to get 0–1 coverage
+    const totalInk = Math.min(255, C[i] + M[i] + Y[i] + K[i]);
+    result[i] = Math.round((totalInk / 255) * scale * 255);
   }
   return result;
 }
