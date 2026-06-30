@@ -1,6 +1,5 @@
 import { useState, useRef, useLayoutEffect } from 'react';
 import { useStore } from '../store/useStore';
-import { isVectorUnlocked } from '../auth/betaFeatures';
 import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, generateHarmonicPalettes } from '../engine/colorSeparation';
 import { nearestPantone, isShadowColor } from '../engine/pantoneMatch';
 
@@ -782,66 +781,6 @@ function ArtworkSection() {
   );
 }
 
-// ─── Vector Colors Section ────────────────────────────────────────────────────
-
-function VectorColorsSection() {
-  const { vectorColors, vectorSvg, isProcessing, vectorNumColors, vectorInkColor, setVectorInkColor } = useStore();
-
-  return (
-    <>
-      <div style={{
-        padding: '8px 12px 6px',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          Colors
-        </span>
-        {vectorSvg && (
-          <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-            {vectorColors.length} found
-          </span>
-        )}
-      </div>
-      <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
-        {isProcessing ? (
-          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Tracing…</div>
-        ) : vectorNumColors === 1 ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ position: 'relative', width: 26, height: 26, flexShrink: 0 }}>
-              <div style={{ width: 26, height: 26, background: vectorInkColor, border: '1px solid var(--border-2)', borderRadius: 3 }} />
-              <input type="color" value={vectorInkColor} onChange={(e) => setVectorInkColor(e.target.value)}
-                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
-            </div>
-            <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-              {vectorInkColor}
-            </span>
-          </div>
-        ) : vectorColors.length > 0 ? (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {vectorColors.map((color) => (
-              <div
-                key={color}
-                title={color}
-                style={{
-                  width: 22, height: 22,
-                  background: color,
-                  border: '1px solid var(--border-2)',
-                  borderRadius: 3,
-                  flexShrink: 0,
-                }}
-              />
-            ))}
-          </div>
-        ) : vectorSvg ? (
-          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>No colors detected</div>
-        ) : (
-          <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Load an image to trace</div>
-        )}
-      </div>
-    </>
-  );
-}
 
 // ─── CMYK Channel Definitions ─────────────────────────────────────────────────
 
@@ -851,6 +790,230 @@ const CMYK_CARD_DEFS = [
   { id: 'cmyk-m', name: 'M · Magenta', color: '#ec008c' },
   { id: 'cmyk-y', name: 'Y · Yellow',  color: '#fff200' },
 ];
+
+// ─── CMYK Pro Layer Section ───────────────────────────────────────────────────
+
+// Returns 'low' | 'medium' | 'high' moiré risk for a pair of screen angles.
+// Angles within 15° → high, 15–25° → medium, ≥25° → low.
+function moireRisk(a1: number, a2: number): 'low' | 'medium' | 'high' {
+  const diff = Math.abs(((a1 - a2) % 180 + 180) % 180);
+  const d = Math.min(diff, 180 - diff);
+  if (d < 15) return 'high';
+  if (d < 25) return 'medium';
+  return 'low';
+}
+
+function MoireWarning({ channelId, proCmykSettings }: {
+  channelId: string;
+  proCmykSettings: import('../engine/cmykProEngine').ProCmykSettings;
+}) {
+  const angles: Record<string, number> = {
+    'cmyk-c': proCmykSettings.halftoneC?.angle ?? 15,
+    'cmyk-m': proCmykSettings.halftoneM?.angle ?? 75,
+    'cmyk-y': proCmykSettings.halftoneY?.angle ?? 0,
+    'cmyk-k': proCmykSettings.halftoneK?.angle ?? 45,
+  };
+  const myAngle = angles[channelId];
+  const lpi = proCmykSettings.halftoneC?.lpi ?? 45;
+
+  // Worst-case risk against all other channels
+  const others = Object.entries(angles).filter(([k]) => k !== channelId);
+  const risks = others.map(([, a]) => moireRisk(myAngle, a));
+  const worst = risks.includes('high') ? 'high' : risks.includes('medium') ? 'medium' : 'low';
+
+  const dot = worst === 'high' ? '#f87171' : worst === 'medium' ? '#fbbf24' : '#4ade80';
+  const label = worst === 'high' ? 'High moiré risk' : worst === 'medium' ? 'Check angles' : 'Low risk';
+
+  // LPI/mesh compatibility hint
+  const meshHint = lpi > 55 ? ` · ${lpi} LPI may exceed mesh` : '';
+
+  return (
+    <div title={label + meshHint} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+      <div style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+      <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+        {myAngle}° · {lpi} LPI
+      </span>
+    </div>
+  );
+}
+
+function CmykProLayerSection() {
+  const {
+    cmykVisibility, setCmykLayerVisible, proCmykPlates, isProcessing,
+    printSimActive, setPrintSimActive, printSimLoading, setPrintSimLoading,
+    canvasColor, showFabricBg,
+    viewingDistance, setViewingDistance, proCmykSettings,
+  } = useStore();
+
+  // Detect dark garment for simulation label (same threshold as CanvasView)
+  const hex = canvasColor.replace('#', '');
+  const garmentLum = showFabricBg
+    ? (parseInt(hex.slice(0, 2), 16) * 0.299 +
+       parseInt(hex.slice(2, 4), 16) * 0.587 +
+       parseInt(hex.slice(4, 6), 16) * 0.114) / 255
+    : 1;
+  const isDarkGarment = garmentLum < 0.5;
+
+  const togglePrintSim = () => {
+    const next = !printSimActive;
+    if (next) {
+      setPrintSimLoading(true);
+      setCmykLayerVisible('cmyk-c', true);
+      setCmykLayerVisible('cmyk-m', true);
+      setCmykLayerVisible('cmyk-y', true);
+      setCmykLayerVisible('cmyk-k', true);
+    }
+    setPrintSimActive(next);
+  };
+
+  const allChannelsOn = ['cmyk-c','cmyk-m','cmyk-y','cmyk-k'].every(id => cmykVisibility[id] ?? false);
+
+  return (
+    <div style={{ padding: '8px 8px 0px' }}>
+
+      {/* ── Preview mode toggle ───────────────────────── */}
+      {proCmykPlates && !isProcessing && (
+        <div style={{ marginBottom: 8 }}>
+          {/* 3-mode selector: Raw Halftone / Dot Inspection / Print Sim */}
+          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
+            Preview Mode
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3, marginBottom: 6 }}>
+            {([
+              { id: 'raw',     label: 'Raw',     title: 'Raw halftone dots at document resolution' },
+              { id: 'inspect', label: 'Inspect', title: 'Dot inspection — zoom in to examine individual halftone cells' },
+              { id: 'sim',     label: 'Print Sim', title: 'Simulate physical ink on substrate — optical blending at viewing distance' },
+            ] as const).map(({ id, label, title }) => {
+              const isActive =
+                id === 'sim'     ? printSimActive :
+                id === 'inspect' ? (!printSimActive && viewingDistance !== 'raw') :
+                                   (!printSimActive && viewingDistance === 'raw');
+              return (
+                <button
+                  key={id}
+                  onClick={() => {
+                    if (id === 'sim') {
+                      togglePrintSim();
+                    } else {
+                      if (printSimActive) setPrintSimActive(false);
+                      setViewingDistance(id === 'inspect' ? '1ft' : 'raw');
+                    }
+                  }}
+                  style={{
+                    padding: '5px 2px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                    background: isActive ? 'var(--accent)' : 'var(--surface-2)',
+                    color: isActive ? '#000' : 'var(--text-dim)',
+                    border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                    borderRadius: 3, cursor: 'pointer',
+                    fontWeight: isActive ? 700 : 400, textAlign: 'center',
+                  }}
+                  title={title}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Loading bar while Print Sim computation runs */}
+          {printSimLoading && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginBottom: 3 }}>
+                Computing ink simulation…
+              </div>
+              <div style={{ height: 3, borderRadius: 2, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 2,
+                  background: 'var(--accent)',
+                  animation: 'printSimProgress 1.2s ease-in-out infinite',
+                }} />
+              </div>
+            </div>
+          )}
+
+          {/* Garment mode label shown when Print Sim is active */}
+          {printSimActive && !printSimLoading && (
+            <div style={{
+              fontSize: 9, fontFamily: 'var(--font-mono)', padding: '3px 6px',
+              background: 'var(--surface-3)', borderRadius: 3, lineHeight: 1.5,
+              color: 'var(--text-dim)',
+            }}>
+              {isDarkGarment
+                ? <><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Dark: </span>garment → white underbase → CMYK</>
+                : <><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Light: </span>paper white → CMYK Multiply</>
+              }
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 6, lineHeight: 1.5 }}>
+        {isProcessing ? 'Separating via LittleCMS…' : proCmykPlates ? 'Solo a plate to inspect its screen.' : 'Load an image to begin ICC separation.'}
+      </div>
+
+      {/* ── Channel cards ─────────────────────────────── */}
+      {[...CMYK_CARD_DEFS].reverse().map(({ id, name, color }) => {
+        const visible = cmykVisibility[id] ?? false;
+        const visCount = Object.values(cmykVisibility).filter(Boolean).length;
+        const isSolo = visible && visCount === 1;
+        return (
+          <div
+            key={id}
+            className="layer-card"
+            style={{ marginBottom: 4, outline: isSolo ? '1px solid var(--accent)' : 'none' }}
+          >
+            <div className="layer-swatch" style={{ cursor: 'default' }}>
+              <div className="layer-swatch-inner" style={{ background: color }} />
+            </div>
+            <div className="layer-card-info" style={{ minWidth: 0 }}>
+              <div className="layer-card-name">{name}</div>
+              {proCmykSettings && (
+                <MoireWarning channelId={id} proCmykSettings={proCmykSettings} />
+              )}
+            </div>
+            <div className="layer-card-actions" style={{ gap: 4 }}>
+              {/* Solo button */}
+              <button
+                className="vis-btn"
+                title={isSolo ? 'Show all plates' : 'Solo this plate'}
+                style={{ color: isSolo ? 'var(--accent)' : 'var(--text-dim)', opacity: isSolo ? 1 : 0.6 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isSolo) {
+                    ['cmyk-k','cmyk-c','cmyk-m','cmyk-y'].forEach(k => setCmykLayerVisible(k, true));
+                  } else {
+                    ['cmyk-k','cmyk-c','cmyk-m','cmyk-y'].forEach(k => setCmykLayerVisible(k, k === id));
+                  }
+                }}
+              >
+                <SoloIcon active={isSolo} />
+              </button>
+              {/* Visibility toggle */}
+              <button
+                className={`vis-btn ${!visible ? 'hidden-layer' : ''}`}
+                title={visible ? 'Hide plate' : 'Show plate'}
+                onClick={(e) => { e.stopPropagation(); setCmykLayerVisible(id, !visible); }}
+              >
+                <EyeIcon visible={visible} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* All channels toggle */}
+      {proCmykPlates && (
+        <button
+          className="btn btn-ghost"
+          style={{ width: '100%', fontSize: 9, fontFamily: 'var(--font-mono)', marginTop: 2, height: 22, opacity: 0.6 }}
+          onClick={() => ['cmyk-k','cmyk-c','cmyk-m','cmyk-y'].forEach(k => setCmykLayerVisible(k, !allChannelsOn))}
+        >
+          {allChannelsOn ? 'Hide all' : 'Show all'}
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ─── Color Sep Layer Panel ────────────────────────────────────────────────────
 
@@ -1160,10 +1323,10 @@ const MODE_INFO = [
     desc: 'Groups pixels by actual color data using perceptual OKLAB clustering. Dark reds and light reds stay in the same layer. Separates by hue and chroma, not just luminance — ideal for color-accurate screen prints.',
   },
   {
-    mode: 'vector',
-    label: 'Vector',
-    title: 'Vector (SVG Trace)',
-    desc: 'Traces your image into clean scalable vector paths and exports as an .SVG file. Best for logos, bold graphics, and artwork that needs to scale to any size without quality loss.',
+    mode: 'cmyk-pro',
+    label: 'CMYK',
+    title: 'CMYK Process (ICC Pro)',
+    desc: 'Professional ICC-based RGB→CMYK separation using LittleCMS. Supports industry-standard profiles (SWOP, FOGRA39), GCR/UCR black generation, TAC ink limiting, and AM halftone screening. For process color screen printing.',
   },
 ] as const;
 
@@ -1195,6 +1358,7 @@ export function LayerPanel() {
     colorSepLockedColors, setColorSepLockedColors,
     underbaseEnabled, underbaseChoke, setUnderbaseEnabled, setUnderbaseChoke,
     underbaseIncludeShadows, setUnderbaseIncludeShadows,
+    underbaseDensity, setUnderbaseDensity,
     pantonePreviewActive, setPantonePreviewActive,
     processedLayers,
   } = useStore();
@@ -1202,7 +1366,10 @@ export function LayerPanel() {
   const modeBtnRefs = useRef<(HTMLButtonElement | null)[]>([null, null, null, null]);
   const [sliderRect, setSliderRect] = useState<{ left: number; width: number } | null>(null);
   const [showPantonePanel, setShowPantonePanel] = useState(false);
-  const MODES = ['threshold', 'palette', 'color-sep', 'vector'] as const;
+  const [showCmykDisclaimer, setShowCmykDisclaimer] = useState(false);
+  const [cmykDisclaimerNeverShow, setCmykDisclaimerNeverShow] = useState(false);
+  const [pendingCmykSwitch, setPendingCmykSwitch] = useState(false);
+  const MODES = ['threshold', 'palette', 'color-sep', 'cmyk-pro'] as const;
 
   function UnderbaseSection() {
     return (
@@ -1237,6 +1404,13 @@ export function LayerPanel() {
                   <div style={{ fontSize: 8, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{n === 0 ? 'No choke' : n === 1 ? 'Standard' : 'Heavy'}</div>
                 </button>
               ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>Density</span>
+              <input type="range" min={0} max={100} step={5} value={underbaseDensity}
+                onChange={e => setUnderbaseDensity(Number(e.target.value))}
+                style={{ flex: 1, accentColor: 'var(--accent)' }} />
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text)', minWidth: 28, textAlign: 'right' }}>{underbaseDensity}%</span>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', paddingTop: 2 }}>
               <input type="checkbox" checked={underbaseIncludeShadows} onChange={e => setUnderbaseIncludeShadows(e.target.checked)}
@@ -1287,6 +1461,8 @@ export function LayerPanel() {
   }
 
   useLayoutEffect(() => {
+    if (separationMode === 'vector') { setSeparationMode('threshold'); return; }
+    if (separationMode === 'cmyk') { setSeparationMode('cmyk-pro'); return; }
     const idx = MODES.indexOf(separationMode as typeof MODES[number]);
     const btn = modeBtnRefs.current[idx];
     if (btn) setSliderRect({ left: btn.offsetLeft, width: btn.offsetWidth });
@@ -1374,37 +1550,32 @@ export function LayerPanel() {
                 zIndex: 0,
               }} />
             )}
-            {(['threshold', 'palette', 'color-sep', 'vector'] as const).map((mode, i) => {
-              const isLocked = mode === 'vector' && !isVectorUnlocked();
-              return (
-                <button
-                  key={mode}
-                  ref={(el) => { modeBtnRefs.current[i] = el; }}
-                  onClick={() => !isLocked && setSeparationMode(mode)}
-                  disabled={isLocked}
-                  title={isLocked ? 'Vector mode — coming soon' : undefined}
-                  style={{
-                    flex: 1, height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
-                    fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
-                    cursor: isLocked ? 'not-allowed' : 'pointer', border: '1px solid var(--border)',
-                    background: 'transparent',
-                    color: isLocked ? 'var(--text-dim)' : separationMode === mode ? '#000' : 'var(--text-muted)',
-                    opacity: isLocked ? 0.45 : 1,
-                    transition: 'color 0.22s cubic-bezier(0.22, 0.61, 0.36, 1)',
-                    position: 'relative', zIndex: 1,
-                  }}
-                >
-                  {mode === 'threshold' ? 'Thresh' : mode === 'palette' ? 'Dither' : mode === 'color-sep' ? 'Color' : (
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-                      <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-                        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-                      </svg>
-                      Vector
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {(['threshold', 'palette', 'color-sep', 'cmyk-pro'] as const).map((mode, i) => (
+              <button
+                key={mode}
+                ref={(el) => { modeBtnRefs.current[i] = el; }}
+                onClick={() => {
+                  if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
+                    setPendingCmykSwitch(true);
+                    setCmykDisclaimerNeverShow(false);
+                    setShowCmykDisclaimer(true);
+                  } else {
+                    setSeparationMode(mode);
+                  }
+                }}
+                style={{
+                  flex: 1, height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
+                  fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+                  cursor: 'pointer', border: 'none',
+                  background: 'transparent',
+                  color: separationMode === mode ? '#000' : 'var(--text-muted)',
+                  transition: 'color 0.22s cubic-bezier(0.22, 0.61, 0.36, 1)',
+                  position: 'relative', zIndex: 1,
+                }}
+              >
+                {mode === 'threshold' ? 'Thresh' : mode === 'palette' ? 'Dither' : mode === 'color-sep' ? 'Color' : 'CMYK'}
+              </button>
+            ))}
             <button
               onClick={() => setModeInfoOpen((v) => !v)}
               title="What does each mode do?"
@@ -1427,19 +1598,26 @@ export function LayerPanel() {
 
           {modeInfoOpen && (
             <div style={{ padding: '0 8px 10px' }}>
-              {MODE_INFO.map(({ mode, label, title, desc }) => {
-                const isLocked = mode === 'vector' && !isVectorUnlocked();
-                return (
+              {MODE_INFO.map(({ mode, label, title, desc }) => (
                 <div
                   key={mode}
                   style={{
                     marginTop: 6, padding: '8px 10px',
                     background: separationMode === mode ? 'color-mix(in srgb, var(--accent) 8%, var(--surface-2))' : 'var(--surface-2)',
                     border: `1px solid ${separationMode === mode ? 'var(--accent)' : 'var(--border)'}`,
-                    cursor: isLocked ? 'not-allowed' : 'pointer',
-                    opacity: isLocked ? 0.5 : 1,
+                    cursor: 'pointer',
                   }}
-                  onClick={() => { if (!isLocked) { setSeparationMode(mode as 'threshold' | 'palette' | 'color-sep' | 'vector'); setModeInfoOpen(false); } }}
+                  onClick={() => {
+                    if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
+                      setPendingCmykSwitch(true);
+                      setCmykDisclaimerNeverShow(false);
+                      setShowCmykDisclaimer(true);
+                      setModeInfoOpen(false);
+                    } else {
+                      setSeparationMode(mode as 'threshold' | 'palette' | 'color-sep' | 'cmyk-pro');
+                      setModeInfoOpen(false);
+                    }
+                  }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                     <span style={{
@@ -1452,26 +1630,20 @@ export function LayerPanel() {
                       {label}
                     </span>
                     <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{title}</span>
-                    {isLocked && (
-                      <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', background: 'var(--surface-3)', color: 'var(--text-dim)', padding: '1px 5px', border: '1px solid var(--border)', marginLeft: 2 }}>
-                        Coming Soon
-                      </span>
-                    )}
                   </div>
                   <p style={{ margin: 0, fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.55, fontFamily: 'var(--font-sans, sans-serif)' }}>
                     {desc}
                   </p>
                 </div>
-                );
-              })}
+              ))}
             </div>
           )}
         </div>
 
         <div key={separationMode} className="at-mode-content">
-        {separationMode === 'vector' ? (
+        {separationMode === 'cmyk-pro' ? (
           <>
-            <VectorColorsSection />
+            <CmykProLayerSection />
             <FabricSection />
             <ArtworkSection />
           </>
@@ -1828,6 +2000,73 @@ export function LayerPanel() {
         </div>
       </div>
 
+      {/* CMYK Pro disclaimer modal */}
+      {showCmykDisclaimer && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.72)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'var(--surface-1)', border: '1px solid var(--border)',
+            width: 360, padding: '28px 24px 20px',
+            display: 'flex', flexDirection: 'column', gap: 16,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', color: 'var(--text)', textTransform: 'uppercase' }}>
+                CMYK Pro — Work in Progress
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6, margin: 0 }}>
+              CMYK Pro mode is under active development. Ink simulation, halftone accuracy, and ICC color separation are functional but not yet fully calibrated for production output.
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6, margin: 0 }}>
+              Results may vary depending on your artwork and press conditions. Use this mode for experimentation and proofing — always verify with a physical press proof before final production.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={cmykDisclaimerNeverShow}
+                onChange={(e) => setCmykDisclaimerNeverShow(e.target.checked)}
+                style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+              />
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                Don't show this again
+              </span>
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+              <button
+                onClick={() => setShowCmykDisclaimer(false)}
+                style={{
+                  padding: '7px 14px', fontSize: 11, fontFamily: 'var(--font-mono)',
+                  background: 'transparent', border: '1px solid var(--border)',
+                  color: 'var(--text-dim)', cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (cmykDisclaimerNeverShow) localStorage.setItem('cmyk-disclaimer-dismissed', '1');
+                  setShowCmykDisclaimer(false);
+                  if (pendingCmykSwitch) { setSeparationMode('cmyk-pro'); setPendingCmykSwitch(false); }
+                }}
+                style={{
+                  padding: '7px 16px', fontSize: 11, fontFamily: 'var(--font-mono)',
+                  background: 'var(--accent)', border: 'none',
+                  color: '#000', cursor: 'pointer', fontWeight: 700,
+                }}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

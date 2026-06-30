@@ -3,7 +3,6 @@ import { useStore } from '../store/useStore';
 import type { PatternType } from '../engine/imageProcessor';
 import { autoDetectPatternSettings } from '../engine/imageProcessor';
 import { getBayer } from '../engine/colorSeparation';
-import { detectOptimalColorCount } from '../engine/vectorTracer';
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -722,140 +721,6 @@ function ColorSepSection() {
   );
 }
 
-// ─── Vector Section ───────────────────────────────────────────────────────────
-
-function VectorSection() {
-  const {
-    separationMode,
-    vectorNumColors, setVectorNumColors,
-    vectorDetail, setVectorDetail,
-    vectorSmooth, setVectorSmooth,
-    vectorInkColor, setVectorInkColor,
-    vectorPathMode, setVectorPathMode,
-    vectorMinSpeckle, setVectorMinSpeckle,
-    vectorSvg, vectorColors,
-    previewImage, bgMask,
-  } = useStore();
-
-  const [detecting, setDetecting] = useState(false);
-
-  if (separationMode !== 'vector') return null;
-
-  const fileSizeKb = vectorSvg ? Math.round(vectorSvg.length / 1024) : null;
-
-  const handleAutoDetect = () => {
-    if (!previewImage || detecting) return;
-    setDetecting(true);
-    setTimeout(() => {
-      const count = detectOptimalColorCount(previewImage, bgMask);
-      setVectorNumColors(count);
-      setDetecting(false);
-    }, 10);
-  };
-
-  return (
-    <Section title="Vector Settings">
-      <div style={{
-        background: 'rgba(250, 173, 20, 0.08)',
-        border: '1px solid rgba(250, 173, 20, 0.25)',
-        borderRadius: 4,
-        padding: '6px 9px',
-        fontSize: 10,
-        color: 'var(--text-muted)',
-        lineHeight: 1.5,
-      }}>
-        <span style={{ color: '#faad14', fontWeight: 600, marginRight: 5 }}>⚠</span>
-        Vector tracing is a work in progress. Results may vary.
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Slider label="Colors" value={vectorNumColors} min={1} max={16} step={1}
-            onChange={setVectorNumColors} />
-        </div>
-        <button
-          onClick={handleAutoDetect}
-          disabled={!previewImage || detecting}
-          title="Auto-detect color count from image"
-          style={{
-            flexShrink: 0, fontSize: 9, padding: '3px 7px', marginTop: 2,
-            background: detecting ? 'var(--surface-2)' : 'var(--accent)',
-            color: detecting ? 'var(--text-muted)' : '#000',
-            border: '1px solid transparent', cursor: previewImage && !detecting ? 'pointer' : 'default',
-            fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.05em',
-            opacity: previewImage ? 1 : 0.4,
-          }}
-        >
-          {detecting ? '…' : 'AUTO'}
-        </button>
-      </div>
-      <Slider label="Detail" value={vectorDetail} min={1} max={10} step={1}
-        onChange={setVectorDetail} />
-      <Slider label="Smooth" value={vectorSmooth} min={1} max={10} step={1}
-        onChange={setVectorSmooth} />
-
-      {vectorNumColors === 1 && (
-        <div className="field" style={{ marginTop: 6 }}>
-          <span className="field-label">Ink Color</span>
-          <div className="color-field">
-            <div className="color-swatch-btn" style={{ background: vectorInkColor }}>
-              <input type="color" value={vectorInkColor}
-                onChange={(e) => setVectorInkColor(e.target.value)} />
-            </div>
-            <input className="color-hex" type="text" value={vectorInkColor} maxLength={7}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (/^#[0-9a-fA-F]{6}$/.test(v)) setVectorInkColor(v);
-              }} />
-          </div>
-        </div>
-      )}
-
-      <div className="field" style={{ marginTop: 6 }}>
-        <span className="field-label">Path Style</span>
-        <div style={{ display: 'flex', gap: 2, flex: 1 }}>
-          {(['spline', 'polygon'] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setVectorPathMode(mode)}
-              style={{
-                flex: 1, height: 24, fontSize: 10, fontFamily: 'var(--font-mono)',
-                border: '1px solid var(--border-2)', borderRadius: 3, cursor: 'pointer',
-                background: vectorPathMode === mode ? 'var(--accent)' : 'var(--bg-3)',
-                color: vectorPathMode === mode ? '#fff' : 'var(--text-dim)',
-                fontWeight: vectorPathMode === mode ? 700 : 400,
-                textTransform: 'capitalize',
-              }}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <Slider label="Min Shape Size" value={vectorMinSpeckle} min={0} max={20} step={1}
-        onChange={setVectorMinSpeckle} />
-
-      {vectorColors.length > 1 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-          {vectorColors.map((c) => (
-            <div key={c} title={c} style={{
-              width: 16, height: 16, borderRadius: 2,
-              background: c, border: '1px solid rgba(255,255,255,0.15)',
-              flexShrink: 0,
-            }} />
-          ))}
-        </div>
-      )}
-
-      {fileSizeKb !== null && (
-        <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 6, lineHeight: 1.5 }}>
-          {vectorColors.length} {vectorColors.length === 1 ? 'color' : 'colors'} · ~{fileSizeKb} KB SVG
-        </div>
-      )}
-    </Section>
-  );
-}
-
 // ─── CMYK Auto Section (beginner-friendly) ───────────────────────────────────
 
 function CmykTabGroup({ label, options, value, onChange }: {
@@ -1035,6 +900,370 @@ function CmykScreenSection() {
   );
 }
 
+// ─── CMYK Pro Section ─────────────────────────────────────────────────────────
+
+const CMYK_PRO_PROFILES = [
+  { value: 'USWebCoatedSWOP',      label: 'US Web Coated (SWOP)' },
+  { value: 'CoatedFOGRA39',        label: 'Coated FOGRA 39' },
+  { value: 'WebCoatedFOGRA28',     label: 'Web Coated FOGRA 28' },
+  { value: 'JapanColor2001Coated', label: 'Japan Color 2001 Coated' },
+] as const;
+
+const CMYK_PRO_BG = [
+  { value: 'adaptive',     label: 'Adaptive (Recommended)' },
+  { value: 'photo',        label: 'Photo' },
+  { value: 'illustration', label: 'Illustration' },
+  { value: 'poster',       label: 'Poster' },
+  { value: 'vintage',      label: 'Vintage' },
+  { value: 'screenPrint',  label: 'Screen Print' },
+  { value: 'maxInkSaving', label: 'Maximum Ink Saving' },
+] as const;
+
+const QUALITY_PRESETS = [
+  { label: 'Ultra Fine', lpi: 80 },
+  { label: 'Fine',       lpi: 70 },
+  { label: 'Detailed',   lpi: 65 },
+  { label: 'Standard',   lpi: 55 },
+  { label: 'Commercial', lpi: 45 },
+  { label: 'Vintage',    lpi: 35 },
+  { label: 'Poster',     lpi: 25 },
+] as const;
+
+const ANGLE_PRESETS = [
+  {
+    value: 'photoshop',
+    label: 'Photoshop Default',
+    angles: { C: 15, M: 75, Y: 0, K: 45 },
+    desc: 'C 15° · M 75° · Y 0° · K 45°',
+  },
+  {
+    value: 'screenPrint',
+    label: 'Screen Print Process',
+    // 7.5° shift avoids halftone/fabric-weave moiré on textiles
+    angles: { C: 22.5, M: 52.5, Y: 7.5, K: 37.5 },
+    desc: 'C 22.5° · M 52.5° · Y 7.5° · K 37.5°',
+  },
+  {
+    value: 'accurip',
+    label: 'Commercial Offset',
+    angles: { C: 75, M: 15, Y: 30, K: 45 },
+    desc: 'C 75° · M 15° · Y 30° · K 45°',
+  },
+] as const;
+
+// Screen mode presets: configure all 4 channel shapes at once
+const SCREEN_MODES = [
+  {
+    value: 'custom',
+    label: 'Custom',
+    shapes: null,
+  },
+  {
+    value: 'classic',
+    label: 'Classic Rosette  — Round, all channels',
+    shapes: { C: 'round', M: 'round', Y: 'round', K: 'round' },
+  },
+  {
+    value: 'euclidean',
+    label: 'Euclidean Rosette  — Smooth midtones',
+    shapes: { C: 'euclidean', M: 'euclidean', Y: 'euclidean', K: 'euclidean' },
+  },
+  {
+    value: 'line',
+    label: 'Line Screen  — AM lines, all channels',
+    shapes: { C: 'line', M: 'line', Y: 'line', K: 'line' },
+  },
+] as const;
+
+const HALFTONE_CHANNELS = [
+  { key: 'halftoneC' as const, label: 'Cyan',    dot: '#00AEEF' },
+  { key: 'halftoneM' as const, label: 'Magenta', dot: '#EC008C' },
+  { key: 'halftoneY' as const, label: 'Yellow',  dot: '#C8A800' },
+  { key: 'halftoneK' as const, label: 'Black',   dot: '#444' },
+] as const;
+
+function CmykProSection() {
+  const {
+    separationMode, proCmykSettings, setProCmykSettings, documentDpi, isProcessing,
+  } = useStore();
+  if (separationMode !== 'cmyk-pro') return null;
+  const s = proCmykSettings;
+
+  // Update a single channel's halftone settings; if lockLpi, sync LPI across all channels
+  function updateChannel(
+    key: 'halftoneC' | 'halftoneM' | 'halftoneY' | 'halftoneK',
+    patch: Partial<import('../engine/cmykProEngine').ChannelHalftone>,
+  ) {
+    const current = s[key];
+    const updated = { ...current, ...patch };
+    const allKeys = ['halftoneC', 'halftoneM', 'halftoneY', 'halftoneK'] as const;
+    if (s.lockLpi && patch.lpi !== undefined) {
+      const lpiUpdates = Object.fromEntries(
+        allKeys.map(k => [k, { ...s[k], lpi: patch.lpi! }])
+      );
+      setProCmykSettings({ ...lpiUpdates, [key]: updated });
+    } else {
+      setProCmykSettings({ [key]: updated });
+    }
+  }
+
+  return (
+    <>
+      <Section title="ICC Separation">
+        {isProcessing && (
+          <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', marginBottom: 8, lineHeight: 1.5 }}>
+            Separating via ICC profile…
+          </div>
+        )}
+        <div className="field">
+          <span className="field-label">Profile</span>
+          <select
+            className="at-select"
+            value={s.cmykProfile}
+            onChange={(e) => setProCmykSettings({ cmykProfile: e.target.value as typeof s.cmykProfile })}
+          >
+            {CMYK_PRO_PROFILES.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field" style={{ marginTop: 6 }}>
+          <span className="field-label">Black Gen</span>
+          <select
+            className="at-select"
+            value={s.blackGeneration}
+            onChange={(e) => setProCmykSettings({ blackGeneration: e.target.value as typeof s.blackGeneration })}
+          >
+            {CMYK_PRO_BG.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <Slider label="Total Ink Limit" value={s.totalInkLimit} min={200} max={400} step={5}
+          onChange={(v) => setProCmykSettings({ totalInkLimit: v })} unit="%" />
+        <SwitchRow label="Preserve Pure Black" checked={s.preservePureBlack}
+          onChange={(v) => setProCmykSettings({ preservePureBlack: v })} />
+        <Slider label="Gray Balance" value={s.grayBalance} min={-50} max={50} step={1}
+          onChange={(v) => setProCmykSettings({ grayBalance: v })} />
+      </Section>
+
+      <Section title="Density" defaultOpen={false}>
+        <Slider label="Cyan"    value={s.densityC} min={50} max={150} step={1}
+          onChange={(v) => setProCmykSettings({ densityC: v })} unit="%" />
+        <Slider label="Magenta" value={s.densityM} min={50} max={150} step={1}
+          onChange={(v) => setProCmykSettings({ densityM: v })} unit="%" />
+        <Slider label="Yellow"  value={s.densityY} min={50} max={150} step={1}
+          onChange={(v) => setProCmykSettings({ densityY: v })} unit="%" />
+        <Slider label="Black"   value={s.densityK} min={50} max={150} step={1}
+          onChange={(v) => setProCmykSettings({ densityK: v })} unit="%" />
+      </Section>
+
+      <Section title="Halftone Screen" defaultOpen={true}>
+        {/* Quality preset: sets LPI for all channels at once */}
+        {(() => {
+          const currentLpi = s.halftoneC?.lpi ?? 80;
+          const matchedPreset = QUALITY_PRESETS.find(p => p.lpi === currentLpi);
+          return (
+            <div className="field" style={{ marginBottom: 8 }}>
+              <span className="field-label">Quality</span>
+              <select
+                className="at-select"
+                value={matchedPreset ? String(matchedPreset.lpi) : 'custom'}
+                onChange={(e) => {
+                  if (e.target.value === 'custom') return;
+                  const lpi = Number(e.target.value);
+                  setProCmykSettings({
+                    lockLpi: true,
+                    halftoneC: { ...s.halftoneC, lpi },
+                    halftoneM: { ...s.halftoneM, lpi },
+                    halftoneY: { ...s.halftoneY, lpi },
+                    halftoneK: { ...s.halftoneK, lpi },
+                  });
+                }}
+              >
+                {!matchedPreset && <option value="custom">Custom ({currentLpi} LPI)</option>}
+                {QUALITY_PRESETS.map((p) => (
+                  <option key={p.lpi} value={String(p.lpi)}>{p.label} — {p.lpi} LPI</option>
+                ))}
+              </select>
+            </div>
+          );
+        })()}
+
+        <SwitchRow label="Lock LPI" checked={s.lockLpi ?? true}
+          onChange={(v) => setProCmykSettings({ lockLpi: v })} />
+
+        {/* Angle preset: sets all 4 channel angles at once */}
+        {(() => {
+          const ca = s.halftoneC?.angle ?? 15;
+          const ma = s.halftoneM?.angle ?? 75;
+          const ya = s.halftoneY?.angle ?? 0;
+          const ka = s.halftoneK?.angle ?? 45;
+          const matched = ANGLE_PRESETS.find(
+            p => p.angles.C === ca && p.angles.M === ma && p.angles.Y === ya && p.angles.K === ka,
+          );
+          return (
+            <div className="field" style={{ marginTop: 6 }}>
+              <span className="field-label">Angles</span>
+              <select
+                className="at-select"
+                value={matched ? matched.value : 'custom'}
+                onChange={(e) => {
+                  const preset = ANGLE_PRESETS.find(p => p.value === e.target.value);
+                  if (!preset) return;
+                  setProCmykSettings({
+                    halftoneC: { ...s.halftoneC, angle: preset.angles.C },
+                    halftoneM: { ...s.halftoneM, angle: preset.angles.M },
+                    halftoneY: { ...s.halftoneY, angle: preset.angles.Y },
+                    halftoneK: { ...s.halftoneK, angle: preset.angles.K },
+                  });
+                }}
+              >
+                {!matched && <option value="custom">Custom ({ca}° / {ma}° / {ya}° / {ka}°)</option>}
+                {ANGLE_PRESETS.map(p => (
+                  <option key={p.value} value={p.value}>{p.label} — {p.desc}</option>
+                ))}
+              </select>
+            </div>
+          );
+        })()}
+
+        {/* Screen / rosette mode preset */}
+        {(() => {
+          const shapes = {
+            C: s.halftoneC?.shape, M: s.halftoneM?.shape,
+            Y: s.halftoneY?.shape, K: s.halftoneK?.shape,
+          };
+          const matched = SCREEN_MODES.find(
+            m => m.shapes !== null &&
+              m.shapes.C === shapes.C && m.shapes.M === shapes.M &&
+              m.shapes.Y === shapes.Y && m.shapes.K === shapes.K
+          );
+          return (
+            <div className="field" style={{ marginTop: 6 }}>
+              <span className="field-label">Screen</span>
+              <select
+                className="at-select"
+                value={matched ? matched.value : 'custom'}
+                onChange={(e) => {
+                  const mode = SCREEN_MODES.find(m => m.value === e.target.value);
+                  if (!mode || !mode.shapes) return;
+                  setProCmykSettings({
+                    halftoneC: { ...s.halftoneC, shape: mode.shapes.C as import('../engine/cmykProEngine').DotShape },
+                    halftoneM: { ...s.halftoneM, shape: mode.shapes.M as import('../engine/cmykProEngine').DotShape },
+                    halftoneY: { ...s.halftoneY, shape: mode.shapes.Y as import('../engine/cmykProEngine').DotShape },
+                    halftoneK: { ...s.halftoneK, shape: mode.shapes.K as import('../engine/cmykProEngine').DotShape },
+                  });
+                }}
+              >
+                {!matched && <option value="custom">Custom</option>}
+                {SCREEN_MODES.filter(m => m.value !== 'custom').map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          );
+        })()}
+
+        {HALFTONE_CHANNELS.map(({ key, label, dot }) => {
+          const ht = s[key];
+          const dotPx = (documentDpi / Math.max(1, ht.lpi)).toFixed(1);
+          return (
+            <div key={key} style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+              {/* Channel header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: dot, flexShrink: 0, display: 'inline-block',
+                }} />
+                <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', color: 'var(--text)' }}>
+                  {label.toUpperCase()}
+                </span>
+                <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
+                  ~{dotPx}px/dot
+                </span>
+              </div>
+
+              {/* LPI + Angle row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+                <div className="field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+                  <span className="field-label" style={{ fontSize: 9 }}>LPI</span>
+                  <input
+                    type="number"
+                    min={25} max={200} step={1}
+                    value={ht.lpi}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v)) updateChannel(key, { lpi: Math.min(200, v) });
+                    }}
+                    onBlur={(e) => updateChannel(key, { lpi: Math.max(25, Math.min(200, +e.target.value || 65)) })}
+                    style={{
+                      width: '100%', background: 'var(--input-bg)', border: '1px solid var(--border)',
+                      color: 'var(--text)', borderRadius: 4, padding: '3px 6px',
+                      fontSize: 12, fontFamily: 'var(--font-mono)',
+                    }}
+                  />
+                </div>
+                <div className="field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
+                  <span className="field-label" style={{ fontSize: 9 }}>Angle</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
+                    <input
+                      type="number"
+                      min={0} max={180} step={1}
+                      value={ht.angle}
+                      onChange={(e) => updateChannel(key, { angle: Math.max(0, Math.min(180, +e.target.value || 0)) })}
+                      style={{
+                        flex: 1, background: 'var(--input-bg)', border: '1px solid var(--border)',
+                        color: 'var(--text)', borderRadius: 4, padding: '3px 6px',
+                        fontSize: 12, fontFamily: 'var(--font-mono)',
+                      }}
+                    />
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>°</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Shape */}
+              <div className="field" style={{ marginBottom: 4 }}>
+                <span className="field-label">Shape</span>
+                <select
+                  className="at-select"
+                  value={ht.shape}
+                  onChange={(e) => updateChannel(key, { shape: e.target.value as import('../engine/cmykProEngine').DotShape })}
+                >
+                  <option value="round">Round</option>
+                  <option value="euclidean">Euclidean</option>
+                  <option value="ellipse">Ellipse</option>
+                  <option value="line">Line</option>
+                  <option value="square">Square</option>
+                  <option value="diamond">Diamond</option>
+                </select>
+              </div>
+
+              {/* Dot Gain */}
+              <Slider label="Dot Gain" value={ht.dotGain} min={0} max={30} step={1}
+                onChange={(v) => updateChannel(key, { dotGain: v })} unit="%" />
+
+              {/* Highlight cleanup */}
+              <Slider label="HL Clip" value={ht.highlightClip ?? 3} min={0} max={10} step={0.5}
+                onChange={(v) => updateChannel(key, { highlightClip: v })} unit="%" />
+              <Slider label="HL Fade" value={ht.highlightFade ?? 5} min={0} max={15} step={0.5}
+                onChange={(v) => updateChannel(key, { highlightFade: v })} unit="%" />
+
+              {/* Shadow cleanup — fill tiny holes in heavy shadows to prevent mesh clog */}
+              <Slider label="SH Clip" value={ht.shadowClip ?? 0} min={0} max={10} step={0.5}
+                onChange={(v) => updateChannel(key, { shadowClip: v })} unit="%" />
+              <Slider label="SH Fade" value={ht.shadowFade ?? 0} min={0} max={15} step={0.5}
+                onChange={(v) => updateChannel(key, { shadowFade: v })} unit="%" />
+            </div>
+          );
+        })}
+
+      </Section>
+    </>
+  );
+}
+
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | null }) {
@@ -1058,6 +1287,8 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
       <div className="panel-header">
         {separationMode === 'cmyk' ? (
           <span className="panel-title">CMYK</span>
+        ) : separationMode === 'cmyk-pro' ? (
+          <span className="panel-title">CMYK Pro</span>
         ) : separationMode === 'palette' ? (
           <span className="panel-title">Dither</span>
         ) : separationMode === 'vector' ? (
@@ -1081,16 +1312,16 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
             <CmykAdvancedSection />
             <CmykScreenSection />
           </>
+        ) : separationMode === 'cmyk-pro' ? (
+          <CmykProSection />
         ) : separationMode === 'palette' ? (
           <PaletteSection />
         ) : separationMode === 'color-sep' ? (
           <ColorSepSection />
-        ) : separationMode === 'vector' ? (
-          <VectorSection />
         ) : (
           <GlobalPatternSection />
         )}
-        {separationMode !== 'vector' && <ImageAdjustmentsSection />}
+        {separationMode !== 'vector' && separationMode !== 'cmyk-pro' && <ImageAdjustmentsSection />}
 
         {/* Per-layer controls — threshold mode only */}
         {separationMode === 'threshold' && layer ? (
