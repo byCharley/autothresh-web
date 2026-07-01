@@ -545,7 +545,7 @@ const BRAND_PALETTES: { brand: string; colors: { hex: string; name: string }[] }
 // ─── Inks Section ─────────────────────────────────────────────────────────────
 
 function InksSection() {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const {
     paletteColors, paletteVisibility, setPaletteVisibility, setPaletteColor,
     paletteNumColors, setPaletteNumColors, setPaletteColors,
@@ -695,10 +695,13 @@ function InksSection() {
 
 // ─── Fabric Section ───────────────────────────────────────────────────────────
 
-function FabricSection() {
-  const [open, setOpen] = useState(true);
+function BackgroundSection() {
+  const [open, setOpen] = useState(false);
   const [brand, setBrand] = useState('LA Apparel');
   const {
+    bgRemovalEnabled, bgTolerance, setBgRemovalEnabled, setBgTolerance,
+    bgSeedColors, setBgSeedColors, bgEyedropperActive, setBgEyedropperActive,
+    bgPaintMask, bgPaintMode, setBgPaintMask, setBgPaintMode,
     canvasColor, setCanvasColor, showFabricBg, setShowFabricBg,
     fabricTexture, setFabricTexture,
     fabricBlendStrength, setFabricBlendStrength,
@@ -711,9 +714,128 @@ function FabricSection() {
 
   return (
     <>
-      <SectionHeader title="Fabric (BG Color)" open={open} onToggle={() => setOpen(!open)} />
+      <SectionHeader title="Background" open={open} onToggle={() => setOpen(!open)} />
       {open && (
         <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* BG removal */}
+          <SwitchRow label="Remove BG" checked={bgRemovalEnabled} onChange={setBgRemovalEnabled} />
+          {bgRemovalEnabled && (
+            <>
+              <Slider label="Tolerance" value={bgTolerance} min={1} max={100}
+                onChange={setBgTolerance} unit="%" />
+
+              {/* Eyedropper color picker */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Color Pick
+                </span>
+                <button
+                  onClick={() => setBgEyedropperActive(!bgEyedropperActive)}
+                  title="Click a color in the image to also remove that color globally"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    padding: '4px 8px', fontSize: 9,
+                    fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                    background: bgEyedropperActive ? 'var(--accent)' : 'var(--surface-2)',
+                    color: bgEyedropperActive ? '#000' : 'var(--text-dim)',
+                    border: `1px solid ${bgEyedropperActive ? 'var(--accent)' : 'var(--border)'}`,
+                    borderRadius: 3, cursor: 'pointer',
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M12 2a2 2 0 0 1 3 3L7 13l-4 1 1-4 8-8z"/>
+                    <line x1="15" y1="5" x2="19" y2="9"/>
+                  </svg>
+                  {bgEyedropperActive ? 'Click image…' : '+ Sample'}
+                </button>
+              </div>
+
+              {/* Picked color swatches */}
+              {bgSeedColors.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                  {bgSeedColors.map((hex, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setBgSeedColors(bgSeedColors.filter((_, j) => j !== i))}
+                      title={`Remove ${hex}`}
+                      style={{
+                        width: 20, height: 20, background: hex, cursor: 'pointer',
+                        border: '1px solid var(--border-2)', borderRadius: 2, position: 'relative',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span style={{
+                        position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: 9, color: '#fff',
+                        textShadow: '0 0 3px #000', opacity: 0, transition: 'opacity 0.15s',
+                      }}
+                        className="swatch-x"
+                      >×</span>
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setBgSeedColors([])}
+                    style={{
+                      fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+                      background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
+                      textDecoration: 'underline',
+                    }}
+                  >clear</button>
+                </div>
+              )}
+
+              {/* Paint-fix brush */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Paint Fix
+                </span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button
+                    onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
+                    title="Paint to restore areas incorrectly removed"
+                    style={{
+                      padding: '4px 8px', fontSize: 9,
+                      fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: bgPaintMode === 'restore' ? '#2866cc' : 'var(--surface-2)',
+                      color: bgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
+                      border: `1px solid ${bgPaintMode === 'restore' ? '#2866cc' : 'var(--border)'}`,
+                      borderRadius: 3, cursor: 'pointer',
+                    }}
+                  >Restore</button>
+                  <button
+                    onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
+                    title="Paint to remove additional pixels"
+                    style={{
+                      padding: '4px 8px', fontSize: 9,
+                      fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: bgPaintMode === 'remove' ? '#cc6600' : 'var(--surface-2)',
+                      color: bgPaintMode === 'remove' ? '#fff' : 'var(--text-dim)',
+                      border: `1px solid ${bgPaintMode === 'remove' ? '#cc6600' : 'var(--border)'}`,
+                      borderRadius: 3, cursor: 'pointer',
+                    }}
+                  >Remove</button>
+                </div>
+              </div>
+              {bgPaintMode !== 'off' && (
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 1 }}>
+                  Drag on image to {bgPaintMode} · [ ] to resize brush
+                </div>
+              )}
+              {bgPaintMask && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
+                    style={{
+                      fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+                      background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: '0 2px',
+                    }}
+                  >clear paint fixes</button>
+                </div>
+              )}
+            </>
+          )}
+          <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+
           <SwitchRow label="Show Background" checked={showFabricBg} onChange={setShowFabricBg} />
 
           {/* Realistic fabric view */}
@@ -758,15 +880,12 @@ function FabricSection() {
           )}
 
           <div style={{ opacity: showFabricBg ? 1 : 0.45, pointerEvents: showFabricBg ? 'auto' : 'none', transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-            {/* Brand selector */}
             <select className="at-select" value={brand} onChange={(e) => setBrand(e.target.value)}>
               {BRAND_PALETTES.map((b) => (
                 <option key={b.brand} value={b.brand}>{b.brand}</option>
               ))}
             </select>
 
-            {/* Color picker row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div className="color-swatch-btn" style={{ background: canvasColor, width: 26, height: 26, flexShrink: 0 }}>
                 <input type="color" value={canvasColor} onChange={(e) => setCanvasColor(e.target.value)} />
@@ -783,14 +902,12 @@ function FabricSection() {
               />
             </div>
 
-            {/* Matched color name */}
             {matchedColor && (
               <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: -4 }}>
                 {matchedColor.name}
               </div>
             )}
 
-            {/* Swatch grid */}
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {palette.map(({ hex, name }) => (
                 <button
@@ -816,13 +933,11 @@ function FabricSection() {
 // ─── Texture Section ──────────────────────────────────────────────────────────
 
 function TextureSection() {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const {
-    originalImage,
     textureEnabled, textureIntensity, textureScale, textureSeed,
     setTextureEnabled, setTextureIntensity, setTextureScale, setTextureSeed,
   } = useStore();
-  if (!originalImage) return null;
 
   return (
     <>
@@ -859,28 +974,6 @@ function TextureSection() {
   );
 }
 
-// ─── Background Removal Section ───────────────────────────────────────────────
-
-function ArtworkSection() {
-  const [open, setOpen] = useState(true);
-  const { originalImage, bgRemovalEnabled, bgTolerance, setBgRemovalEnabled, setBgTolerance } = useStore();
-  if (!originalImage) return null;
-
-  return (
-    <>
-      <SectionHeader title="Background" open={open} onToggle={() => setOpen(!open)} />
-      {open && (
-        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <SwitchRow label="Remove BG" checked={bgRemovalEnabled} onChange={setBgRemovalEnabled} />
-          {bgRemovalEnabled && (
-            <Slider label="Tolerance" value={bgTolerance} min={1} max={100}
-              onChange={setBgTolerance} unit="%" />
-          )}
-        </div>
-      )}
-    </>
-  );
-}
 
 
 // ─── CMYK Channel Definitions ─────────────────────────────────────────────────
@@ -1810,8 +1903,7 @@ export function LayerPanel() {
         {separationMode === 'cmyk-pro' ? (
           <>
             <CmykProLayerSection />
-            <FabricSection />
-            <ArtworkSection />
+            <BackgroundSection />
           </>
         ) : separationMode === 'palette' ? (
           <>
@@ -1819,8 +1911,7 @@ export function LayerPanel() {
             <UnderbaseSection />
             <PantonePreviewSection />
             <TextureSection />
-            <FabricSection />
-            <ArtworkSection />
+            <BackgroundSection />
           </>
         ) : separationMode === 'color-sep' ? (
           <>
@@ -1839,8 +1930,7 @@ export function LayerPanel() {
             <UnderbaseSection />
             <PantonePreviewSection />
             <TextureSection />
-            <FabricSection />
-            <ArtworkSection />
+            <BackgroundSection />
           </>
         ) : separationMode === 'cmyk' ? (
           <>
@@ -1892,11 +1982,7 @@ export function LayerPanel() {
               })}
             </div>
 
-            {/* Fabric color + bg toggle — still useful in CMYK mode */}
-            <FabricSection />
-
-            {/* Background removal — still useful in CMYK mode */}
-            <ArtworkSection />
+            <BackgroundSection />
           </>
         ) : (
           <>
@@ -2156,11 +2242,7 @@ export function LayerPanel() {
             {/* Texture overlay */}
             <TextureSection />
 
-            {/* Fabric color + bg toggle */}
-            <FabricSection />
-
-            {/* Background removal (image only) */}
-            <ArtworkSection />
+            <BackgroundSection />
           </>
         )}
         </div>

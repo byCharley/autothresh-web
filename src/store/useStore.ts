@@ -267,6 +267,11 @@ interface AppState {
   bgRemovalEnabled: boolean;
   bgTolerance: number;
   bgMask: Uint8Array | null;
+  bgSeedColors: string[];
+  bgEyedropperActive: boolean;
+  bgPaintMask: Uint8Array | null;
+  bgPaintMaskDims: { w: number; h: number } | null;
+  bgPaintMode: 'off' | 'restore' | 'remove';
 
   showRegistrationMarks: boolean;
   regMarkPadding: number;  // inches from document corner to mark center
@@ -372,6 +377,10 @@ interface AppState {
   setBgRemovalEnabled: (v: boolean) => void;
   setBgTolerance: (v: number) => void;
   setBgMask: (mask: Uint8Array | null) => void;
+  setBgSeedColors: (colors: string[]) => void;
+  setBgEyedropperActive: (v: boolean) => void;
+  setBgPaintMask: (mask: Uint8Array | null, dims: { w: number; h: number } | null) => void;
+  setBgPaintMode: (mode: 'off' | 'restore' | 'remove') => void;
   setShowRegistrationMarks: (v: boolean) => void;
   setRegMarkPadding: (v: number) => void;
   setDocumentBleed: (v: number) => void;
@@ -486,6 +495,11 @@ export const useStore = create<AppState>((set, get) => ({
   bgRemovalEnabled: ((localStorage.getItem('at-mode') as string | null) === 'cmyk-pro') ? false : true,
   bgTolerance: 30,
   bgMask: null,
+  bgSeedColors: [] as string[],
+  bgEyedropperActive: false,
+  bgPaintMask: null,
+  bgPaintMaskDims: null,
+  bgPaintMode: 'off' as const,
   showRegistrationMarks: false,
   regMarkPadding: 0.5,
   documentBleed: 0,
@@ -579,11 +593,11 @@ export const useStore = create<AppState>((set, get) => ({
 
   setTheme: (theme) => { localStorage.setItem('at-theme', theme); set({ theme }); },
   setOriginalImage: (originalImage, previewImage, imageFileName) =>
-    set({ originalImage, previewImage, imageFileName, bgMask: null, palettePool: [], activePaletteIdx: 0 }),
+    set({ originalImage, previewImage, imageFileName, bgMask: null, bgPaintMask: null, bgPaintMaskDims: null, palettePool: [], activePaletteIdx: 0 }),
   clearImage: () =>
     set((s) => ({
       originalImage: null, previewImage: null, processedLayers: [], imageFileName: '',
-      bgMask: null, palettePool: [], activePaletteIdx: 0, paintMasks: {},
+      bgMask: null, bgPaintMask: null, bgPaintMaskDims: null, bgPaintMode: 'off', palettePool: [], activePaletteIdx: 0, paintMasks: {},
       vectorSvg: null, vectorColors: [],
       paletteColors: [],
       paletteVisibility: {},
@@ -606,8 +620,12 @@ export const useStore = create<AppState>((set, get) => ({
   setSplitView: (splitView) => set({ splitView }),
   updateGlobalPattern: (updates) =>
     set((s) => ({ globalPattern: { ...s.globalPattern, ...updates } })),
-  setBgRemovalEnabled: (bgRemovalEnabled) => set({ bgRemovalEnabled }),
+  setBgRemovalEnabled: (bgRemovalEnabled) => set({ bgRemovalEnabled, ...(!bgRemovalEnabled ? { bgPaintMode: 'off' as const } : {}) }),
   setBgTolerance: (bgTolerance) => set({ bgTolerance }),
+  setBgSeedColors: (bgSeedColors) => set({ bgSeedColors }),
+  setBgEyedropperActive: (bgEyedropperActive) => set({ bgEyedropperActive }),
+  setBgPaintMask: (bgPaintMask, bgPaintMaskDims) => set({ bgPaintMask, bgPaintMaskDims }),
+  setBgPaintMode: (bgPaintMode) => set({ bgPaintMode }),
   setBgMask: (bgMask) => set({ bgMask }),
   setShowRegistrationMarks: (showRegistrationMarks) => set({ showRegistrationMarks }),
   setRegMarkPadding: (regMarkPadding) => set({ regMarkPadding: Math.max(0.1, Math.min(3, regMarkPadding)) }),
@@ -686,6 +704,9 @@ export const useStore = create<AppState>((set, get) => ({
     paintMasks: {},
     soloLayerId: null,
     bgMask: null,
+    bgPaintMask: null,
+    bgPaintMaskDims: null,
+    bgPaintMode: 'off' as const,
   })),
   setPalettePool: (palettePool) => set({ palettePool }),
   applyPalette: (idx) => set((s) => {

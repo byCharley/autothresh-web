@@ -642,25 +642,109 @@ export function extractPalette(imageData: ImageData, numColors = 4): string[] {
 
 // ─── Background Removal ───────────────────────────────────────────────────────
 
-export function computeBackgroundMask(imageData: ImageData, tolerance: number): Uint8Array {
+// Removes enclosed background-colored pockets that the border flood-fill never
+// reached — e.g. white space trapped inside a coiled snake or ring-shaped subject.
+// bgCheck(i): true if pixel i is "near background" (eligible for the pocket path).
+// Any enclosed component (none of its pixels touch the image border) larger than
+// minSize is erased.
+function removeInteriorPockets(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  bgCheck: (i: number) => boolean,
+  minSize: number,
+): void {
+  const n = width * height;
+  const visited = new Uint8Array(n);
+  for (let start = 0; start < n; start++) {
+    if (mask[start] !== 0 || visited[start] || !bgCheck(start)) continue;
+    const component: number[] = [];
+    let touchesBorder = false;
+    const q = [start];
+    visited[start] = 1;
+    let qHead = 0;
+    while (qHead < q.length) {
+      const idx = q[qHead++];
+      component.push(idx);
+      const cx = idx % width, cy = (idx / width) | 0;
+      if (cx === 0 || cx === width - 1 || cy === 0 || cy === height - 1) touchesBorder = true;
+      const l = cx > 0, r = cx < width - 1, u = cy > 0, d = cy < height - 1;
+      const tryAdd = (nb: number) => {
+        if (!visited[nb] && mask[nb] === 0 && bgCheck(nb)) { visited[nb] = 1; q.push(nb); }
+      };
+      if (l)    tryAdd(idx - 1);
+      if (r)    tryAdd(idx + 1);
+      if (u)    tryAdd(idx - width);
+      if (d)    tryAdd(idx + width);
+      if (l&&u) tryAdd(idx - width - 1);
+      if (r&&u) tryAdd(idx - width + 1);
+      if (l&&d) tryAdd(idx + width - 1);
+      if (r&&d) tryAdd(idx + width + 1);
+    }
+    if (!touchesBorder && component.length >= minSize) {
+      for (const idx of component) mask[idx] = 255;
+    }
+  }
+}
+
+// Connected-component analysis: any foreground island smaller than minBlobPixels
+// that is not the main subject gets erased. Uses 8-connectivity so diagonal
+// chains don't keep tiny corner specks alive.
+function removeSmallForegroundIslands(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  minBlobPixels: number,
+): void {
+  const n = width * height;
+  const blobOf = new Int32Array(n).fill(-1);
+  const sizes: number[] = [];
+
+  for (let start = 0; start < n; start++) {
+    if (mask[start] !== 0 || blobOf[start] >= 0) continue;
+    const id = sizes.length;
+    sizes.push(0);
+    const queue = [start];
+    blobOf[start] = id;
+    let head = 0;
+    while (head < queue.length) {
+      const idx = queue[head++];
+      sizes[id]++;
+      const x = idx % width, y = (idx / width) | 0;
+      const l = x > 0, r = x < width - 1, u = y > 0, d = y < height - 1;
+      if (l)    { const nb = idx - 1;         if (mask[nb] === 0 && blobOf[nb] < 0) { blobOf[nb] = id; queue.push(nb); } }
+      if (r)    { const nb = idx + 1;         if (mask[nb] === 0 && blobOf[nb] < 0) { blobOf[nb] = id; queue.push(nb); } }
+      if (u)    { const nb = idx - width;     if (mask[nb] === 0 && blobOf[nb] < 0) { blobOf[nb] = id; queue.push(nb); } }
+      if (d)    { const nb = idx + width;     if (mask[nb] === 0 && blobOf[nb] < 0) { blobOf[nb] = id; queue.push(nb); } }
+      if (l&&u) { const nb = idx - width - 1; if (mask[nb] === 0 && blobOf[nb] < 0) { blobOf[nb] = id; queue.push(nb); } }
+      if (r&&u) { const nb = idx - width + 1; if (mask[nb] === 0 && blobOf[nb] < 0) { blobOf[nb] = id; queue.push(nb); } }
+      if (l&&d) { const nb = idx + width - 1; if (mask[nb] === 0 && blobOf[nb] < 0) { blobOf[nb] = id; queue.push(nb); } }
+      if (r&&d) { const nb = idx + width + 1; if (mask[nb] === 0 && blobOf[nb] < 0) { blobOf[nb] = id; queue.push(nb); } }
+    }
+  }
+
+  const kill = new Uint8Array(sizes.length);
+  for (let id = 0; id < sizes.length; id++) {
+    if (sizes[id] <= minBlobPixels) kill[id] = 1;
+  }
+  for (let i = 0; i < n; i++) {
+    if (blobOf[i] >= 0 && kill[blobOf[i]]) mask[i] = 255;
+  }
+}
+
+export function computeBackgroundMask(imageData: ImageData, tolerance: number, seedColors?: string[]): Uint8Array {
   const { data, width, height } = imageData;
   const n = width * height;
   const mask = new Uint8Array(n);
+  const minIsland = Math.max(30, Math.round(n * 0.000035));
 
-  // If the image already has meaningful alpha transparency, flood-fill from
-  // the edges through transparent pixels only. This removes the main background
-  // (which is connected to the image border) while preserving isolated interior
-  // transparent specks from anti-aliasing or texture — those are never reached
-  // by the fill and stay as foreground.
+  // ── Alpha path (PNG / already-matted images) ─────────────────────────────────
   let transparentPixels = 0;
   for (let i = 0; i < n; i++) {
     if (data[i * 4 + 3] < 32) transparentPixels++;
   }
   if (transparentPixels > n * 0.005) {
-    // Only flood-fill through pixels with alpha < 32 (nearly fully transparent).
-    // Using < 128 was too aggressive — it followed semi-transparent chains of
-    // anti-aliased or textured design pixels through narrow passages into the art.
-    // The real outer background has alpha ~0 in properly-exported PNGs.
+    // Pass 1: edge flood-fill through alpha < 32 pixels connected to the border.
     const alphaVisited = new Uint8Array(n);
     const alphaQueue: number[] = [];
     const addAlpha = (idx: number) => {
@@ -673,20 +757,85 @@ export function computeBackgroundMask(imageData: ImageData, tolerance: number): 
     let alphaHead = 0;
     while (alphaHead < alphaQueue.length) {
       const idx = alphaQueue[alphaHead++];
-      const x = idx % width, y = Math.floor(idx / width);
+      const x = idx % width, y = (idx / width) | 0;
       if (x > 0)          addAlpha(idx - 1);
       if (x < width - 1)  addAlpha(idx + 1);
       if (y > 0)          addAlpha(idx - width);
       if (y < height - 1) addAlpha(idx + width);
     }
+
+    // Pass 2: grow into semi-transparent fringe pixels adjacent to confirmed
+    // background.
+    //   a) alpha ≤ 80 with ≥ 2 bg neighbors → background (thin fringe).
+    //   b) near-white pixel (white-background bleed) alpha ≤ 220 with ≥ 1 bg
+    //      neighbor → background. Only touches semi-transparent white halos,
+    //      never fully-opaque colored subject pixels.
+    for (let pass = 0; pass < 4; pass++) {
+      let changed = false;
+      for (let i = 0; i < n; i++) {
+        if (mask[i] !== 0) continue;
+        const a = data[i * 4 + 3];
+        if (a > 220) continue;
+        const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
+        const isNearWhite = r > 210 && g > 210 && b > 210;
+        const x = i % width, y = (i / width) | 0;
+        let bgN = 0;
+        if (x > 0          && mask[i - 1] === 255)     bgN++;
+        if (x < width - 1  && mask[i + 1] === 255)     bgN++;
+        if (y > 0          && mask[i - width] === 255)  bgN++;
+        if (y < height - 1 && mask[i + width] === 255)  bgN++;
+        if ((a <= 80 && bgN >= 2) || (isNearWhite && bgN >= 1)) {
+          mask[i] = 255; changed = true;
+        }
+      }
+      if (!changed) break;
+    }
+
+    // Pass 3: interior pocket — fully-opaque near-pure-white pixels completely
+    // enclosed by the subject (never touching the image border). Luminance > 230
+    // is intentionally strict so only genuine white background pockets are caught,
+    // not cream or light-colored subject highlights.
+    const pocketMinSize = Math.max(200, Math.round(n * 0.0003));
+    removeInteriorPockets(
+      mask, width, height,
+      (i) => data[i * 4 + 3] > 200 &&
+             (data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114) > 230,
+      pocketMinSize,
+    );
+
+    removeSmallForegroundIslands(mask, width, height, minIsland);
+
+    if (seedColors && seedColors.length > 0) {
+      const seedThresh = tolerance * 1.5;
+      for (const hex of seedColors) {
+        const sr = parseInt(hex.slice(1, 3), 16);
+        const sg = parseInt(hex.slice(3, 5), 16);
+        const sb = parseInt(hex.slice(5, 7), 16);
+        for (let i = 0; i < n; i++) {
+          if (mask[i] === 255) continue;
+          if (data[i * 4 + 3] < 10) continue;
+          const pi = i * 4;
+          const dr = data[pi]     - sr;
+          const dg = data[pi + 1] - sg;
+          const db = data[pi + 2] - sb;
+          if (Math.sqrt(0.299 * dr * dr + 0.587 * dg * dg + 0.114 * db * db) <= seedThresh) {
+            mask[i] = 255;
+          }
+        }
+      }
+    }
+
     return mask;
   }
 
-  // Fallback: color-similarity flood-fill for fully opaque images (JPGs, etc.)
+  // ── Color path (JPG / fully opaque images) ───────────────────────────────────
+  // Sample corner patches for background color. Full-border sampling is tempting
+  // but unreliable for artwork where the subject texture extends to the edges —
+  // it poisons the bgColor estimate and causes the fill to eat into the art.
   const visited = new Uint8Array(n);
   const thresh = tolerance * 1.5;
 
-  const patchSize = Math.min(3, width, height);
+  const patchSize = Math.min(5, width, height);
   const corners = [
     [0, 0], [width - patchSize, 0],
     [0, height - patchSize], [width - patchSize, height - patchSize],
@@ -702,30 +851,62 @@ export function computeBackgroundMask(imageData: ImageData, tolerance: number): 
   }
   const bgR = sumR / count, bgG = sumG / count, bgB = sumB / count;
 
+  // Perceptually-weighted color distance.
   const colorDist = (pi: number) => {
-    const dr = data[pi] - bgR, dg = data[pi + 1] - bgG, db = data[pi + 2] - bgB;
-    return Math.sqrt(dr * dr + dg * dg + db * db);
+    const dr = data[pi]     - bgR;
+    const dg = data[pi + 1] - bgG;
+    const db = data[pi + 2] - bgB;
+    return Math.sqrt(0.299 * dr * dr + 0.587 * dg * dg + 0.114 * db * db);
   };
 
+  // 8-connectivity flood-fill from the full image border.
   const queue: number[] = [];
   const add = (idx: number) => {
     if (visited[idx]) return;
     visited[idx] = 1;
     if (colorDist(idx * 4) <= thresh) { mask[idx] = 255; queue.push(idx); }
   };
-
   for (let x = 0; x < width; x++) { add(x); add((height - 1) * width + x); }
   for (let y = 1; y < height - 1; y++) { add(y * width); add(y * width + width - 1); }
-
   let head = 0;
   while (head < queue.length) {
     const idx = queue[head++];
-    const x = idx % width, y = Math.floor(idx / width);
-    if (x > 0)          add(idx - 1);
-    if (x < width - 1)  add(idx + 1);
-    if (y > 0)          add(idx - width);
-    if (y < height - 1) add(idx + width);
+    const x = idx % width, y = (idx / width) | 0;
+    const l = x > 0, r = x < width - 1, u = y > 0, d = y < height - 1;
+    if (l)    add(idx - 1);
+    if (r)    add(idx + 1);
+    if (u)    add(idx - width);
+    if (d)    add(idx + width);
+    if (l&&u) add(idx - width - 1);
+    if (r&&u) add(idx - width + 1);
+    if (l&&d) add(idx + width - 1);
+    if (r&&d) add(idx + width + 1);
   }
+
+  removeSmallForegroundIslands(mask, width, height, minIsland);
+
+  // User-picked seed colors: remove all pixels matching any picked color
+  // (global, not flood-fill connected) so isolated same-color background
+  // pockets get caught even when not reachable from the image border.
+  if (seedColors && seedColors.length > 0) {
+    const seedThresh = tolerance * 1.5;
+    for (const hex of seedColors) {
+      const sr = parseInt(hex.slice(1, 3), 16);
+      const sg = parseInt(hex.slice(3, 5), 16);
+      const sb = parseInt(hex.slice(5, 7), 16);
+      for (let i = 0; i < n; i++) {
+        if (mask[i] === 255) continue;
+        const pi = i * 4;
+        const dr = data[pi]     - sr;
+        const dg = data[pi + 1] - sg;
+        const db = data[pi + 2] - sb;
+        if (Math.sqrt(0.299 * dr * dr + 0.587 * dg * dg + 0.114 * db * db) <= seedThresh) {
+          mask[i] = 255;
+        }
+      }
+    }
+  }
+
   return mask;
 }
 

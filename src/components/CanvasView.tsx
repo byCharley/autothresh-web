@@ -162,6 +162,9 @@ export function CanvasView() {
   const paintDraftRef    = useRef<Uint8Array | null>(null);
   const paintDraftDimsRef = useRef({ w: 0, h: 0 });
   const isPaintingRef    = useRef(false);
+  const bgPaintDraftRef     = useRef<Uint8Array | null>(null);
+  const bgPaintDraftDimsRef = useRef({ w: 0, h: 0 });
+  const isBgPaintingRef     = useRef(false);
   const spaceHeldRef     = useRef(false);
   const undoStackRef     = useRef<Record<string, Array<Uint8Array | null>>>({});
   // Cache K-means base colors (from unadjusted image) for color-sep.
@@ -169,14 +172,15 @@ export function CanvasView() {
   // Image adjustments are applied mathematically to the cached base colors — no K-means rerun.
   const csKmeansCacheRef = useRef<{
     originalImage: ImageData; numColors: number; colorPriority: number;
-    bgRemovalEnabled: boolean; bgTolerance: number;
+    bgRemovalEnabled: boolean; bgTolerance: number; bgSeedColors: string[];
     baseColors: import('../engine/colorSeparation').RGB[];
   } | null>(null);
 
   const {
     originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     globalPattern,
-    bgRemovalEnabled, bgTolerance,
+    bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgSeedColors, setBgEyedropperActive,
+    bgPaintMask, bgPaintMaskDims, bgPaintMode, setBgPaintMask,
     showRegistrationMarks, regMarkPadding, documentBleed,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     canvasColor, showFabricBg, fabricTexture, fabricBlendStrength, fabricTextureDepth,
@@ -466,8 +470,9 @@ export function CanvasView() {
         const artScaled    = scaleImageDataExact(originalImage, artPrevW, artPrevH);
         const localBgMask = (() => {
           if (!bgRemovalEnabled) return null;
+          const seeds = bgSeedColors.length > 0 ? bgSeedColors : undefined;
           if (separationMode !== 'palette') {
-            return computeBackgroundMask(artScaled, bgTolerance);
+            return computeBackgroundMask(artScaled, bgTolerance, seeds);
           }
           // Palette mode with bg removal on: auto-pick tolerance based on background
           // luminance to handle feathered/vignette edges on light backgrounds.
@@ -475,8 +480,17 @@ export function CanvasView() {
           const corners = [0, (w - 1) * 4, (h - 1) * w * 4, ((h - 1) * w + w - 1) * 4];
           const bgLum = corners.reduce((s, p) => s + 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2], 0) / 4;
           const tol = bgLum > 200 ? 40 : bgTolerance;
-          return computeBackgroundMask(artScaled, tol);
+          return computeBackgroundMask(artScaled, tol, seeds);
         })();
+
+        // Apply user paint-fix overrides on top of the computed mask
+        if (localBgMask && bgPaintMask && bgPaintMaskDims &&
+            bgPaintMaskDims.w === artPrevW && bgPaintMaskDims.h === artPrevH) {
+          for (let i = 0; i < localBgMask.length; i++) {
+            if (bgPaintMask[i] === 1) localBgMask[i] = 0;
+            else if (bgPaintMask[i] === 2) localBgMask[i] = 255;
+          }
+        }
 
         const importanceMap = buildImportanceMap(artScaled, localBgMask);
 
@@ -808,7 +822,8 @@ export function CanvasView() {
             kCache.numColors === colorSepNumColors &&
             kCache.colorPriority === colorSepColorPriority &&
             kCache.bgRemovalEnabled === bgRemovalEnabled &&
-            kCache.bgTolerance === bgTolerance;
+            kCache.bgTolerance === bgTolerance &&
+            JSON.stringify(kCache.bgSeedColors) === JSON.stringify(bgSeedColors);
 
           let lockedForSep: typeof colorSepLockedColors;
           if (colorSepLockedColors) {
@@ -818,7 +833,7 @@ export function CanvasView() {
               // Run K-means once on unadjusted artScaled so it's adj-independent.
               const baseColors = detectColorSepColors(artScaled, colorSepNumColors, colorSepColorPriority / 100, localBgMask, importanceMap);
               csKmeansCacheRef.current = { originalImage, numColors: colorSepNumColors,
-                colorPriority: colorSepColorPriority, bgRemovalEnabled, bgTolerance, baseColors };
+                colorPriority: colorSepColorPriority, bgRemovalEnabled, bgTolerance, bgSeedColors, baseColors };
             }
             // Shift base colors by current adjustments (fast, no K-means).
             const isAdjNoop = imageAdjustments.adjMode === 'basic' &&
@@ -866,7 +881,7 @@ export function CanvasView() {
             ? scaleImageDataExact(originalImage, vectorLayout.artPrevW, vectorLayout.artPrevH)
             : artScaled;
           const vectorBgMask = (localBgMask && vectorLayout)
-            ? (() => { const m = computeBackgroundMask(vectorScaled, bgTolerance); return m; })()
+            ? (() => { const m = computeBackgroundMask(vectorScaled, bgTolerance, bgSeedColors.length > 0 ? bgSeedColors : undefined); return m; })()
             : localBgMask;
 
           // Build pre-processed imageData with bg pixels made transparent
@@ -1075,7 +1090,7 @@ export function CanvasView() {
     return () => { cancelled = true; clearTimeout(tid); if (rafId !== undefined) cancelAnimationFrame(rafId); };
   }, [
     originalImage, layers, knockoutEnabled, globalPattern,
-    bgRemovalEnabled, bgTolerance, canvasColor, showFabricBg, imageAdjustments,
+    bgRemovalEnabled, bgTolerance, bgSeedColors, bgPaintMask, canvasColor, showFabricBg, imageAdjustments,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     textureVersion,
     documentWidthIn, documentHeightIn, documentDpi, documentBleed,
@@ -1228,32 +1243,45 @@ export function CanvasView() {
     return () => obs.disconnect();
   }, [documentWidthIn, documentHeightIn]);
 
-  // Re-draw paint overlay from committed mask whenever the mask or selected layer changes.
-  // This keeps the overlay in sync with the store without clearing on mouseup.
+  // Re-draw paint overlay from committed masks whenever they change.
   useEffect(() => {
     const octx = paintOverlayRef.current?.getContext('2d');
     if (!octx || canvasDims.w === 0 || !artworkBounds) return;
     octx.clearRect(0, 0, canvasDims.w, canvasDims.h);
-    const mask = selectedLayerId ? paintMasks[selectedLayerId] : null;
-    if (!mask) return;
-    const { w, h } = artworkBounds;
+    const { w, h, x, y } = artworkBounds;
+    const layerMask = selectedLayerId ? paintMasks[selectedLayerId] : null;
+    const hasBgPaint = bgPaintMode !== 'off' && !!(bgPaintMask && bgPaintMaskDims && bgPaintMaskDims.w === w && bgPaintMaskDims.h === h);
+    if (!layerMask && !hasBgPaint) return;
     const imgData = new ImageData(w, h);
-    for (let i = 0; i < mask.length; i++) {
-      if (mask[i] === 1) {
-        imgData.data[i * 4] = 80; imgData.data[i * 4 + 1] = 200; imgData.data[i * 4 + 2] = 80; imgData.data[i * 4 + 3] = 110;
-      } else if (mask[i] === 2) {
-        imgData.data[i * 4] = 200; imgData.data[i * 4 + 1] = 60; imgData.data[i * 4 + 2] = 60; imgData.data[i * 4 + 3] = 110;
+    // BG paint drawn first (lower z-order)
+    if (hasBgPaint && bgPaintMask) {
+      for (let i = 0; i < bgPaintMask.length; i++) {
+        if (bgPaintMask[i] === 1) {
+          imgData.data[i * 4] = 40; imgData.data[i * 4 + 1] = 140; imgData.data[i * 4 + 2] = 255; imgData.data[i * 4 + 3] = 110;
+        } else if (bgPaintMask[i] === 2) {
+          imgData.data[i * 4] = 255; imgData.data[i * 4 + 1] = 120; imgData.data[i * 4 + 2] = 0; imgData.data[i * 4 + 3] = 110;
+        }
       }
     }
-    octx.putImageData(imgData, artworkBounds.x, artworkBounds.y);
-  }, [paintMasks, selectedLayerId, artworkBounds, canvasDims]);
+    // Layer paint drawn on top
+    if (layerMask) {
+      for (let i = 0; i < layerMask.length; i++) {
+        if (layerMask[i] === 1) {
+          imgData.data[i * 4] = 80; imgData.data[i * 4 + 1] = 200; imgData.data[i * 4 + 2] = 80; imgData.data[i * 4 + 3] = 110;
+        } else if (layerMask[i] === 2) {
+          imgData.data[i * 4] = 200; imgData.data[i * 4 + 1] = 60; imgData.data[i * 4 + 2] = 60; imgData.data[i * 4 + 3] = 110;
+        }
+      }
+    }
+    octx.putImageData(imgData, x, y);
+  }, [paintMasks, selectedLayerId, artworkBounds, canvasDims, bgPaintMask, bgPaintMaskDims, bgPaintMode]);
 
   // Keep brushSizeRef in sync so the key handler always has the latest value.
   brushSizeRef.current = brushSize;
 
-  // [ ] bracket keys to resize brush when paint mode is active.
+  // [ ] bracket keys to resize brush when any paint mode is active.
   useEffect(() => {
-    if (paintMode === 'off') return;
+    if (paintMode === 'off' && bgPaintMode === 'off') return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
       if (e.key === '[') setBrushSize(brushSizeRef.current - 5);
@@ -1261,7 +1289,7 @@ export function CanvasView() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [paintMode, setBrushSize]);
+  }, [paintMode, bgPaintMode, setBrushSize]);
 
   // Spacebar: hold to temporarily pan instead of paint.
   useEffect(() => {
@@ -1428,6 +1456,67 @@ export function CanvasView() {
     setPaintMask(selectedLayerId, newMask);
   };
 
+  // ── Eyedropper click: sample original image pixel at clicked position ──────────
+  const handleEyedropperClick = (e: React.MouseEvent<HTMLElement>) => {
+    if (!bgEyedropperActive || !originalImage || !artworkBounds || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const canvasX = (e.clientX - rect.left) / cssScale;
+    const canvasY = (e.clientY - rect.top)  / cssScale;
+    const relX = (canvasX - artworkBounds.x) / artworkBounds.w;
+    const relY = (canvasY - artworkBounds.y) / artworkBounds.h;
+    if (relX < 0 || relX > 1 || relY < 0 || relY > 1) return;
+    const px = Math.floor(relX * (originalImage.width  - 1));
+    const py = Math.floor(relY * (originalImage.height - 1));
+    const pi = (py * originalImage.width + px) * 4;
+    const r = originalImage.data[pi];
+    const g = originalImage.data[pi + 1];
+    const b = originalImage.data[pi + 2];
+    const hex = '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+    setBgSeedColors([...bgSeedColors, hex]);
+    setBgEyedropperActive(false);
+  };
+
+  // ── BG paint-fix handlers ───────────────────────────────────────────────────────
+  const applyBgPaintPoint = (e: React.PointerEvent) => {
+    const coords = getArtworkCoords(e);
+    if (!coords || !isBgPaintingRef.current || !bgPaintDraftRef.current) return;
+    const { cx, cy } = coords;
+    const { w, h } = bgPaintDraftDimsRef.current;
+    const val: 1 | 2 = bgPaintMode === 'restore' ? 1 : 2;
+    paintCircleOnMask(bgPaintDraftRef.current, w, h, cx, cy, brushSize, val);
+    const octx = paintOverlayRef.current?.getContext('2d');
+    if (octx) {
+      octx.beginPath();
+      octx.arc(cx + (artworkBounds?.x ?? 0), cy + (artworkBounds?.y ?? 0), brushSize, 0, Math.PI * 2);
+      octx.fillStyle = bgPaintMode === 'restore' ? 'rgba(40, 140, 255, 0.45)' : 'rgba(255, 120, 0, 0.45)';
+      octx.fill();
+    }
+  };
+
+  const handleBgPaintMouseDown = (e: React.PointerEvent) => {
+    if (bgPaintMode === 'off' || !artworkBounds) return;
+    e.stopPropagation();
+    isBgPaintingRef.current = true;
+    const dims = { w: artworkBounds.w, h: artworkBounds.h };
+    bgPaintDraftDimsRef.current = dims;
+    const existingMask = (bgPaintMask && bgPaintMaskDims &&
+      bgPaintMaskDims.w === dims.w && bgPaintMaskDims.h === dims.h) ? bgPaintMask : null;
+    bgPaintDraftRef.current = existingMask ? new Uint8Array(existingMask) : new Uint8Array(dims.w * dims.h);
+    applyBgPaintPoint(e);
+  };
+
+  const handleBgPaintMouseMove = (e: React.PointerEvent) => {
+    if (!isBgPaintingRef.current) return;
+    applyBgPaintPoint(e);
+  };
+
+  const handleBgPaintMouseUp = () => {
+    if (!isBgPaintingRef.current || !bgPaintDraftRef.current) return;
+    isBgPaintingRef.current = false;
+    setBgPaintMask(new Uint8Array(bgPaintDraftRef.current), { ...bgPaintDraftDimsRef.current });
+    bgPaintDraftRef.current = null;
+  };
+
   // ── Derived values ─────────────────────────────────────────────────────────────
 
   const [cr, cg, cb] = hexToRgb(canvasColor);
@@ -1526,11 +1615,17 @@ export function CanvasView() {
             midX: (pts[0].x + pts[1].x) / 2 - rect.left,
             midY: (pts[0].y + pts[1].y) / 2 - rect.top,
           };
+          if (isBgPaintingRef.current) handleBgPaintMouseUp();
           if (isPaintingRef.current) handlePaintMouseUp();
           setIsDragging(false);
           return;
         }
 
+        if (bgPaintMode !== 'off' && !spaceHeldRef.current) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          handleBgPaintMouseDown(e);
+          return;
+        }
         if (paintMode !== 'off' && !spaceHeldRef.current) {
           e.currentTarget.setPointerCapture(e.pointerId);
           handlePaintMouseDown(e);
@@ -1566,6 +1661,12 @@ export function CanvasView() {
           return;
         }
 
+        if (bgPaintMode !== 'off' && !spaceHeldRef.current) {
+          handleBgPaintMouseMove(e);
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (rect) setBrushPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+          return;
+        }
         if (paintMode !== 'off' && !spaceHeldRef.current) {
           handlePaintMouseMove(e);
           const rect = containerRef.current?.getBoundingClientRect();
@@ -1579,6 +1680,7 @@ export function CanvasView() {
         activePointersRef.current.delete(e.pointerId);
         e.currentTarget.releasePointerCapture(e.pointerId);
         if (activePointersRef.current.size < 2) pinchRef.current = null;
+        if (isBgPaintingRef.current) handleBgPaintMouseUp();
         if (isPaintingRef.current) handlePaintMouseUp();
         setIsDragging(false);
       }}
@@ -1586,15 +1688,19 @@ export function CanvasView() {
         activePointersRef.current.delete(e.pointerId);
         e.currentTarget.releasePointerCapture(e.pointerId);
         pinchRef.current = null;
+        if (isBgPaintingRef.current) handleBgPaintMouseUp();
         if (isPaintingRef.current) handlePaintMouseUp();
         setBrushPos(null);
         setIsDragging(false);
       }}
       onPointerLeave={() => {
-        if (!isPaintingRef.current) setBrushPos(null);
+        if (!isPaintingRef.current && !isBgPaintingRef.current) setBrushPos(null);
       }}
+      onClick={bgEyedropperActive ? handleEyedropperClick : undefined}
       style={{
-        cursor: paintMode !== 'off' && !isSpacePanning
+        cursor: bgEyedropperActive
+          ? 'crosshair'
+          : (bgPaintMode !== 'off' || paintMode !== 'off') && !isSpacePanning
           ? 'none'
           : isDragging ? 'grabbing'
           : (isSpacePanning || originalImage) ? 'grab'
@@ -1732,7 +1838,7 @@ export function CanvasView() {
           )}
 
           {/* Brush cursor — follows mouse, sized to match brush radius in display pixels */}
-          {paintMode !== 'off' && brushPos && !isSpacePanning && (
+          {(paintMode !== 'off' || bgPaintMode !== 'off') && brushPos && !isSpacePanning && (
             <svg style={{
               position: 'absolute',
               left: brushPos.x - brushSize * cssScale,
@@ -1747,21 +1853,37 @@ export function CanvasView() {
                 cx={brushSize * cssScale}
                 cy={brushSize * cssScale}
                 r={Math.max(1, brushSize * cssScale - 1)}
-                fill={paintMode === 'paint' ? 'rgba(80,200,80,0.08)' : 'rgba(200,60,60,0.08)'}
-                stroke={paintMode === 'paint' ? '#50c878' : '#e05050'}
+                fill={
+                  bgPaintMode === 'restore' ? 'rgba(40,140,255,0.08)' :
+                  bgPaintMode === 'remove'  ? 'rgba(255,120,0,0.08)' :
+                  paintMode === 'paint' ? 'rgba(80,200,80,0.08)' : 'rgba(200,60,60,0.08)'
+                }
+                stroke={
+                  bgPaintMode === 'restore' ? '#288cff' :
+                  bgPaintMode === 'remove'  ? '#ff7800' :
+                  paintMode === 'paint' ? '#50c878' : '#e05050'
+                }
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
               />
               <line
                 x1={brushSize * cssScale} y1={brushSize * cssScale - 5}
                 x2={brushSize * cssScale} y2={brushSize * cssScale + 5}
-                stroke={paintMode === 'paint' ? '#50c878' : '#e05050'}
+                stroke={
+                  bgPaintMode === 'restore' ? '#288cff' :
+                  bgPaintMode === 'remove'  ? '#ff7800' :
+                  paintMode === 'paint' ? '#50c878' : '#e05050'
+                }
                 strokeWidth={1}
               />
               <line
                 x1={brushSize * cssScale - 5} y1={brushSize * cssScale}
                 x2={brushSize * cssScale + 5} y2={brushSize * cssScale}
-                stroke={paintMode === 'paint' ? '#50c878' : '#e05050'}
+                stroke={
+                  bgPaintMode === 'restore' ? '#288cff' :
+                  bgPaintMode === 'remove'  ? '#ff7800' :
+                  paintMode === 'paint' ? '#50c878' : '#e05050'
+                }
                 strokeWidth={1}
               />
             </svg>
