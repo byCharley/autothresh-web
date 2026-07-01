@@ -238,6 +238,7 @@ export function useAuth() {
   const logout = useCallback(() => {
     clearSession(); // only removes SESSION_KEY
     clearPausedAt();
+    localStorage.removeItem('at-mode'); // reset so next login starts in Thresh mode
     setSession(null);
     setStatus('unauthenticated');
   }, []);
