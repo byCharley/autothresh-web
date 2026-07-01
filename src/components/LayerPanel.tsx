@@ -826,9 +826,12 @@ function TextureSection() {
 
   return (
     <>
-      <SectionHeader title="Plastisol Texture" open={open} onToggle={() => setOpen(!open)} />
+      <SectionHeader title="Distressed Texture" open={open} onToggle={() => setOpen(!open)} />
       {open && (
         <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, opacity: 0.7 }}>
+            Texture engine made using real Plastisol Ink Crack Scans
+          </div>
           <SwitchRow label="Enable" checked={textureEnabled} onChange={setTextureEnabled} />
 
           <div style={{ opacity: textureEnabled ? 1 : 0.4, pointerEvents: textureEnabled ? 'auto' : 'none', transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: 10 }}>
