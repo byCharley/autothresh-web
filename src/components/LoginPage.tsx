@@ -363,7 +363,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                 onClick={(e) => {
                   e.stopPropagation();
                   const url = selectedPlan === 'monthly'
-                    ? 'https://charleypangus.myshopify.com/cart/48356328210586:1?selling_plan=305671962778'
+                    ? 'https://charleypangus.com/checkout/autothresh-web/monthly'
                     : 'https://charleypangus.com/checkout/autothresh-web/yearly';
                   window.open(url, '_blank', 'noopener,noreferrer');
                 }}
