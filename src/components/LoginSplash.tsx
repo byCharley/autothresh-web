@@ -63,7 +63,7 @@ export function LoginSplash({ firstName, email, onDone }: LoginSplashProps) {
           fontFamily: 'var(--font-mono)', color: 'var(--text)',
           letterSpacing: '-0.02em',
         }}>
-          Welcome{displayName ? `, ${displayName}` : ''}
+          Hello{displayName ? `, ${displayName}` : ''}
         </div>
       </div>
     </div>
