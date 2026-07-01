@@ -305,15 +305,15 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                     </div>
                   )}
                   <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Monthly</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
-                    <span style={{ fontSize: 30, fontWeight: 700 }}>$11.99</span>
+                  <div style={{ fontFamily: 'var(--font-mono)', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                    <span style={{ fontSize: 30, fontWeight: 700 }}>$8.99</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>/mo</span>
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>/month</div>
                   <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
                     3-day free trial<br />Cancel anytime
                   </div>
                   <div style={{ marginTop: 8, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', opacity: 0.6, lineHeight: 1.5 }}>
-                    $11.99 charged after trial
+                    $8.99 charged after trial
                   </div>
                 </div>
 
@@ -334,7 +334,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                     background: 'var(--accent)', color: '#000',
                     fontSize: 8, fontWeight: 700, fontFamily: 'var(--font-mono)',
                     padding: '4px 9px', letterSpacing: '0.08em',
-                  }}>SAVE 20%</div>
+                  }}>SAVE 15%</div>
                   {selectedPlan === 'yearly' && (
                     <div style={{ position: 'absolute', bottom: 14, right: 14, color: 'var(--accent)' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -343,16 +343,16 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                     </div>
                   )}
                   <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Annual</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', lineHeight: 1 }}>
-                    <span style={{ fontSize: 30, fontWeight: 700 }}>$9.59</span>
+                  <div style={{ fontFamily: 'var(--font-mono)', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                    <span style={{ fontSize: 30, fontWeight: 700 }}>$90.95</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>/yr</span>
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>/month</div>
-                  <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 2, opacity: 0.7 }}>$115.10 billed yearly</div>
+                  <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 4, opacity: 0.7 }}>$7.58/mo</div>
                   <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
                     3-day free trial<br />Best value
                   </div>
                   <div style={{ marginTop: 8, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', opacity: 0.6, lineHeight: 1.5 }}>
-                    $115.10 charged after trial
+                    $90.95 charged after trial
                   </div>
                 </div>
 
