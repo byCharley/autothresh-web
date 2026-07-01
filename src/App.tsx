@@ -36,7 +36,7 @@ import {
 import type { LayerConfig, PatternConfig, ProcessedLayer, PatternType } from './engine/imageProcessor';
 import { generateTextureMask } from './engine/textureGenerator';
 import { buildImportanceMap } from './engine/analysisPass';
-import { encodeTiff } from './engine/exportFormats';
+import { encodeTiff, encodeEps } from './engine/exportFormats';
 import { isShadowColor, nearestPantone } from './engine/pantoneMatch';
 import { separateCmykPro, applyHalftoneToCmykPlates } from './engine/cmykProEngine';
 import { generateCmykProUnderbase, chokeWhitePlate } from './engine/underbaseEngine';
@@ -802,6 +802,52 @@ function App() {
         }
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-tiff.zip`);
       }
+    }
+
+    // ── EPS ──────────────────────────────────────────────────────────────────
+    // Screen print: one grayscale-positive EPS per separation (black=ink,
+    // white=no-ink), registration marks embedded, spot-color DSC headers
+    // so RIP software (AccuRIP, Kothari, Separation Studio …) labels each channel.
+    // CMYK/CMYK Pro use the same grayscale plate canvases as PNG/TIFF.
+    // DTG / Palette: single composite RGB EPS.
+    if (format === 'eps') {
+      const epsOf = (canvas: HTMLCanvasElement, title: string, spotColor?: [number,number,number] | null) =>
+        encodeEps(canvas, { dpi: documentDpi, title, spotColor: spotColor ?? null, grayscale: true });
+
+      if (mode === 'dtg' || separationMode === 'palette') {
+        // Single composite RGB EPS
+        const eps = encodeEps(buildCompositeCanvas(false), { dpi: documentDpi, title: baseName, grayscale: false });
+        saveAs(new Blob([eps.buffer as ArrayBuffer], { type: 'application/postscript' }), `${baseName}-composite.eps`);
+
+      } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
+        // One grayscale plate EPS per CMYK channel
+        const zip    = new JSZip();
+        const folder = zip.folder('plates-eps')!;
+        for (const pl of visibleLayers) {
+          const name = layerName(pl).toLowerCase().replace(/\s*·\s*/g, '-');
+          folder.file(`${name}.eps`, epsOf(buildCmykPlateCanvas(pl), layerName(pl)));
+        }
+        const suffix = separationMode === 'cmyk-pro' ? 'cmyk-pro-eps' : 'cmyk-eps';
+        saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-${suffix}.zip`);
+
+      } else {
+        // Screen-print separation modes: one EPS per color layer + optional underbase
+        const zip    = new JSZip();
+        const folder = zip.folder('screen-print-eps')!;
+        if (underbase) {
+          folder.file('underbase.eps', epsOf(buildUnderbaseCanvas(underbaseChoke), 'Underbase · #FFFFFF', [255, 255, 255]));
+        }
+        for (const pl of visibleLayers) {
+          const name = layerName(pl).toLowerCase().replace(/\s*·\s*/g, '-');
+          folder.file(`${name}.eps`, epsOf(buildLayerCanvas(pl, true), layerName(pl), pl.color));
+        }
+        if (includeColorInfo) {
+          const refColors: RGB[] = separationMode === 'color-sep' ? csExportColors : artLayers.map(l => l.color as RGB);
+          if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors)));
+        }
+        saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-eps.zip`);
+      }
+      return;
     }
   };
 

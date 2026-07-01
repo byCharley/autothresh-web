@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 
-export type ExportFormat = 'png' | 'psd' | 'pdf' | 'tiff' | 'svg';
+export type ExportFormat = 'png' | 'psd' | 'pdf' | 'tiff' | 'svg' | 'eps';
 
 export interface ExportConfig {
   mode:             'screen' | 'dtg';
@@ -25,12 +25,14 @@ const FORMATS_ALL: { value: ExportFormat; label: string; ext: string }[] = [
   { value: 'psd',  label: 'PSD',  ext: '.psd'  },
   { value: 'pdf',  label: 'PDF',  ext: '.pdf'  },
   { value: 'tiff', label: 'TIFF', ext: '.tiff' },
+  { value: 'eps',  label: 'EPS',  ext: '.eps'  },
 ];
 
 const FORMATS_DITHER: { value: ExportFormat; label: string; ext: string }[] = [
   { value: 'png', label: 'PNG', ext: '.png' },
   { value: 'psd', label: 'PSD', ext: '.psd' },
   { value: 'pdf', label: 'PDF', ext: '.pdf' },
+  { value: 'eps', label: 'EPS', ext: '.eps' },
 ];
 
 function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean) {
@@ -39,10 +41,18 @@ function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean
   }
   if (isDither) {
     switch (format) {
-      case 'png': return { pkg: 'Single file', layers: 'Dithered composite image', bg: 'White', marks: 'Not included' };
-      case 'psd': return { pkg: 'Single file', layers: 'One colored layer per ink zone', bg: 'White', marks: 'Not included' };
-      case 'pdf': return { pkg: 'Single file', layers: 'Dithered composite page', bg: 'White', marks: 'Not included' };
-      case 'tiff': return { pkg: 'Single file', layers: 'Dithered composite image', bg: 'White', marks: 'Not included' };
+      case 'png':  return { pkg: 'Single file', layers: 'Dithered composite image',        bg: 'White', marks: 'Not included' };
+      case 'psd':  return { pkg: 'Single file', layers: 'One colored layer per ink zone',  bg: 'White', marks: 'Not included' };
+      case 'pdf':  return { pkg: 'Single file', layers: 'Dithered composite page',         bg: 'White', marks: 'Not included' };
+      case 'tiff': return { pkg: 'Single file', layers: 'Dithered composite image',        bg: 'White', marks: 'Not included' };
+      case 'eps':  return { pkg: 'Single file', layers: 'Composite RGB EPS',               bg: 'White', marks: 'Not included' };
+    }
+  }
+  if (format === 'eps') {
+    if (mode === 'screen') {
+      return { pkg: 'ZIP archive', layers: 'One grayscale EPS per separation + underbase', bg: 'Transparent', marks: 'Included' };
+    } else {
+      return { pkg: 'Single file', layers: 'Composite RGB EPS', bg: 'White', marks: 'Not included' };
     }
   }
   if (mode === 'screen') {
@@ -99,6 +109,8 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
 
   const d = details(mode, format, isDither);
   const fmt = FORMATS.find(f => f.value === format) ?? FORMATS[0];
+  // EPS in screen mode exports a ZIP; show the correct extension in the filename bar
+  const displayExt = (format === 'eps' && !isDither && mode === 'screen') ? '.zip' : fmt.ext;
 
   return (
     <div
@@ -219,7 +231,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
               }}
             />
             <span style={{ padding: '7px 10px', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
-              {fmt.ext}
+              {displayExt}
             </span>
           </div>
         </div>
@@ -337,7 +349,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
         <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleExport} disabled={exporting}>
-            {exporting ? 'Exporting…' : `Export ${fmt.label}`}
+            {exporting ? 'Exporting…' : format === 'eps' && !isDither && mode === 'screen' ? 'Export EPS (ZIP)' : `Export ${fmt.label}`}
           </button>
         </div>
       </div>
