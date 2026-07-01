@@ -116,6 +116,32 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
             )}
           </button>
 
+          {/* Switch account */}
+          {onSwitchAccount && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+              <button
+                onClick={onSwitchAccount}
+                disabled={loading}
+                style={{
+                  width: '100%', padding: '9px 20px',
+                  background: 'none', border: '1px solid var(--border)',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                  transition: 'opacity 0.15s',
+                }}
+                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.7')}
+                onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <polyline points="16 11 18 13 22 9"/>
+                </svg>
+                Sign in with a different account
+              </button>
+            </div>
+          )}
+
           {/* Subscribe row */}
           <div style={{
             marginTop: 18, paddingTop: 16,
@@ -142,32 +168,6 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
               Subscribe
             </button>
           </div>
-
-          {/* Switch account */}
-          {onSwitchAccount && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-              <button
-                onClick={onSwitchAccount}
-                disabled={loading}
-                style={{
-                  width: '100%', padding: '9px 20px',
-                  background: 'none', border: '1px solid var(--border)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-                  transition: 'opacity 0.15s',
-                }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.7')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-                  <circle cx="9" cy="7" r="4"/>
-                  <polyline points="16 11 18 13 22 9"/>
-                </svg>
-                Sign in with a different account
-              </button>
-            </div>
-          )}
         </div>
 
         {/* About link */}
