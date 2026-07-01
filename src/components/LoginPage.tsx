@@ -156,11 +156,11 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 display: 'inline-flex', alignItems: 'center', gap: 5,
-                fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono)',
-                fontWeight: 700, padding: 0, transition: 'opacity 0.15s', opacity: 0.9,
+                fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
+                fontWeight: 700, padding: 0, transition: 'color 0.15s',
               }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.9')}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)')}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)')}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="5" y1="12" x2="19" y2="12"/>
