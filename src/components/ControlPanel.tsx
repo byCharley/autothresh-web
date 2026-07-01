@@ -74,7 +74,7 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
             className="field-value"
             title="Click to enter a value"
             onClick={() => { setDraft(displayVal); setEditing(true); }}
-            style={{ cursor: 'text', borderBottom: '1px dashed var(--border-2)' }}
+            style={{ cursor: 'text', borderBottom: '1px dashed var(--border-2)', padding: '4px 2px', minWidth: 28, display: 'inline-block', textAlign: 'right' }}
           >
             {displayVal}{unit}
           </span>
