@@ -51,7 +51,7 @@ export function FaqModal({ onClose }: Props) {
             <br />
             AutoThresh™ Web is the next step in the AutoThresh ecosystem. Built on the same trusted AutoThresh® Engine,
             it expands the lineup beyond Photoshop, giving you the freedom to create professional color separations directly in your browser.
-            Whether you prefer the speed of the desktop plugin or the flexibility of a web app, every AutoThresh product
+            Whether you prefer the speed of the Photoshop plugin or the flexibility of a web app, every AutoThresh product
             is designed to deliver the same high-quality results while continuing to add new tools, workflows, and separation technologies.
           </Item>
 
