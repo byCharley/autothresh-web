@@ -10,7 +10,7 @@ interface LoginSplashProps {
 export function LoginSplash({ firstName, email, onDone }: LoginSplashProps) {
   const [phase, setPhase] = useState<'fill' | 'text' | 'out'>('fill');
 
-  const displayName = firstName || email?.split('@')[0] || 'there';
+  const displayName = firstName || email?.split('@')[0] || '';
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('text'), 1000);
@@ -59,17 +59,11 @@ export function LoginSplash({ firstName, email, onDone }: LoginSplashProps) {
         transition: 'opacity 0.45s ease, transform 0.45s ease',
       }}>
         <div style={{
-          fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase',
-          fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginBottom: 8,
-        }}>
-          Welcome back
-        </div>
-        <div style={{
           fontSize: 24, fontWeight: 700,
           fontFamily: 'var(--font-mono)', color: 'var(--text)',
           letterSpacing: '-0.02em',
         }}>
-          {displayName}
+          Welcome{displayName ? `, ${displayName}` : ''}
         </div>
       </div>
     </div>
