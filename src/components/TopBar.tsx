@@ -6,6 +6,12 @@ import { AppIcon } from './AppIcon';
 // Add new entries at the TOP. Each `id` must be higher than all previous ones.
 const NOTIFICATIONS = [
   {
+    id: 3,
+    date: 'Jul 1, 2026',
+    title: 'Texture & Export Fixes',
+    body: 'Texture distressor now correctly knocks out of ink layers on export — no more overlay effect. Shadow layers stay solid so they don\'t bleed lighter colors through texture holes. Composite and DTG PNGs now include the garment background color when enabled. Passthrough mode exports a true flat PNG with texture and BG removal applied.',
+  },
+  {
     id: 2,
     date: 'Jul 1, 2026',
     title: 'Paint Fix Brush',
@@ -377,33 +383,42 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
                 AutoThresh
               </span>
             </div>
-            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-              {NOTIFICATIONS.map((n, i) => (
-                <div key={n.id} style={{
-                  padding: '12px 14px',
-                  borderBottom: i < NOTIFICATIONS.length - 1 ? '1px solid var(--border)' : 'none',
-                  display: 'flex', gap: 10,
-                }}>
-                  <div style={{
-                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 5,
-                    background: n.id > seenId ? 'var(--accent)' : 'var(--border)',
-                    boxShadow: n.id > seenId ? '0 0 5px var(--accent)' : 'none',
-                  }} />
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
-                        {n.title}
-                      </span>
-                      <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
-                        {n.date}
-                      </span>
+            <div style={{ position: 'relative' }}>
+              <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                {NOTIFICATIONS.map((n, i) => (
+                  <div key={n.id} style={{
+                    padding: '12px 14px',
+                    borderBottom: i < NOTIFICATIONS.length - 1 ? '1px solid var(--border)' : 'none',
+                    display: 'flex', gap: 10,
+                    opacity: i >= 4 ? Math.max(0.35, 0.65 - (i - 4) * 0.1) : 1,
+                    animation: `notif-row-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) ${i * 55}ms both`,
+                  }}>
+                    <div style={{
+                      width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 5,
+                      background: n.id > seenId ? 'var(--accent)' : 'var(--border)',
+                      boxShadow: n.id > seenId ? '0 0 5px var(--accent)' : 'none',
+                    }} />
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                          {n.title}
+                        </span>
+                        <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                          {n.date}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0, fontFamily: 'var(--font-mono)' }}>
+                        {n.body}
+                      </p>
                     </div>
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0, fontFamily: 'var(--font-mono)' }}>
-                      {n.body}
-                    </p>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0, height: 64,
+                background: 'linear-gradient(to bottom, transparent, var(--surface))',
+                pointerEvents: 'none',
+              }} />
             </div>
           </div>
         )}
