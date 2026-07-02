@@ -4,7 +4,26 @@ const SEAL_TOKEN   = process.env.SEAL_API_TOKEN!;
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const CRON_SECRET  = process.env.CRON_SECRET ?? '';
+const CRON_SECRET    = process.env.CRON_SECRET ?? '';
+const STORE_ID       = process.env.SHOPIFY_STORE_ID!;
+const CUST_API_URL   = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
+const CREATOR_EMAILS = new Set(
+  (process.env.CREATOR_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+);
+
+async function isCreatorToken(token: string): Promise<boolean> {
+  if (!token) return false;
+  try {
+    const r = await fetch(CUST_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': token },
+      body: JSON.stringify({ query: `query { customer { emailAddress { emailAddress } } }` }),
+    });
+    const body = await r.json() as { data?: { customer?: { emailAddress?: { emailAddress: string } } } };
+    const email = body?.data?.customer?.emailAddress?.emailAddress ?? '';
+    return CREATOR_EMAILS.has(email.toLowerCase());
+  } catch { return false; }
+}
 
 async function getSealCounts(): Promise<{ active: number; trial: number; paused: number; cancelled: number; total: number }> {
   const counts = { active: 0, trial: 0, paused: 0, cancelled: 0, total: 0 };
@@ -36,10 +55,12 @@ async function getSealCounts(): Promise<{ active: number; trial: number; paused:
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Vercel cron sends Authorization: Bearer <CRON_SECRET>
-  // Allow if secret matches OR if running in Vercel's internal cron context (no secret configured)
+  // Accept: Vercel cron secret OR a valid creator session token
   const authHeader = String(req.headers.authorization ?? '');
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  const bearer = authHeader.replace(/^Bearer /, '');
+  const isCron    = !CRON_SECRET || authHeader === `Bearer ${CRON_SECRET}`;
+  const isCreator = isCron ? false : await isCreatorToken(bearer);
+  if (!isCron && !isCreator) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 

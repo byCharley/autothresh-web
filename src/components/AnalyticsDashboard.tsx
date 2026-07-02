@@ -335,6 +335,27 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     setPreset('custom');
   }
 
+  const [snapping, setSnapping] = useState(false);
+  const [snapMsg, setSnapMsg]   = useState<string | null>(null);
+
+  function takeSnapshot() {
+    setSnapping(true);
+    setSnapMsg(null);
+    fetch('/api/cron/snapshot-subscriptions', {
+      headers: { Authorization: `Bearer ${session.token}` },
+    })
+      .then(r => r.json() as Promise<{ ok?: boolean; snapshot?: Record<string, number>; error?: string }>)
+      .then(d => {
+        setSnapMsg(d.ok ? `Saved — Active: ${d.snapshot?.active}, Trial: ${d.snapshot?.trial}` : (d.error ?? 'Failed'));
+        setSnapping(false);
+        if (d.ok) {
+          if (preset === 'custom') load({ from: customFrom, to: customTo });
+          else load({ days: preset });
+        }
+      })
+      .catch(() => { setSnapMsg('Request failed'); setSnapping(false); });
+  }
+
   const formatHour = (h: number) => {
     if (h === 0) return '12:00 AM';
     if (h < 12) return `${h}:00 AM`;
@@ -556,7 +577,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
               {/* Subscription trend */}
               <Panel title="Subscription Trend (Daily Snapshots)">
-                <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
+                <div style={{ display: 'flex', gap: 16, marginBottom: 10, alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 20, height: 2, background: 'var(--accent)', borderRadius: 1 }} />
                     <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Active</span>
@@ -565,9 +586,25 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                     <div style={{ width: 20, height: 2, background: '#a78bfa', borderRadius: 1, opacity: 0.7 }} />
                     <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Trial</span>
                   </div>
-                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                    Snapshotted daily at 6:00 AM UTC
-                  </span>
+                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {snapMsg && (
+                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{snapMsg}</span>
+                    )}
+                    <button
+                      onClick={takeSnapshot}
+                      disabled={snapping}
+                      style={{
+                        height: 22, padding: '0 10px',
+                        background: 'transparent', border: '1px solid var(--border)',
+                        color: 'var(--text-dim)', fontSize: 9,
+                        fontFamily: 'var(--font-mono)', fontWeight: 700,
+                        cursor: snapping ? 'default' : 'pointer', opacity: snapping ? 0.5 : 1,
+                        letterSpacing: '0.06em', textTransform: 'uppercase',
+                      }}
+                    >
+                      {snapping ? 'Saving…' : 'Snapshot Now'}
+                    </button>
+                  </div>
                 </div>
                 <SubTrendChart data={data.subTrend} />
               </Panel>
