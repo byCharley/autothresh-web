@@ -294,6 +294,8 @@ interface AppState {
   palettePool: string[][];
   activePaletteIdx: number;
 
+  passthroughMode: boolean;
+
   paintMasks: Record<string, Uint8Array | null>;
   paintMode: 'off' | 'paint' | 'erase';
   brushSize: number;
@@ -414,6 +416,8 @@ interface AppState {
   addLayer: () => void;
   removeLayer: (id: string) => void;
   duplicateLayer: (id: string) => void;
+  setPassthroughMode: (v: boolean) => void;
+
   setPaintMask: (layerId: string, mask: Uint8Array | null) => void;
   clearPaintMask: (layerId: string) => void;
   setPaintMode: (mode: 'off' | 'paint' | 'erase') => void;
@@ -522,6 +526,7 @@ export const useStore = create<AppState>((set, get) => ({
   imageAdjustmentsPerMode: {},
   palettePool: [],
   activePaletteIdx: 0,
+  passthroughMode: false,
   paintMasks: {},
   paintMode: 'off',
   brushSize: 20,
@@ -780,6 +785,10 @@ export const useStore = create<AppState>((set, get) => ({
       layers: [...s.layers.slice(0, idx + 1), copy, ...s.layers.slice(idx + 1)],
       selectedLayerId: copy.id,
     };
+  }),
+  setPassthroughMode: (passthroughMode) => set({
+    passthroughMode,
+    ...(passthroughMode ? { bgRemovalEnabled: false, bgPaintMode: 'off' as const } : {}),
   }),
   setPaintMask: (layerId, mask) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: mask } })),
   clearPaintMask: (layerId) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: null } })),

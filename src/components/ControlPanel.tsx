@@ -1250,7 +1250,7 @@ function CmykProSection() {
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | null }) {
-  const { layers, selectedLayerId, updateLayer, originalImage, separationMode } = useStore();
+  const { layers, selectedLayerId, updateLayer, originalImage, separationMode, passthroughMode } = useStore();
   const layer = layers.find((l) => l.id === selectedLayerId);
 
   if (!originalImage) {
@@ -1259,6 +1259,26 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         <div className="control-scroll">
           <DocumentSection />
           <RegistrationSection />
+        </div>
+      </aside>
+    );
+  }
+
+  if (passthroughMode) {
+    return (
+      <aside className="panel-right" data-tutorial="tutorial-controls">
+        <div className="control-scroll">
+          <DocumentSection />
+          <RegistrationSection />
+          <div style={{
+            margin: '10px 12px',
+            padding: '8px 10px',
+            background: 'color-mix(in srgb, var(--accent) 8%, var(--surface-2))',
+            border: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))',
+            fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', lineHeight: 1.6,
+          }}>
+            Passthrough mode — separation controls disabled.
+          </div>
         </div>
       </aside>
     );

@@ -35,6 +35,7 @@ import {
 } from './engine/imageProcessor';
 import type { LayerConfig, PatternConfig, ProcessedLayer, PatternType } from './engine/imageProcessor';
 import { generateTextureMask } from './engine/textureGenerator';
+import { applyFabricBlend } from './engine/fabricBlend';
 import { buildImportanceMap } from './engine/analysisPass';
 import { encodeTiff, encodeEps } from './engine/exportFormats';
 import { isShadowColor, nearestPantone } from './engine/pantoneMatch';
@@ -157,6 +158,8 @@ function App() {
     paintMasks,
     vectorSvg,
     underbaseIncludeShadows, underbaseEnabled, underbaseDensity, underbaseChoke: storeUnderbaseChoke,
+    passthroughMode, bgSeedColors, bgPaintMask, bgPaintMaskDims,
+    fabricTexture, fabricBlendStrength, fabricTextureDepth,
   } = useStore();
 
   useEffect(() => {
@@ -258,6 +261,82 @@ function App() {
     const artImageData = artExpCanvas.getContext('2d')!.getImageData(0, 0, artScaleW, artScaleH);
 
     const artBgMask = bgRemovalEnabled ? computeBackgroundMask(artImageData, bgTolerance) : null;
+
+    // ── Passthrough mode: flat PNG export (bypasses all separation) ─────────────
+    if (passthroughMode) {
+      const imgData = artImageData;
+      if (bgRemovalEnabled) {
+        const bgMask = computeBackgroundMask(imgData, bgTolerance, bgSeedColors.length > 0 ? bgSeedColors : undefined);
+        if (bgPaintMask && bgPaintMaskDims) {
+          const { w: pmW, h: pmH } = bgPaintMaskDims;
+          const scaleX = artScaleW / pmW;
+          const scaleY = artScaleH / pmH;
+          for (let y = 0; y < artScaleH; y++) {
+            for (let x = 0; x < artScaleW; x++) {
+              const sx = Math.min(pmW - 1, Math.floor(x / scaleX));
+              const sy = Math.min(pmH - 1, Math.floor(y / scaleY));
+              const pv = bgPaintMask[sy * pmW + sx];
+              if (pv === 1) bgMask[y * artScaleW + x] = 0;
+              else if (pv === 2) bgMask[y * artScaleW + x] = 255;
+            }
+          }
+        }
+        for (let i = 0; i < bgMask.length; i++) {
+          if (bgMask[i] === 255) imgData.data[i * 4 + 3] = 0;
+        }
+      }
+      if (textureEnabled) {
+        const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
+        for (let i = 0; i < texMask.length; i++) {
+          if (texMask[i] === 0) imgData.data[i * 4 + 3] = 0;
+        }
+      }
+      // Put processed artwork on a temp canvas (preserves transparency)
+      const artCanvas = document.createElement('canvas');
+      artCanvas.width = artScaleW; artCanvas.height = artScaleH;
+      artCanvas.getContext('2d')!.putImageData(imgData, 0, 0);
+      // Build output canvas — fill background if enabled, then composite artwork
+      const flatCanvas = document.createElement('canvas');
+      flatCanvas.width = artScaleW; flatCanvas.height = artScaleH;
+      const flatCtx = flatCanvas.getContext('2d')!;
+      if (showFabricBg) {
+        flatCtx.fillStyle = canvasColor;
+        flatCtx.fillRect(0, 0, artScaleW, artScaleH);
+      }
+      flatCtx.drawImage(artCanvas, 0, 0);
+      // Apply fabric texture blend on top of the combined result
+      if (showFabricBg && fabricTexture !== 'none') {
+        const fabricPath = fabricTexture === 'light'
+          ? '/textures/White_Fabric_ATW.png'
+          : '/textures/Black_Fabric_ATW.png';
+        const fabData = await new Promise<ImageData | null>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const c = document.createElement('canvas');
+            c.width = img.naturalWidth; c.height = img.naturalHeight;
+            c.getContext('2d')!.drawImage(img, 0, 0);
+            resolve(c.getContext('2d')!.getImageData(0, 0, c.width, c.height));
+          };
+          img.onerror = () => resolve(null);
+          img.src = fabricPath;
+        });
+        if (fabData) {
+          const combined = flatCtx.getImageData(0, 0, artScaleW, artScaleH);
+          applyFabricBlend(combined, fabData, {
+            garmentType: fabricTexture,
+            blendStrength: fabricBlendStrength,
+            textureDepth: fabricTextureDepth,
+            canvasRgb: hexToRgb(canvasColor),
+          });
+          flatCtx.putImageData(combined, 0, 0);
+        }
+      }
+      flatCanvas.toBlob(blob => {
+        if (blob) saveAs(blob, `${fileName || 'autothresh'}.png`);
+      }, 'image/png');
+      return;
+    }
+
     const importanceMap = buildImportanceMap(artImageData, artBgMask);
 
     // Palette tile size — same logic as CanvasView so export matches the preview exactly
@@ -323,6 +402,8 @@ function App() {
       if (textureEnabled) {
         const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
         for (const layer of artLayers) {
+          const [lr, lg, lb] = layer.color;
+          if (isShadowColor(lr, lg, lb)) continue;
           for (let i = 0; i < layer.mask.length; i++) {
             if (texMask[i] === 0) layer.mask[i] = 0;
           }
@@ -345,6 +426,8 @@ function App() {
       if (textureEnabled) {
         const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
         for (const layer of artLayers) {
+          const [lr, lg, lb] = layer.color;
+          if (isShadowColor(lr, lg, lb)) continue;
           for (let i = 0; i < layer.mask.length; i++) {
             if (texMask[i] === 0) layer.mask[i] = 0;
           }
@@ -356,6 +439,8 @@ function App() {
       if (textureEnabled) {
         const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
         for (const layer of artLayers) {
+          const [lr, lg, lb] = layer.color;
+          if (isShadowColor(lr, lg, lb)) continue;
           for (let i = 0; i < layer.mask.length; i++) {
             if (texMask[i] === 0) layer.mask[i] = 0;
           }
@@ -402,6 +487,12 @@ function App() {
     const regPaddingPx = Math.round(regMarkPadding * documentDpi);
     const baseName    = fileName || imageFileName.replace(/\.[^.]+$/, '') || 'autothresh';
 
+    // Texture knockout mask for export — applied to layers and composite so holes are
+    // physically removed from ink rather than overlaid on top.
+    const exportTexMask = (textureEnabled && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro')
+      ? generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed)
+      : null;
+
     // ── Build per-layer canvas: place artwork mask at its offset in the doc ──
     const buildLayerCanvas = (pl: typeof artLayers[number], withMarks: boolean): HTMLCanvasElement => {
       const [r, g, b] = pl.color;
@@ -409,6 +500,7 @@ function App() {
       for (let ay = 0; ay < artScaleH; ay++) {
         for (let ax = 0; ax < artScaleW; ax++) {
           if (pl.mask[ay * artScaleW + ax] !== 255) continue;
+          if (exportTexMask && exportTexMask[ay * artScaleW + ax] === 0) continue;
           const dx = artOffX + ax, dy = artOffY + ay;
           if (dx < 0 || dx >= docPxW || dy < 0 || dy >= docPxH) continue;
           const pi = (dy * docPxW + dx) * 4;
@@ -470,14 +562,16 @@ function App() {
           paletteDensity, paletteAngle, paletteSoftness, importanceMap);
       } else if (separationMode === 'color-sep' && csExportImageData && csExportSettings) {
         artComposite = renderColorSepComposite(csExportImageData, csExportColors, colorSepVisibility, csExportSettings, artBgMask, importanceMap);
-        if (textureEnabled) {
-          const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
-          for (let i = 0; i < texMask.length; i++) {
-            if (texMask[i] === 0) artComposite.data[i * 4 + 3] = 0;
-          }
-        }
       } else {
         artComposite = renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
+      }
+      // Knock texture out of composite for palette/color-sep (rendered from raw image, no layer masks).
+      // For thresh/screen modes, texture is already knocked out of non-shadow layer masks by renderComposite —
+      // applying exportTexMask here would incorrectly punch through the solid shadow layer too.
+      if (exportTexMask && (separationMode === 'palette' || separationMode === 'color-sep')) {
+        for (let i = 0; i < exportTexMask.length; i++) {
+          if (exportTexMask[i] === 0) artComposite.data[i * 4 + 3] = 0;
+        }
       }
       const docCanvas = document.createElement('canvas');
       docCanvas.width = docPxW; docCanvas.height = docPxH;
@@ -485,7 +579,7 @@ function App() {
       if (separationMode === 'cmyk') {
         dCtx.fillStyle = effectiveGarment;
         dCtx.fillRect(0, 0, docPxW, docPxH);
-      } else if ((separationMode === 'palette' || separationMode === 'cmyk-pro') && showFabricBg) {
+      } else if (showFabricBg) {
         dCtx.fillStyle = canvasColor;
         dCtx.fillRect(0, 0, docPxW, docPxH);
       }
@@ -549,6 +643,7 @@ function App() {
       for (let ay = 0; ay < artScaleH; ay++) {
         for (let ax = 0; ax < artScaleW; ax++) {
           if (mask[ay * artScaleW + ax] !== 255) continue;
+          if (exportTexMask && exportTexMask[ay * artScaleW + ax] === 0) continue;
           const dx = artOffX + ax, dy = artOffY + ay;
           if (dx < 0 || dx >= docPxW || dy < 0 || dy >= docPxH) continue;
           const pi = (dy * docPxW + dx) * 4;

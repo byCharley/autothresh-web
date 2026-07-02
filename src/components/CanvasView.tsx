@@ -191,6 +191,7 @@ export function CanvasView() {
     paletteDensity, paletteAngle, paletteSoftness,
     paletteAnalyzeKey,
     setPaletteColors,
+    passthroughMode,
     paintMasks, paintMode, brushSize, selectedLayerId,
     processedLayers, processedLayerDims,
     isProcessing, setOriginalImage, setProcessedLayers, setProcessedLayerDims, setDitherComposite, setIsProcessing, setCanvasColor, setImageAdjustment,
@@ -496,7 +497,23 @@ export function CanvasView() {
 
         let artComposite: ImageData;
         let underbaseLayers: import('../engine/imageProcessor').ProcessedLayer[] = [];
-        if (separationMode === 'cmyk') {
+        if (passthroughMode) {
+          // Passthrough: original image with BG removal + distressor texture, no separation
+          artComposite = new ImageData(new Uint8ClampedArray(artScaled.data), artPrevW, artPrevH);
+          if (localBgMask) {
+            for (let i = 0; i < localBgMask.length; i++) {
+              if (localBgMask[i] === 255) artComposite.data[i * 4 + 3] = 0;
+            }
+          }
+          if (textureEnabled) {
+            const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+            for (let i = 0; i < texMask.length; i++) {
+              if (texMask[i] === 0) artComposite.data[i * 4 + 3] = 0;
+            }
+          }
+          setProcessedLayers([]);
+          setProcessedLayerDims({ w: artPrevW, h: artPrevH });
+        } else if (separationMode === 'cmyk') {
           const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
           const ALL_VIS = { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true };
 
@@ -930,6 +947,8 @@ export function CanvasView() {
           if (textureEnabled) {
             const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
             for (const layer of processed) {
+              const [lr, lg, lb] = layer.color;
+              if (isShadowColor(lr, lg, lb)) continue; // Shadow stays solid — holes would reveal lighter layers beneath
               for (let i = 0; i < layer.mask.length; i++) {
                 if (texMask[i] === 0) layer.mask[i] = 0;
               }
@@ -1090,7 +1109,7 @@ export function CanvasView() {
     return () => { cancelled = true; clearTimeout(tid); if (rafId !== undefined) cancelAnimationFrame(rafId); };
   }, [
     originalImage, layers, knockoutEnabled, globalPattern,
-    bgRemovalEnabled, bgTolerance, bgSeedColors, bgPaintMask, canvasColor, showFabricBg, imageAdjustments,
+    bgRemovalEnabled, bgTolerance, bgSeedColors, bgPaintMask, passthroughMode, canvasColor, showFabricBg, imageAdjustments,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     textureVersion,
     documentWidthIn, documentHeightIn, documentDpi, documentBleed,

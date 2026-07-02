@@ -1623,6 +1623,7 @@ export function LayerPanel() {
     previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
     paletteNumColors, setPaletteColors,
     separationMode, setSeparationMode,
+    passthroughMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
     removeLayer, duplicateLayer, paintMasks, paintMode,
     globalPattern, soloLayerId, setSoloLayerId,
@@ -1818,7 +1819,9 @@ export function LayerPanel() {
               <button
                 key={mode}
                 ref={(el) => { modeBtnRefs.current[i] = el; }}
+                disabled={passthroughMode}
                 onClick={() => {
+                  if (passthroughMode) return;
                   setSeparationMode(mode);
                   if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
                     setCmykDisclaimerNeverShow(false);
@@ -1828,9 +1831,10 @@ export function LayerPanel() {
                 style={{
                   flex: 1, height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
                   fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
-                  cursor: 'pointer', border: 'none',
+                  cursor: passthroughMode ? 'not-allowed' : 'pointer', border: 'none',
                   background: 'transparent',
-                  color: separationMode === mode ? '#000' : 'var(--text-muted)',
+                  color: passthroughMode ? 'var(--text-dim)' : separationMode === mode ? '#000' : 'var(--text-muted)',
+                  opacity: passthroughMode ? 0.35 : 1,
                   transition: 'color 0.22s cubic-bezier(0.22, 0.61, 0.36, 1)',
                   position: 'relative', zIndex: 1,
                 }}
@@ -1899,7 +1903,22 @@ export function LayerPanel() {
           )}
         </div>
 
-        <div key={separationMode} className="at-mode-content">
+        {passthroughMode ? (
+          <div className="at-mode-content">
+            <div style={{
+              margin: '10px 12px 4px',
+              padding: '8px 10px',
+              background: 'color-mix(in srgb, var(--accent) 8%, var(--surface-2))',
+              border: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))',
+              borderRadius: 2,
+              fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', lineHeight: 1.6,
+            }}>
+              Passthrough mode — separation off. Texture and background controls below.
+            </div>
+            <TextureSection />
+            <BackgroundSection />
+          </div>
+        ) : <div key={separationMode} className="at-mode-content">
         {separationMode === 'cmyk-pro' ? (
           <>
             <CmykProLayerSection />
@@ -2245,7 +2264,7 @@ export function LayerPanel() {
             <BackgroundSection />
           </>
         )}
-        </div>
+        </div>}
       </div>
 
       {/* CMYK Pro disclaimer modal */}

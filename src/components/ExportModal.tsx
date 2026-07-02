@@ -72,15 +72,18 @@ function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean
   }
 }
 
+const FORMATS_PASSTHROUGH = [{ value: 'png' as ExportFormat, label: 'PNG', ext: '.png' }];
+
 export function ExportModal({ onClose, onExport, defaultFileName, separationMode }: Props) {
-  const isDither  = separationMode === 'palette';
-  const isVector  = separationMode === 'vector';
+  const { passthroughMode } = useStore();
+  const isDither  = !passthroughMode && separationMode === 'palette';
+  const isVector  = !passthroughMode && separationMode === 'vector';
   const isCmyk    = separationMode === 'cmyk';
   const isCmykPro = separationMode === 'cmyk-pro';
-  const FORMATS  = isVector ? [{ value: 'svg' as ExportFormat, label: 'SVG', ext: '.svg' }] : isDither ? FORMATS_DITHER : FORMATS_ALL;
+  const FORMATS  = passthroughMode ? FORMATS_PASSTHROUGH : isVector ? [{ value: 'svg' as ExportFormat, label: 'SVG', ext: '.svg' }] : isDither ? FORMATS_DITHER : FORMATS_ALL;
 
   const [mode,             setMode]             = useState<'screen' | 'dtg'>(isDither ? 'dtg' : 'screen');
-  const [format,           setFormat]           = useState<ExportFormat>(isVector ? 'svg' : 'png');
+  const [format,           setFormat]           = useState<ExportFormat>(passthroughMode ? 'png' : isVector ? 'svg' : 'png');
   const [fileName,         setFileName]         = useState(defaultFileName);
   const { underbaseEnabled, underbaseChoke: storeChoke, setUnderbaseEnabled, setUnderbaseChoke } = useStore();
   const [exporting,        setExporting]        = useState(false);
@@ -112,6 +115,81 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
   // EPS in screen mode exports a ZIP; show the correct extension in the filename bar
   const displayExt = (format === 'eps' && !isDither && mode === 'screen') ? '.zip' : fmt.ext;
 
+  // ── Passthrough modal: stripped to filename + export only ─────────────────────
+  if (passthroughMode) {
+    return (
+      <div
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        onClick={onClose}
+      >
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', width: 380, maxWidth: '92vw', zIndex: 41 }} onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
+              Export — Passthrough
+            </span>
+            <button className="btn btn-ghost btn-icon" onClick={onClose}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          {/* Notice */}
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+              <path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><line x1="12" y1="2" x2="12" y2="12"/>
+            </svg>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', lineHeight: 1.5 }}>
+              Passthrough mode — single PNG with textures applied.
+            </span>
+          </div>
+          {/* Filename */}
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>
+              File Name
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+              <input
+                type="text"
+                value={fileName}
+                onChange={e => setFileName(e.target.value)}
+                placeholder="filename"
+                style={{ flex: 1, background: 'none', border: 'none', outline: 'none', padding: '7px 10px', fontSize: 12, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}
+              />
+              <span style={{ padding: '7px 10px', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>
+                .png
+              </span>
+            </div>
+          </div>
+          {/* Export button */}
+          <div style={{ padding: '12px 16px' }}>
+            {exportError && <div style={{ fontSize: 10, color: '#e05050', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>{exportError}</div>}
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', height: 36, fontSize: 12, color: '#1a1a1a' }}
+              disabled={exporting}
+              onClick={async () => {
+                setExporting(true);
+                setExportError(null);
+                await new Promise(r => setTimeout(r, 60));
+                try {
+                  await onExport({ mode: 'dtg', format: 'png', fileName: fileName.trim() || defaultFileName, includeColorInfo: false, usePantoneNames: false, underbase: false, underbaseChoke: 0 });
+                  onClose();
+                } catch (err) {
+                  setExportError(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setExporting(false);
+                }
+              }}
+            >
+              {exporting ? 'Exporting…' : 'Export PNG'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -136,7 +214,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)',
         }}>
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-            {isVector ? 'Export — Vector' : isDither ? 'Export — Dither' : isCmykPro ? 'Export — CMYK Pro' : 'Export'}
+            {passthroughMode ? 'Export — Passthrough' : isVector ? 'Export — Vector' : isDither ? 'Export — Dither' : isCmykPro ? 'Export — CMYK Pro' : 'Export'}
           </span>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -145,8 +223,24 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           </button>
         </div>
 
-        {/* Mode selector — hidden for Dither, Vector, and CMYK Pro */}
-        {!isDither && !isVector && !isCmykPro && (
+        {/* Passthrough notice */}
+        {passthroughMode && (
+          <div style={{
+            padding: '10px 16px', borderBottom: '1px solid var(--border)',
+            background: 'var(--accent-dim)',
+            display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+              <path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/><line x1="12" y1="2" x2="12" y2="12"/>
+            </svg>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', lineHeight: 1.5 }}>
+              Passthrough mode active — exporting original image with textures only. PNG only.
+            </span>
+          </div>
+        )}
+
+        {/* Mode selector — hidden for Dither, Vector, CMYK Pro, and Passthrough */}
+        {!isDither && !isVector && !isCmykPro && !passthroughMode && (
           <div style={{ padding: '14px 16px 0', borderBottom: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
               Export Mode

@@ -2,6 +2,33 @@ import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { AppIcon } from './AppIcon';
 
+// ── Changelog ──────────────────────────────────────────────────────────────────
+// Add new entries at the TOP. Each `id` must be higher than all previous ones.
+const NOTIFICATIONS = [
+  {
+    id: 2,
+    date: 'Jul 1, 2026',
+    title: 'Paint Fix Brush',
+    body: 'After removing a background, use the new Paint Fix controls in the Background panel. "Restore" paints back pixels that were incorrectly removed. "Remove" erases any remaining stray pixels. Switch between modes and drag directly on your image.',
+  },
+  {
+    id: 1,
+    date: 'Jul 1, 2026',
+    title: 'Background Removal & Realistic Fabric Texture',
+    body: 'Background removal now includes an eyedropper tool — click any color in your image to remove it globally on top of the automatic mask. The Background panel also has a new Realistic View toggle: choose Light or Dark shirt to preview how your print looks on an actual fabric texture.',
+  },
+];
+
+const SEEN_KEY = 'at-notif-seen';
+const MAX_ID   = NOTIFICATIONS[0].id;
+
+function getSeenId(): number {
+  return parseInt(localStorage.getItem(SEEN_KEY) ?? '0', 10);
+}
+function markAllSeen() {
+  localStorage.setItem(SEEN_KEY, String(MAX_ID));
+}
+
 interface TopBarProps {
   onExport: () => void;
   onMockup: () => void;
@@ -17,9 +44,13 @@ interface TopBarProps {
 }
 
 export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
-  const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo } = useStore();
+  const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const [seenId, setSeenId] = useState(getSeenId);
+  const unreadCount = NOTIFICATIONS.filter(n => n.id > seenId).length;
 
   const daysRemaining = subscriptionExpiresAt
     ? Math.ceil((new Date(subscriptionExpiresAt).getTime() - Date.now()) / 86_400_000)
@@ -37,17 +68,24 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
 
   const displayName = firstName || userEmail || '';
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     if (!menuOpen) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
+
+  useEffect(() => {
+    if (!notifOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [notifOpen]);
 
   return (
     <header className="topbar">
@@ -129,6 +167,42 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
       </button>
 
       <div className="topbar-divider" />
+
+      {/* Passthrough mode toggle */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}
+        onMouseEnter={e => { const t = e.currentTarget.querySelector('.pt-tip') as HTMLElement; if (t) t.style.opacity = '1'; }}
+        onMouseLeave={e => { const t = e.currentTarget.querySelector('.pt-tip') as HTMLElement; if (t) t.style.opacity = '0'; }}
+      >
+        <button
+          className="btn btn-ghost btn-icon"
+          onClick={() => setPassthroughMode(!passthroughMode)}
+          style={{
+            height: 26, width: 30,
+            color: passthroughMode ? 'var(--accent)' : undefined,
+            opacity: passthroughMode ? 1 : 0.5,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18.36 6.64A9 9 0 1 1 5.64 6.64"/>
+            <line x1="12" y1="2" x2="12" y2="12"/>
+          </svg>
+        </button>
+        <div className="pt-tip" style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          width: 230, padding: '8px 10px',
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+          lineHeight: 1.6, zIndex: 300, pointerEvents: 'none',
+          opacity: 0, transition: 'opacity 0.12s',
+          whiteSpace: 'normal',
+        }}>
+          <span style={{ color: 'var(--text)', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+            {passthroughMode ? 'Passthrough ON' : 'Passthrough OFF'}
+          </span>
+          Turns off all separation and pattern effects but keeps textures active. Useful for clean PNG exports with distress effects only.
+        </div>
+      </div>
 
       {/* Signed-in user badge — click to open account dropdown */}
       {displayName && (
@@ -256,6 +330,84 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
           })()}
         </div>
       )}
+
+      {/* Changelog bell */}
+      <div ref={notifRef} style={{ position: 'relative' }}>
+        <button
+          className="btn btn-ghost btn-icon"
+          title="What's new"
+          onClick={() => {
+            const opening = !notifOpen;
+            setNotifOpen(opening);
+            if (opening) { markAllSeen(); setSeenId(MAX_ID); }
+          }}
+          style={{ position: 'relative', height: 26, width: 30 }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          {unreadCount > 0 && (
+            <span style={{
+              position: 'absolute', top: 3, right: 3,
+              width: 7, height: 7, borderRadius: '50%',
+              background: 'var(--accent)',
+              boxShadow: '0 0 5px var(--accent)',
+            }} />
+          )}
+        </button>
+
+        {notifOpen && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+            width: 320,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+            zIndex: 200,
+          }}>
+            <div style={{
+              padding: '11px 14px 10px',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text)' }}>
+                What's New
+              </span>
+              <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                AutoThresh
+              </span>
+            </div>
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              {NOTIFICATIONS.map((n, i) => (
+                <div key={n.id} style={{
+                  padding: '12px 14px',
+                  borderBottom: i < NOTIFICATIONS.length - 1 ? '1px solid var(--border)' : 'none',
+                  display: 'flex', gap: 10,
+                }}>
+                  <div style={{
+                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 5,
+                    background: n.id > seenId ? 'var(--accent)' : 'var(--border)',
+                    boxShadow: n.id > seenId ? '0 0 5px var(--accent)' : 'none',
+                  }} />
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                        {n.title}
+                      </span>
+                      <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                        {n.date}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0, fontFamily: 'var(--font-mono)' }}>
+                      {n.body}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       <button
         className="btn btn-ghost"
