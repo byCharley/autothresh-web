@@ -269,15 +269,27 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
               }}>
                 {/* Identity */}
                 <div style={{ padding: '13px 15px 11px', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>
-                    {firstName || userEmail?.split('@')[0]}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                      {firstName || userEmail?.split('@')[0]}
+                    </span>
+                    {subscriptionStatus === 'creator' && (
+                      <span style={{
+                        fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em',
+                        textTransform: 'uppercase', color: '#111',
+                        background: subColor, padding: '2px 6px', borderRadius: 2,
+                      }}>
+                        Creator
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {userEmail}
                   </div>
                 </div>
 
-                {/* Plan */}
+                {/* Plan — hidden for creator */}
+                {subscriptionStatus !== 'creator' && (
                 <div style={{ padding: '11px 15px 12px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: nextBillingFormatted || (daysRemaining !== null && daysRemaining > 0) ? 7 : 0 }}>
                     <span style={{
@@ -302,6 +314,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Actions */}
                 <div style={{ padding: '7px 15px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
