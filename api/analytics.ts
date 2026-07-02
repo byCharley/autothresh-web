@@ -81,10 +81,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
 
   try {
-    // ── All events in period ────────────────────────────────────────────────
-    const events = await sbQuery(
-      `analytics_events?select=created_at,event_type,email,device_type,country,city&created_at=gte.${since}&order=created_at.asc&limit=50000`
-    );
+    // ── Parallel fetch: Supabase events + Seal subscriptions ────────────────
+    const [events, subscriptions] = await Promise.all([
+      sbQuery(
+        `analytics_events?select=created_at,event_type,email,device_type,country,city&created_at=gte.${encodeURIComponent(since)}&order=created_at.asc&limit=50000`
+      ),
+      getSealSubscriptionCounts(),
+    ]);
 
     // ── Daily aggregation ───────────────────────────────────────────────────
     const dailyMap = new Map<string, { logins: number; opens: number; unique: Set<string> }>();
@@ -135,9 +138,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!isNaN(hour)) hourCounts[hour]++;
     }
     const peakHour = hourCounts.indexOf(Math.max(...hourCounts));
-
-    // ── Seal subscription counts ────────────────────────────────────────────
-    const subscriptions = await getSealSubscriptionCounts();
 
     res.status(200).json({
       period: { days, since },
