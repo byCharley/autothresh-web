@@ -55,6 +55,8 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
   const menuRef = useRef<HTMLDivElement>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [notifAtBottom, setNotifAtBottom] = useState(false);
+  const notifScrollRef = useRef<HTMLDivElement>(null);
   const [seenId, setSeenId] = useState(getSeenId);
   const unreadCount = NOTIFICATIONS.filter(n => n.id > seenId).length;
 
@@ -345,7 +347,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
           onClick={() => {
             const opening = !notifOpen;
             setNotifOpen(opening);
-            if (opening) { markAllSeen(); setSeenId(MAX_ID); }
+            if (opening) { markAllSeen(); setSeenId(MAX_ID); setNotifAtBottom(false); }
           }}
           style={{ position: 'relative', height: 26, width: 30 }}
         >
@@ -384,7 +386,15 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
               </span>
             </div>
             <div style={{ position: 'relative' }}>
-              <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              <div
+                ref={notifScrollRef}
+                style={{ maxHeight: 420, overflowY: 'auto' }}
+                onScroll={() => {
+                  const el = notifScrollRef.current;
+                  if (!el) return;
+                  setNotifAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 8);
+                }}
+              >
                 {NOTIFICATIONS.map((n, i) => (
                   <div key={n.id} style={{
                     padding: '12px 14px',
@@ -418,6 +428,8 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
                 position: 'absolute', bottom: 0, left: 0, right: 0, height: 64,
                 background: 'linear-gradient(to bottom, transparent, var(--surface))',
                 pointerEvents: 'none',
+                opacity: notifAtBottom ? 0 : 1,
+                transition: 'opacity 0.25s ease',
               }} />
             </div>
           </div>
