@@ -14,7 +14,8 @@ import { buildImportanceMap } from '../engine/analysisPass';
 import { loadAllTextures } from '../engine/textureLoader';
 import { traceImageToSVG } from '../engine/vectorTracer';
 import { isShadowColor, nearestPantoneRgb } from '../engine/pantoneMatch';
-import { separateCmykPro, applyHalftoneToCmykPlates } from '../engine/cmykProEngine';
+import { iccSeparateRaw, applyPostIcc, applyHalftoneToCmykPlates } from '../engine/cmykProEngine';
+import type { RawIccPlanes } from '../engine/cmykProEngine';
 import {
   buildNeugebauerPrimaries, compositeHalftonePlates,
   upsampleCmykPlates, upsampleMask, areaAverageDownsample,
@@ -206,6 +207,10 @@ export function CanvasView() {
     printSimActive, setPrintSimLoading, viewingDistance,
   } = useStore();
 
+  // Raw ICC planes cache — keyed by image+profile+adjustments only.
+  // Density/GCR/TAC changes skip re-separation and run applyPostIcc on these.
+  const rawIccCacheRef = useRef<{ key: string; raw: RawIccPlanes } | null>(null);
+
   // Cached CMYK Pro pipeline output — lets halftone/visibility/sim changes rebuild
   // the composite without re-calling the expensive separateCmykPro() API.
   const cmykProCacheRef = useRef<{
@@ -379,6 +384,53 @@ export function CanvasView() {
     return () => clearTimeout(dimTimerRef.current);
   }, [zoom]);
 
+  // 2× box-filter downscale — 4× fewer pixels for the ICC separation step.
+  function downscale2x(src: ImageData): ImageData {
+    const w2 = Math.max(1, src.width  >> 1);
+    const h2 = Math.max(1, src.height >> 1);
+    const dst = new ImageData(w2, h2);
+    const sd = src.data, dd = dst.data;
+    const sw = src.width;
+    for (let y = 0; y < h2; y++) {
+      for (let x = 0; x < w2; x++) {
+        const s0 = ((y * 2)     * sw + x * 2) * 4;
+        const s1 = ((y * 2)     * sw + x * 2 + 1) * 4;
+        const s2 = ((y * 2 + 1) * sw + x * 2) * 4;
+        const s3 = ((y * 2 + 1) * sw + x * 2 + 1) * 4;
+        const d  = (y * w2 + x) * 4;
+        dd[d]   = (sd[s0]   + sd[s1]   + sd[s2]   + sd[s3])   >> 2;
+        dd[d+1] = (sd[s0+1] + sd[s1+1] + sd[s2+1] + sd[s3+1]) >> 2;
+        dd[d+2] = (sd[s0+2] + sd[s1+2] + sd[s2+2] + sd[s3+2]) >> 2;
+        dd[d+3] = (sd[s0+3] + sd[s1+3] + sd[s2+3] + sd[s3+3]) >> 2;
+      }
+    }
+    return dst;
+  }
+
+  // Bilinear upscale of a single Uint8Array plate channel.
+  function upscalePlate(src: Uint8Array, sw: number, sh: number, dw: number, dh: number): Uint8Array {
+    const dst = new Uint8Array(dw * dh);
+    const xRatio = sw / dw, yRatio = sh / dh;
+    for (let y = 0; y < dh; y++) {
+      const ySrc = y * yRatio;
+      const y0 = Math.min(sh - 1, ySrc | 0);
+      const y1 = Math.min(sh - 1, y0 + 1);
+      const fy = ySrc - y0;
+      for (let x = 0; x < dw; x++) {
+        const xSrc = x * xRatio;
+        const x0 = Math.min(sw - 1, xSrc | 0);
+        const x1 = Math.min(sw - 1, x0 + 1);
+        const fx = xSrc - x0;
+        const v = src[y0 * sw + x0] * (1 - fx) * (1 - fy)
+                + src[y0 * sw + x1] * fx        * (1 - fy)
+                + src[y1 * sw + x0] * (1 - fx)  * fy
+                + src[y1 * sw + x1] * fx         * fy;
+        dst[y * dw + x] = v + 0.5 | 0;
+      }
+    }
+    return dst;
+  }
+
   // Apply the same luminance adjustment that applyAdjToImage uses, but to a single RGB triple.
   // Used to shift cached K-means cluster centers when image adjustments change.
   type RGB3 = [number, number, number];
@@ -456,6 +508,7 @@ export function CanvasView() {
     let vectorTraceRunning = false;
     let cmykProRunning = false;
     let rafId: number | undefined;
+    const delay = separationMode === 'cmyk-pro' ? 200 : 40;
     const tid = setTimeout(() => {
       setIsProcessing(true);
       rafId = requestAnimationFrame(() => {
@@ -517,39 +570,48 @@ export function CanvasView() {
           const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
           const ALL_VIS = { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true };
 
+          const adjScaled = applyAdjToImage(artScaled, imageAdjustments);
           const cellSize = Math.max(3, (artPrevW / documentWidthIn * 4) / cmykLpi);
-          const allLayers = cmykSeparate(artScaled, cellSize, localBgMask, cmykAngles, 1, cmykParams);
+          const allLayers = cmykSeparate(adjScaled, cellSize, localBgMask, cmykAngles, 1, cmykParams);
           const visibleLayers = allLayers.filter(l => visibleIds.includes(l.id));
           setProcessedLayers(visibleLayers);
 
           if (cmykViewMode === 'composite') {
             // Composite view: full-color proof on garment substrate (all channels, no halftone)
-            artComposite = renderCmykSmooth(artScaled, localBgMask, ALL_VIS, cmykParams);
+            artComposite = renderCmykSmooth(adjScaled, localBgMask, ALL_VIS, cmykParams);
           } else {
             // Plates view: show halftone structure for solo channel, smooth for multi
             const isSoloPlate = visibleIds.length === 1;
             if (isSoloPlate) {
               artComposite = renderCmykComposite(visibleLayers, artPrevW, artPrevH, localBgMask);
             } else {
-              artComposite = renderCmykSmooth(artScaled, localBgMask, cmykVisibility, cmykParams);
+              artComposite = renderCmykSmooth(adjScaled, localBgMask, cmykVisibility, cmykParams);
             }
           }
-          const score = computeCmykQuality(artScaled, cmykParams);
+          const score = computeCmykQuality(adjScaled, cmykParams);
           setCmykQuality(score);
         } else if (separationMode === 'cmyk-pro') {
-          // ── CMYK Pro: ICC-based separation via server-side LittleCMS ─────
-          //
-          // Separation fingerprint: only fields that affect the server-side ICC transform.
-          // Halftone settings (LPI/angle/shape/gain) are applied client-side on the plates —
-          // they do NOT invalidate the cache, so changing them skips the API entirely.
+          // ── CMYK Pro: three-level cache ───────────────────────────────────
+          // Level 1 (fastest): plate cache — halftone/visibility changes only, rebuild composite.
+          // Level 2 (fast):    raw ICC cache — density/GCR/TAC changed, run applyPostIcc sync.
+          // Level 3 (slow):    full ICC separation async when image or profile changes.
+
+          // iccKey: invalidate only when image content or profile changes.
+          const iccKey = JSON.stringify([
+            proCmykSettings.cmykProfile,
+            artPrevW, artPrevH,
+            imageAdjustments.adjMode, imageAdjustments.exposure, imageAdjustments.contrast,
+            imageAdjustments.shadows, imageAdjustments.highlights, imageAdjustments.blur,
+          ]);
+          // plateKey: full fingerprint including post-ICC settings.
           const apiKey = JSON.stringify([
-            proCmykSettings.cmykProfile, proCmykSettings.blackGeneration,
+            iccKey,
+            proCmykSettings.blackGeneration,
             proCmykSettings.totalInkLimit, proCmykSettings.preservePureBlack,
             proCmykSettings.densityC, proCmykSettings.densityM,
             proCmykSettings.densityY, proCmykSettings.densityK,
             proCmykSettings.grayBalance,
             bgRemovalEnabled, bgTolerance,
-            artPrevW, artPrevH,
           ]);
           const cached = cmykProCacheRef.current;
           if (cached && cmykProApiKeyRef.current === apiKey) {
@@ -603,15 +665,69 @@ export function CanvasView() {
             setDitherComposite({ data: composite, w: artPrevW, h: artPrevH });
             // Let the main effect's sync draw path render `artComposite` to the canvas.
             artComposite = composite;
-          } else {
-          // ── API call needed: separation settings or image changed ───────────
+          } else if (rawIccCacheRef.current?.key === iccKey) {
+          // ── Level 2: raw ICC cached, only post-processing changed → sync ──
           setDitherComposite(null);
-          // Kick off async API call; cancel token prevents stale results
+          const halfPlatesL2 = applyPostIcc(rawIccCacheRef.current.raw, proCmykSettings);
+          const platesL2 = {
+            C: upscalePlate(halfPlatesL2.C, halfPlatesL2.width, halfPlatesL2.height, artPrevW, artPrevH),
+            M: upscalePlate(halfPlatesL2.M, halfPlatesL2.width, halfPlatesL2.height, artPrevW, artPrevH),
+            Y: upscalePlate(halfPlatesL2.Y, halfPlatesL2.width, halfPlatesL2.height, artPrevW, artPrevH),
+            K: upscalePlate(halfPlatesL2.K, halfPlatesL2.width, halfPlatesL2.height, artPrevW, artPrevH),
+            width: artPrevW, height: artPrevH,
+          };
+          setProCmykPlates(platesL2);
+          cmykProApiKeyRef.current = apiKey;
+          cmykProCacheRef.current = { plates: platesL2, bgMask: localBgMask, artPrevW, artPrevH, artPrevOffX, artPrevOffY, docPrevW, docPrevH };
+          // Re-enter the plate-cache path synchronously to build the composite
+          const cachedL2 = cmykProCacheRef.current;
+          {
+            const { plates, bgMask: cachedBgMask } = cachedL2;
+            const primariesL2 = buildNeugebauerPrimaries(proCmykSettings.cmykProfile);
+            const hexL2 = canvasColor.replace('#', '');
+            const gRgbL2: [number, number, number] = [parseInt(hexL2.slice(0,2),16), parseInt(hexL2.slice(2,4),16), parseInt(hexL2.slice(4,6),16)];
+            const gLumL2 = showFabricBg ? (gRgbL2[0]*0.299+gRgbL2[1]*0.587+gRgbL2[2]*0.114)/255 : 1;
+            const simL2 = printSimActiveRef.current;
+            const gModeL2 = (simL2 && gLumL2 < 0.5) ? 'dark' : 'light';
+            const visL2 = { c: cmykVisibility['cmyk-c'], m: cmykVisibility['cmyk-m'], y: cmykVisibility['cmyk-y'], k: cmykVisibility['cmyk-k'] };
+            const prevDpiL2 = artPrevW / documentWidthIn;
+            let wpL2: Uint8Array | undefined;
+            if (underbaseEnabled) { const rL2 = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows }); wpL2 = chokeWhitePlate(rL2, plates.width, plates.height, underbaseChoke); }
+            const dotDpiL2 = Math.max(150, prevDpiL2);
+            const allLayersL2 = applyHalftoneToCmykPlates(plates, proCmykSettings, dotDpiL2, cachedBgMask, wpL2, 4);
+            const visIdsL2 = Object.entries(cmykVisibility).filter(([,v])=>v).map(([id])=>id);
+            setProcessedLayers(allLayersL2.filter(l => visIdsL2.includes(l.id)));
+            setProcessedLayerDims({ w: artPrevW, h: artPrevH });
+            let compL2: ImageData;
+            if (simL2) {
+              const SCALE=4; const p4=upsampleCmykPlates(plates,SCALE); const bm4=cachedBgMask?upsampleMask(cachedBgMask,artPrevW,artPrevH,SCALE):null;
+              const wp4=wpL2?upsampleMask(wpL2,plates.width,plates.height,SCALE):undefined;
+              const l4=applyHalftoneToCmykPlates(p4,proCmykSettings,prevDpiL2*SCALE,bm4,wp4);
+              const hi=compositeHalftonePlates(l4,artPrevW*SCALE,artPrevH*SCALE,primariesL2,bm4,visL2,gModeL2,gRgbL2);
+              compL2=areaAverageDownsample(hi,artPrevW,artPrevH);
+            } else { compL2=compositeHalftonePlates(allLayersL2,artPrevW,artPrevH,primariesL2,cachedBgMask,visL2,gModeL2,gRgbL2); }
+            setDitherComposite({ data: compL2, w: artPrevW, h: artPrevH });
+            artComposite = compL2;
+          }
+          } else {
+          // ── Level 3: full ICC separation needed ───────────────────────────
+          setDitherComposite(null);
           cmykProRunning = true;
-          const abortCtrl = new AbortController();
-          separateCmykPro(artScaled, proCmykSettings, abortCtrl.signal)
-            .then((plates) => {
+          const adjScaledPro = applyAdjToImage(artScaled, imageAdjustments);
+          const halfScaled = downscale2x(adjScaledPro);
+          iccSeparateRaw(halfScaled, proCmykSettings.cmykProfile)
+            .then((rawPlanes) => {
               if (cancelled) return;
+              rawIccCacheRef.current = { key: iccKey, raw: rawPlanes };
+              const halfPlates = applyPostIcc(rawPlanes, proCmykSettings);
+              // Upscale plates from half-res back to full preview resolution
+              const plates = {
+                C: upscalePlate(halfPlates.C, halfPlates.width, halfPlates.height, artPrevW, artPrevH),
+                M: upscalePlate(halfPlates.M, halfPlates.width, halfPlates.height, artPrevW, artPrevH),
+                Y: upscalePlate(halfPlates.Y, halfPlates.width, halfPlates.height, artPrevW, artPrevH),
+                K: upscalePlate(halfPlates.K, halfPlates.width, halfPlates.height, artPrevW, artPrevH),
+                width: artPrevW, height: artPrevH,
+              };
               setProCmykPlates(plates);
               cmykProApiKeyRef.current = apiKey;
               // Cache plates + layout dims for fast rebuilds on subsequent changes
@@ -1105,7 +1221,7 @@ export function CanvasView() {
         }
         if (!vectorTraceRunning && !cmykProRunning) setIsProcessing(false);
       });
-    }, 40);
+    }, delay);
     return () => { cancelled = true; clearTimeout(tid); if (rafId !== undefined) cancelAnimationFrame(rafId); };
   }, [
     originalImage, layers, knockoutEnabled, globalPattern,

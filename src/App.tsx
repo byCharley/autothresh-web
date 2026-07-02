@@ -385,10 +385,10 @@ function App() {
     let artLayers: ProcessedLayer[];
     if (separationMode === 'cmyk') {
       // Cell size derived from LPI: output DPI / LPI = pixels per halftone dot
-      artLayers = cmykSeparate(artImageData, documentDpi / cmykLpi, artBgMask, cmykAngles, 1, cmykParams);
+      artLayers = cmykSeparate(applyAdjToImageData(artImageData), documentDpi / cmykLpi, artBgMask, cmykAngles, 1, cmykParams);
     } else if (separationMode === 'cmyk-pro') {
       // ICC-based separation + per-channel halftone screening
-      const plates = await separateCmykPro(artImageData, proCmykSettings);
+      const plates = await separateCmykPro(applyAdjToImageData(artImageData), proCmykSettings);
       let exportWhitePlate: Uint8Array | undefined;
       if (underbaseEnabled) {
         const raw = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
@@ -556,7 +556,7 @@ function App() {
 
       let artComposite: ImageData;
       if (separationMode === 'cmyk') {
-        artComposite = renderCmykSmooth(artImageData, artBgMask, { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true }, overrideParams);
+        artComposite = renderCmykSmooth(applyAdjToImageData(artImageData), artBgMask, { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true }, overrideParams);
       } else if (separationMode === 'palette') {
         artComposite = renderPaletteComposite(artImageData, paletteColors, artBgMask,
           Object.fromEntries(paletteColors.map((_, i) => [`palette-${i}`, true])),

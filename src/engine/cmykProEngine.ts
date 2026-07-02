@@ -116,105 +116,75 @@ function chromaGcr(chroma: number, curve: GcrCurve): number {
   return curve[4];
 }
 
-export async function separateCmykPro(
+// ── Raw ICC planes (cached between post-processing calls) ────────────────────
+export interface RawIccPlanes {
+  C: Float32Array; M: Float32Array; Y: Float32Array; K: Float32Array;
+  src: Uint8ClampedArray;
+  width: number; height: number;
+}
+
+export async function iccSeparateRaw(
   imageData: ImageData,
-  settings:  ProCmykSettings,
-  _signal?:  AbortSignal,
-): Promise<CmykProPlates> {
-  const { width: w, height: h } = imageData;
-  const src = imageData.data;
-  const n   = w * h;
-
-  // ── Step 1: ICC profile lookup (tetrahedral CLUT interpolation) ───────────
-  const profile = await loadIccProfile(settings.cmykProfile);
+  profileName: ProCmykSettings['cmykProfile'],
+): Promise<RawIccPlanes> {
+  const profile = await loadIccProfile(profileName);
   const { C, M, Y, K } = separateWithProfile(imageData, profile);
+  return { C, M, Y, K, src: imageData.data, width: imageData.width, height: imageData.height };
+}
 
-  // ── Step 2: Chroma-gated post-profile GCR ────────────────────────────────
-  // Push neutral CMY → K based on each pixel's chroma.
-  // Low-chroma pixels (stone, shadow, armor) get heavy GCR.
-  // High-chroma pixels (red banners, vivid logos) are mostly left alone.
-  // Only the neutral (min CMY) component is shifted — hue is preserved.
+export function applyPostIcc(raw: RawIccPlanes, settings: ProCmykSettings): CmykProPlates {
+  const { C: rC, M: rM, Y: rY, K: rK, src, width: w, height: h } = raw;
+  const n = w * h;
+  // Work on copies so the cached raw planes stay pristine
+  const C = rC.slice(), M = rM.slice(), Y = rY.slice(), K = rK.slice();
+
+  // ── GCR / skin / shadow / density / TAC ────────────────────────────────────
   const curve = GCR_CURVES[settings.blackGeneration] ?? GCR_CURVES['adaptive'];
   for (let i = 0; i < n; i++) {
     const c = C[i], m = M[i], y = Y[i], k = K[i];
     const neutral = Math.min(c, m, y);
     if (neutral < 0.005) continue;
-
-    const chroma    = Math.max(c, m, y) - neutral;
+    const chroma = Math.max(c, m, y) - neutral;
     const gcrFactor = chromaGcr(chroma, curve);
     if (gcrFactor < 0.001) continue;
-
     const shift = Math.min(gcrFactor * neutral, neutral * 0.97, 1 - k);
-    C[i] = c - shift;
-    M[i] = m - shift;
-    Y[i] = y - shift;
-    K[i] = k + shift;
+    C[i] = c - shift; M[i] = m - shift; Y[i] = y - shift; K[i] = k + shift;
   }
-
-  // ── Step 2.5: Warm-tone skin protection ──────────────────────────────────
-  // In pixels where original R ≥ G ≥ B (warm hue covering all skin tones from
-  // pale to very dark), the ICC profile often delivers more C than a skilled
-  // print operator would use. We cap C at ≈35% of M for warm pixels, which
-  // removes the cyan cast from cheeks/forehead without flattening cool colors.
   for (let i = 0; i < n; i++) {
     const r = src[i * 4], g = src[i * 4 + 1], b = src[i * 4 + 2];
-    // Only warm hues where red is dominant — catches every skin tone
     if (r < g || g < b || r < 55 || K[i] > 0.60) continue;
     const c = C[i], m = M[i];
     if (m < 0.12 || c < 0.01) continue;
-
-    // Warmth strength: how far R > G > B (normalized, capped at 1)
     const warmth = Math.min(1, (r - g) / 40 + (g - b) / 30);
     const cTarget = m * 0.35;
     if (c <= cTarget) continue;
-
     C[i] = c - (c - cTarget) * warmth * 0.65;
   }
-
-  // ── Step 2.6: Shadow K punch ──────────────────────────────────────────────
-  // Push neutral CMY bulk out of shadows into K progressively — darker means
-  // more aggressive. At K=0.30 we shift ~25% of neutral CMY; at K=0.80 we
-  // shift ~72%. This keeps the sweater, dark stone, and shadow areas K-dominant
-  // rather than leaving residual CMY that muddles the shadow.
   for (let i = 0; i < n; i++) {
     const c = C[i], m = M[i], y = Y[i], k = K[i];
     if (k < 0.25) continue;
     const neutral = Math.min(c, m, y);
     if (neutral < 0.01) continue;
-    if (Math.max(c, m, y) - neutral > 0.14) continue;  // protect chromatic areas
-
+    if (Math.max(c, m, y) - neutral > 0.14) continue;
     const punchFactor = Math.min(0.90, 0.24 + k * 0.70);
     const shift = Math.min(punchFactor * neutral, 1 - k);
     C[i] = c - shift; M[i] = m - shift; Y[i] = y - shift; K[i] = k + shift;
   }
-
-  // ── Step 3: Pure-K cleanup (smooth fade, no hard RGB snap) ─────────────────
-  // Fades residual CMY to zero in very dark, near-neutral pixels, using the
-  // already-processed K value rather than a raw RGB threshold so there are
-  // no blotch boundaries. Only activates where K > 0.80 and chroma is low.
   if (settings.preservePureBlack) {
     for (let i = 0; i < n; i++) {
       const k = K[i];
       if (k < 0.80) continue;
       const c = C[i], m = M[i], y = Y[i];
       if (c + m + y < 0.02) continue;
-      // Protect chromatic darks (deep purples, teal shadows, etc.)
       if (Math.max(c, m, y) - Math.min(c, m, y) > 0.12) continue;
-      // Quadratic ramp: t=0 at K=0.80, t=1 at K=1.0 → smooth, no visible edge
       const fade = ((k - 0.80) / 0.20) ** 2;
-      C[i] = c * (1 - fade);
-      M[i] = m * (1 - fade);
-      Y[i] = y * (1 - fade);
+      C[i] = c * (1 - fade); M[i] = m * (1 - fade); Y[i] = y * (1 - fade);
     }
   }
-
-  // ── Step 4: Gray balance slider (fine C-channel trim) ────────────────────
   const gb = (settings.grayBalance ?? 0) / 300;
   if (Math.abs(gb) > 0.001) {
     for (let i = 0; i < n; i++) C[i] = Math.min(1, Math.max(0, C[i] * (1 + gb)));
   }
-
-  // ── Step 5: Per-channel density scaling ──────────────────────────────────
   const dC = settings.densityC / 100, dM = settings.densityM / 100;
   const dY = settings.densityY / 100, dK = settings.densityK / 100;
   if (dC !== 1 || dM !== 1 || dY !== 1 || dK !== 1) {
@@ -223,43 +193,33 @@ export async function separateCmykPro(
       Y[i] = Math.min(1, Y[i] * dY); K[i] = Math.min(1, K[i] * dK);
     }
   }
-
-  // ── Step 5.5: Plate optimization ────────────────────────────────────────
-  // Content-aware RIP-quality plate preparation: edge-preserving smoothing,
-  // isolated-dot removal in neutral areas, K sharpening, minimum dot cleanup.
-  // Receives Float32 plates and returns optimised Float32 plates.
   const optimized = optimizePlates(C, M, Y, K, w, h);
   C.set(optimized.C); M.set(optimized.M); Y.set(optimized.Y); K.set(optimized.K);
-
-  // ── Step 6: Total ink coverage limit ─────────────────────────────────────
-  // Intelligent reduction: remove K first (most neutral), then scale CMY.
   const tac = settings.totalInkLimit / 100;
   for (let i = 0; i < n; i++) {
     const total = C[i] + M[i] + Y[i] + K[i];
     if (total <= tac) continue;
     const excess = total - tac;
-    if (K[i] >= excess) {
-      K[i] -= excess;
-    } else {
-      const remaining = excess - K[i];
-      K[i] = 0;
+    if (K[i] >= excess) { K[i] -= excess; } else {
+      const remaining = excess - K[i]; K[i] = 0;
       const cmyTotal = C[i] + M[i] + Y[i];
-      if (cmyTotal > 0) {
-        const scale = Math.max(0, (cmyTotal - remaining) / cmyTotal);
-        C[i] *= scale; M[i] *= scale; Y[i] *= scale;
-      }
+      if (cmyTotal > 0) { const scale = Math.max(0, (cmyTotal - remaining) / cmyTotal); C[i] *= scale; M[i] *= scale; Y[i] *= scale; }
     }
   }
-
-  const toU8 = (f: Float32Array) =>
-    Uint8Array.from(f, v => Math.round(Math.min(1, Math.max(0, v)) * 255));
-
-  return Promise.resolve({
-    C: toU8(C), M: toU8(M), Y: toU8(Y), K: toU8(K), width: w, height: h,
-  });
+  const toU8 = (f: Float32Array) => Uint8Array.from(f, v => Math.round(Math.min(1, Math.max(0, v)) * 255));
+  return { C: toU8(C), M: toU8(M), Y: toU8(Y), K: toU8(K), width: w, height: h };
 }
 
-// ── Halftone application (unchanged) ─────────────────────────────────────────
+export async function separateCmykPro(
+  imageData: ImageData,
+  settings:  ProCmykSettings,
+  _signal?:  AbortSignal,
+): Promise<CmykProPlates> {
+  const raw = await iccSeparateRaw(imageData, settings.cmykProfile);
+  return applyPostIcc(raw, settings);
+}
+
+// ── Halftone application ──────────────────────────────────────────────────────
 
 const CMYK_CHANNEL_INFO = [
   { id: 'cmyk-c', name: 'C · Cyan',    color: [0, 174, 239]  as [number, number, number] },

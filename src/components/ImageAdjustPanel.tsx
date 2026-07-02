@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, type CSSProperties } from 'react';
 import type { LevelsAdjustment, CurvePoint, AdjMode } from '../engine/imageProcessor';
 import { buildCurvesLUT } from '../engine/adjustments';
 
@@ -340,11 +340,48 @@ function TabBtn({ label, active, onClick }: { label: string; active: boolean; on
 function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
   label: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; unit?: string;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const displayVal = step < 1 ? value.toFixed(1) : String(value);
+
+  const commit = (raw: string) => {
+    const n = parseFloat(raw);
+    if (!isNaN(n)) onChange(Math.min(max, Math.max(min, n)));
+    setEditing(false);
+  };
+
+  const numStyle: CSSProperties = {
+    width: 44, height: 18, padding: '0 4px', fontSize: 10,
+    fontFamily: 'var(--font-mono)', background: 'var(--surface-2)',
+    border: '1px solid var(--accent)', color: 'var(--text)',
+    textAlign: 'right',
+  };
+
   return (
     <div className="field">
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
         <span style={{ ...MONO, fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</span>
-        <span style={{ ...MONO, fontSize: 10, color: 'var(--text-dim)' }}>{value}{unit}</span>
+        {editing ? (
+          <input
+            type="number" autoFocus
+            style={numStyle}
+            value={draft} min={min} max={max} step={step}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={e => commit(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commit((e.target as HTMLInputElement).value);
+              if (e.key === 'Escape') setEditing(false);
+            }}
+          />
+        ) : (
+          <span
+            title="Click to enter a value"
+            onClick={() => { setDraft(displayVal); setEditing(true); }}
+            style={{ ...MONO, fontSize: 10, color: 'var(--text-dim)', cursor: 'text', borderBottom: '1px dashed var(--border-2)', padding: '1px 2px', minWidth: 24, textAlign: 'right' }}
+          >
+            {displayVal}{unit}
+          </span>
+        )}
       </div>
       <input type="range" min={min} max={max} step={step} value={value}
         onChange={e => onChange(Number(e.target.value))}

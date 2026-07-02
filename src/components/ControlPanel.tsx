@@ -1291,12 +1291,16 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         <RegistrationSection />
         {separationMode === 'cmyk' ? (
           <>
+            <ImageAdjustmentsSection />
             <CmykAutoSection quality={cmykQuality} />
             <CmykAdvancedSection />
             <CmykScreenSection />
           </>
         ) : separationMode === 'cmyk-pro' ? (
-          <CmykProSection />
+          <>
+            <ImageAdjustmentsSection />
+            <CmykProSection />
+          </>
         ) : separationMode === 'palette' ? (
           <PaletteSection />
         ) : separationMode === 'color-sep' ? (
@@ -1304,7 +1308,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         ) : (
           <GlobalPatternSection />
         )}
-        {separationMode !== 'vector' && separationMode !== 'cmyk-pro' && <ImageAdjustmentsSection />}
+        {separationMode !== 'vector' && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && <ImageAdjustmentsSection />}
 
         {/* Per-layer controls — threshold mode only */}
         {separationMode === 'threshold' && layer ? (

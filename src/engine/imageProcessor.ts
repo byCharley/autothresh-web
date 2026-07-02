@@ -461,15 +461,15 @@ export function applyGlobalAdjustments(lum: number, adj: ImageAdjustments): numb
   if (lut) return lut[Math.max(0, Math.min(255, lum | 0))];
   // Basic sliders
   let l = lum;
-  if (adj.exposure !== 0)    l = l * Math.pow(2, (adj.exposure / 100) * 3);
-  if (adj.contrast !== 0)    l = (l - 128) * (1 + (adj.contrast / 100) * 1.5) + 128;
+  if (adj.exposure !== 0)    l = l * Math.pow(2, (adj.exposure / 100));
+  if (adj.contrast !== 0)    l = (l - 128) * (1 + (adj.contrast / 100) * 0.5) + 128;
   if (adj.shadows !== 0) {
     const t = Math.max(0, 1 - l / 128);
-    l += adj.shadows * t * 50;
+    l += adj.shadows * t;
   }
   if (adj.highlights !== 0) {
     const t = Math.max(0, (l - 128) / 128);
-    l += adj.highlights * t * 50;
+    l += adj.highlights * t;
   }
   return Math.max(0, Math.min(255, l));
 }
