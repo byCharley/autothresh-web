@@ -1697,7 +1697,8 @@ export function LayerPanel() {
   }
 
   function PantonePreviewSection() {
-    return (
+    return null; // hidden pending Pantone licensing
+    return ( // eslint-disable-line no-unreachable
       <div style={{ borderTop: '1px solid var(--border)', padding: '8px 8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ flex: 1, minWidth: 0 }}>

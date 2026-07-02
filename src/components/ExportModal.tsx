@@ -78,7 +78,6 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
   const { passthroughMode } = useStore();
   const isDither  = !passthroughMode && separationMode === 'palette';
   const isVector  = !passthroughMode && separationMode === 'vector';
-  const isCmyk    = separationMode === 'cmyk';
   const isCmykPro = separationMode === 'cmyk-pro';
   const FORMATS  = passthroughMode ? FORMATS_PASSTHROUGH : isVector ? [{ value: 'svg' as ExportFormat, label: 'SVG', ext: '.svg' }] : isDither ? FORMATS_DITHER : FORMATS_ALL;
 
@@ -89,7 +88,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
   const [exporting,        setExporting]        = useState(false);
   const [exportError,      setExportError]      = useState<string | null>(null);
   const [includeColorInfo, setIncludeColorInfo] = useState(false);
-  const [usePantoneNames,  setUsePantoneNames]  = useState(false);
+  const [usePantoneNames] = useState(false);
   const includeUnderbase = underbaseEnabled;
   const undChoke         = storeChoke;
   const setIncludeUnderbase = setUnderbaseEnabled;
@@ -355,30 +354,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           </div>
         )}
 
-        {/* Pantone names toggle — not applicable for vector or CMYK */}
-        {!isVector && !isCmyk && !isCmykPro && (
-          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                Pantone Names
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
-                Convert layer names to nearest PMS Coated code
-              </div>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0 }}>
-              <input
-                type="checkbox"
-                checked={usePantoneNames}
-                onChange={e => setUsePantoneNames(e.target.checked)}
-                style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-                {usePantoneNames ? 'On' : 'Off'}
-              </span>
-            </label>
-          </div>
-        )}
+        {/* Pantone names toggle hidden pending licensing */}
 
         {/* Underbase — not for vector mode */}
         {!isVector && (
