@@ -23,6 +23,7 @@ import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components
 import { ContactModal } from './components/ContactModal';
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { LoginSplash } from './components/LoginSplash';
+import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
@@ -125,6 +126,7 @@ function App() {
   const [showContact, setShowContact]     = useState(false);
   const [showTutorial, setShowTutorial]   = useState(false);
   const [showVideo, setShowVideo]         = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
   // Read the flag immediately so the splash is true on the very first render
   // after the OAuth redirect — no waiting for auth to complete.
   const [showSplash, setShowSplash] = useState(() => !!sessionStorage.getItem('at-pending-welcome'));
@@ -971,7 +973,7 @@ function App() {
 
   return (
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => setShowAnalytics(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} />
 
       {isPaused && (
         <div style={{
@@ -1121,6 +1123,7 @@ function App() {
       {showContact  && <ContactModal  onClose={() => setShowContact(false)}  />}
       {showTutorial && <TutorialOverlay onClose={() => setShowTutorial(false)} />}
       {showSplash && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
+      {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
       {showVideo && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9980, display: 'flex', alignItems: 'center', justifyContent: 'center' }}

@@ -4,6 +4,27 @@ const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const TESTER_EMAILS = new Set(
   (process.env.TESTER_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
 );
+const CREATOR_EMAILS = new Set(
+  (process.env.CREATOR_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+);
+
+const SUPABASE_URL  = process.env.SUPABASE_URL ?? '';
+const SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+
+function detectDevice(ua: string): string {
+  if (/tablet|ipad|playbook|silk/i.test(ua)) return 'tablet';
+  if (/mobile|android|iphone|ipod|blackberry|opera mini|windows phone/i.test(ua)) return 'mobile';
+  return 'desktop';
+}
+
+function logEvent(data: Record<string, unknown>) {
+  if (!SUPABASE_URL || !SERVICE_KEY) return;
+  fetch(`${SUPABASE_URL}/rest/v1/analytics_events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}`, 'apikey': SERVICE_KEY },
+    body: JSON.stringify(data),
+  }).catch(() => { /* non-blocking */ });
+}
 
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
@@ -116,20 +137,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!cust) return res.status(200).json({ valid: false });
 
   const email = cust.emailAddress?.emailAddress ?? '';
-  const isTester = TESTER_EMAILS.has(email.toLowerCase());
+  const emailLower = email.toLowerCase();
+  const isCreator = CREATOR_EMAILS.has(emailLower);
+  const isTester  = !isCreator && TESTER_EMAILS.has(emailLower);
 
   // ── Check subscription via Seal ───────────────────────────────────────────
   const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = await sealCheckSubscription(email);
-  const finalHasSub = hasSub || isTester;
+  const finalHasSub = hasSub || isCreator || isTester;
 
-  console.log('Verify result:', { email, hasSub, isTester, finalHasSub, subscriptionStatus, nextBillingDate, planTitle });
+  const finalStatus   = isCreator ? 'creator' : isTester ? 'tester' : subscriptionStatus;
+  const finalPlan     = isCreator ? 'Creator' : isTester ? 'Tester Access' : planTitle;
+  const finalExpiry   = (isCreator || isTester) ? undefined : nextBillingDate;
+
+  console.log('Verify result:', { email, hasSub, isCreator, isTester, finalHasSub, finalStatus, nextBillingDate, planTitle });
+
+  // ── Log analytics event (fire-and-forget) ─────────────────────────────────
+  const ua = String(req.headers['user-agent'] ?? '');
+  logEvent({
+    event_type:  'app_open',
+    email:       emailLower,
+    device_type: detectDevice(ua),
+    country:     req.headers['x-vercel-ip-country'] ?? req.headers['x-vercel-ip-country-region'] ?? null,
+    city:        req.headers['x-vercel-ip-city'] ? decodeURIComponent(String(req.headers['x-vercel-ip-city'])) : null,
+  });
 
   return res.status(200).json({
     valid:                 true,
     hasSubscription:       finalHasSub,
-    subscriptionStatus:    isTester ? 'tester' : subscriptionStatus,
-    subscriptionExpiresAt: isTester ? undefined : nextBillingDate,
-    planTitle:             isTester ? 'Tester Access' : planTitle,
+    subscriptionStatus:    finalStatus,
+    subscriptionExpiresAt: finalExpiry,
+    planTitle:             finalPlan,
     email,
     firstName:             cust.firstName ?? '',
   });

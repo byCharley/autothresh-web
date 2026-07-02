@@ -41,6 +41,7 @@ interface TopBarProps {
   onPresets: () => void;
   onTutorial: () => void;
   onVideo: () => void;
+  onAnalytics?: () => void;
   onLogout?: () => void;
   userEmail?: string;
   firstName?: string;
@@ -49,7 +50,7 @@ interface TopBarProps {
   subscriptionStatus?: string;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -247,11 +248,13 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
           </button>
 
           {menuOpen && (() => {
-            const subColor = subscriptionStatus === 'tester'  ? '#38bdf8'
-              : subscriptionStatus === 'trial'                ? '#a78bfa'
+            const subColor = subscriptionStatus === 'creator'  ? 'var(--accent)'
+              : subscriptionStatus === 'tester'                ? '#38bdf8'
+              : subscriptionStatus === 'trial'                 ? '#a78bfa'
               : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
               : '#3ecf4f';
-            const subLabel = subscriptionStatus === 'tester' ? 'Tester'
+            const subLabel = subscriptionStatus === 'creator' ? 'Creator'
+              : subscriptionStatus === 'tester' ? 'Tester'
               : subscriptionStatus === 'trial' ? 'Free Trial'
               : subscriptionStatus === 'paused' ? 'Paused'
               : subscriptionStatus === 'cancelled' ? 'Cancelled'
@@ -337,6 +340,20 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onL
             );
           })()}
         </div>
+      )}
+
+      {/* Analytics button — creator only */}
+      {subscriptionStatus === 'creator' && onAnalytics && (
+        <button
+          className="btn btn-ghost btn-icon"
+          title="Analytics dashboard"
+          onClick={onAnalytics}
+          style={{ height: 26, width: 30 }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </button>
       )}
 
       {/* Changelog bell */}

@@ -7,6 +7,27 @@ const REDIRECT_URI = process.env.SHOPIFY_REDIRECT_URI ?? 'https://www.autothresh
 const TESTER_EMAILS = new Set(
   (process.env.TESTER_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
 );
+const CREATOR_EMAILS = new Set(
+  (process.env.CREATOR_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+);
+
+const SUPABASE_URL  = process.env.SUPABASE_URL ?? '';
+const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+
+function detectDevice(ua: string): string {
+  if (/tablet|ipad|playbook|silk/i.test(ua)) return 'tablet';
+  if (/mobile|android|iphone|ipod|blackberry|opera mini|windows phone/i.test(ua)) return 'mobile';
+  return 'desktop';
+}
+
+function logEvent(data: Record<string, unknown>) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  fetch(`${SUPABASE_URL}/rest/v1/analytics_events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY },
+    body: JSON.stringify(data),
+  }).catch(() => { /* non-blocking */ });
+}
 
 // Customer Account API
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
@@ -168,10 +189,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── 4. Check subscription via Seal ────────────────────────────────────────
   const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = await sealCheckSubscription(custEmail);
-  const isTester = TESTER_EMAILS.has(custEmail.toLowerCase());
-  const finalHasSub = hasSub || isTester;
+  const emailLower = custEmail.toLowerCase();
+  const isCreator  = CREATOR_EMAILS.has(emailLower);
+  const isTester   = !isCreator && TESTER_EMAILS.has(emailLower);
+  const finalHasSub = hasSub || isCreator || isTester;
 
-  console.log('Auth result:', { custEmail, hasSub, isTester, finalHasSub, nextBillingDate });
+  const finalStatus  = isCreator ? 'creator' : isTester ? 'tester' : subscriptionStatus;
+  const finalPlan    = isCreator ? 'Creator' : isTester ? 'Tester Access' : planTitle;
+  const finalExpiry  = (isCreator || isTester) ? undefined : nextBillingDate;
+
+  console.log('Auth result:', { custEmail, hasSub, isCreator, isTester, finalHasSub, nextBillingDate });
+
+  // ── Log login event (fire-and-forget) ────────────────────────────────────
+  const ua = String(req.headers['user-agent'] ?? '');
+  logEvent({
+    event_type:  'login',
+    email:       emailLower,
+    device_type: detectDevice(ua),
+    country:     req.headers['x-vercel-ip-country'] ?? null,
+    city:        req.headers['x-vercel-ip-city'] ? decodeURIComponent(String(req.headers['x-vercel-ip-city'])) : null,
+  });
 
   return res.status(200).json({
     token:                tokens.access_token,
@@ -181,8 +218,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     email:                custEmail,
     firstName,
     hasSubscription:      finalHasSub,
-    subscriptionStatus:    isTester ? 'tester' : subscriptionStatus,
-    subscriptionExpiresAt: isTester ? undefined : nextBillingDate,
-    planTitle:             isTester ? 'Tester Access' : planTitle,
+    subscriptionStatus:   finalStatus,
+    subscriptionExpiresAt: finalExpiry,
+    planTitle:            finalPlan,
   });
 }
