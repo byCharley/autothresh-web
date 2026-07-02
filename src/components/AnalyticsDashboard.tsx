@@ -341,7 +341,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
   function takeSnapshot() {
     setSnapping(true);
     setSnapMsg(null);
-    fetch('/api/cron/snapshot-subscriptions', {
+    fetch('/api/snapshot', {
       headers: { Authorization: `Bearer ${session.token}` },
     })
       .then(r => r.json() as Promise<{ ok?: boolean; snapshot?: Record<string, number>; error?: string }>)
