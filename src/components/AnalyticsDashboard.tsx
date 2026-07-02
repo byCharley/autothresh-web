@@ -9,6 +9,7 @@ interface AnalyticsData {
   dailyTrend: Array<{ date: string; logins: number; opens: number; unique: number }>;
   hourly: number[];
   subscriptions: { active: number; trial: number; paused: number; cancelled: number; total: number };
+  subTrend: Array<{ date: string; active: number; trial: number; paused: number; cancelled: number; total: number }>;
 }
 
 // ── SVG line + area chart ───────────────────────────────────────────────────
@@ -138,6 +139,73 @@ function DonutChart({ desktop, mobile, tablet }: { desktop: number; mobile: numb
         ))}
       </div>
     </div>
+  );
+}
+
+// ── Subscription trend chart ────────────────────────────────────────────────
+function SubTrendChart({ data }: { data: AnalyticsData['subTrend'] }) {
+  if (data.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '28px 0', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+        No snapshot data yet — first snapshot runs at 6:00 AM UTC daily.
+      </div>
+    );
+  }
+
+  const W = 560; const H = 140; const PAD = { t: 10, r: 10, b: 32, l: 42 };
+  const cW = W - PAD.l - PAD.r; const cH = H - PAD.t - PAD.b;
+
+  const maxVal = Math.max(...data.map(d => d.active + d.trial), 1);
+  const xPos = (i: number) => PAD.l + (data.length === 1 ? cW / 2 : (i / (data.length - 1)) * cW);
+  const yPos = (v: number) => PAD.t + cH - (v / maxVal) * cH;
+
+  const linePath = (vals: number[]) =>
+    vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ');
+
+  const areaPath = (vals: number[]) => {
+    const base = PAD.t + cH;
+    return vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ')
+      + ` L${xPos(data.length - 1).toFixed(1)},${base} L${xPos(0).toFixed(1)},${base} Z`;
+  };
+
+  const yTicks = [0, Math.round(maxVal / 2), maxVal];
+  const labelStep = Math.max(1, Math.floor(data.length / 5));
+  const xLabels = data.filter((_, i) => i === 0 || i === data.length - 1 || i % labelStep === 0);
+
+  const activeVals = data.map(d => d.active);
+  const trialVals  = data.map(d => d.trial);
+
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id="grad-active" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="grad-trial" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#a78bfa" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {yTicks.map(v => (
+        <g key={v}>
+          <line x1={PAD.l} y1={yPos(v)} x2={W - PAD.r} y2={yPos(v)} stroke="var(--border)" strokeWidth="0.5" />
+          <text x={PAD.l - 6} y={yPos(v) + 4} textAnchor="end" fontSize="9" fill="var(--text-dim)" fontFamily="var(--font-mono)">{v}</text>
+        </g>
+      ))}
+      <path d={areaPath(trialVals)}  fill="url(#grad-trial)" />
+      <path d={areaPath(activeVals)} fill="url(#grad-active)" />
+      <path d={linePath(trialVals)}  fill="none" stroke="#a78bfa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+      <path d={linePath(activeVals)} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      {xLabels.map(d => {
+        const i = data.indexOf(d);
+        return (
+          <text key={d.date} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="var(--text-dim)" fontFamily="var(--font-mono)">
+            {d.date.slice(5)}
+          </text>
+        );
+      })}
+    </svg>
   );
 }
 
@@ -397,6 +465,24 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                   })()}
                 </Panel>
               </div>
+
+              {/* Subscription trend */}
+              <Panel title="Subscription Trend (Daily Snapshots)">
+                <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 20, height: 2, background: 'var(--accent)', borderRadius: 1 }} />
+                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Active</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{ width: 20, height: 2, background: '#a78bfa', borderRadius: 1, opacity: 0.7 }} />
+                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Trial</span>
+                  </div>
+                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                    Snapshotted daily at 6:00 AM UTC
+                  </span>
+                </div>
+                <SubTrendChart data={data.subTrend} />
+              </Panel>
 
               {/* Hourly activity */}
               <Panel title="Hourly Activity (UTC)">

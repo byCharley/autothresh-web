@@ -87,11 +87,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
 
   try {
-    // ── Parallel fetch: Supabase events + Seal subscriptions ────────────────
-    const [events, subscriptions] = await Promise.all([
+    // ── Parallel fetch: events + snapshots + Seal live counts ───────────────
+    const [events, snapshots, subscriptions] = await Promise.all([
       sbQuery(
         `analytics_events?select=created_at,event_type,email,device_type,country,city&created_at=gte.${since}&order=created_at.asc&limit=10000`
       ),
+      sbQuery(
+        `subscription_snapshots?select=created_at,active,trial,paused,cancelled,total&created_at=gte.${since}&order=created_at.asc&limit=1000`
+      ).catch(() => [] as Array<Record<string, unknown>>),
       getSealSubscriptionCounts(),
     ]);
 
@@ -145,6 +148,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const peakHour = hourCounts.indexOf(Math.max(...hourCounts));
 
+    // ── Subscription trend from daily snapshots ─────────────────────────────
+    const subTrend = snapshots.map(s => ({
+      date:      String(s.created_at ?? '').slice(0, 10),
+      active:    Number(s.active   ?? 0),
+      trial:     Number(s.trial    ?? 0),
+      paused:    Number(s.paused   ?? 0),
+      cancelled: Number(s.cancelled ?? 0),
+      total:     Number(s.total    ?? 0),
+    }));
+
     res.status(200).json({
       period: { days, since },
       summary: {
@@ -159,6 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       dailyTrend,
       hourly: hourCounts,
       subscriptions,
+      subTrend,
     });
   } catch (e) {
     console.error('Analytics error:', e);
