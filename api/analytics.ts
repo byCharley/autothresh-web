@@ -83,17 +83,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = await verifyCreator(token);
   if (!isCreator) return res.status(403).json({ error: 'Forbidden' });
 
-  const days  = Math.min(parseInt(String(req.query.days ?? '30')), 365);
-  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const fromParam = req.query.from ? String(req.query.from) : null;
+  const toParam   = req.query.to   ? String(req.query.to)   : null;
+
+  let since: string;
+  let until: string;
+  let days: number;
+
+  if (fromParam && toParam) {
+    since = new Date(fromParam).toISOString();
+    until = new Date(toParam + 'T23:59:59.999Z').toISOString();
+    days  = Math.max(1, Math.ceil((new Date(until).getTime() - new Date(since).getTime()) / 86_400_000));
+  } else {
+    days  = Math.min(parseInt(String(req.query.days ?? '30')), 365);
+    since = new Date(Date.now() - days * 86_400_000).toISOString();
+    until = new Date().toISOString();
+  }
 
   try {
     // ── Parallel fetch: events + snapshots + Seal live counts ───────────────
     const [events, snapshots, subscriptions] = await Promise.all([
       sbQuery(
-        `analytics_events?select=created_at,event_type,email,device_type,country,city&created_at=gte.${since}&order=created_at.asc&limit=10000`
+        `analytics_events?select=created_at,event_type,email,device_type,country,city&created_at=gte.${since}&created_at=lte.${until}&order=created_at.asc&limit=10000`
       ),
       sbQuery(
-        `subscription_snapshots?select=created_at,active,trial,paused,cancelled,total&created_at=gte.${since}&order=created_at.asc&limit=1000`
+        `subscription_snapshots?select=created_at,active,trial,paused,cancelled,total&created_at=gte.${since}&created_at=lte.${until}&order=created_at.asc&limit=1000`
       ).catch(() => [] as Array<Record<string, unknown>>),
       getSealSubscriptionCounts(),
     ]);
@@ -124,11 +138,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       countryCounts[cc] = (countryCounts[cc] ?? 0) + 1;
     }
 
-    // Fill gaps in daily timeline
+    // Fill gaps in daily timeline across the full selected range
     const dailyTrend: Array<{ date: string; logins: number; opens: number; unique: number }> = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(Date.now() - i * 86_400_000);
-      const key = d.toISOString().slice(0, 10);
+    const rangeStart = new Date(since); rangeStart.setUTCHours(0, 0, 0, 0);
+    const rangeEnd   = new Date(until);
+    for (let d = new Date(rangeStart); d <= rangeEnd; d.setUTCDate(d.getUTCDate() + 1)) {
+      const key   = d.toISOString().slice(0, 10);
       const entry = dailyMap.get(key);
       dailyTrend.push({ date: key, logins: entry?.logins ?? 0, opens: entry?.opens ?? 0, unique: entry?.unique.size ?? 0 });
     }

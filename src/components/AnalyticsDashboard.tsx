@@ -288,16 +288,32 @@ function Panel({ title, children, style }: { title: string; children: React.Reac
 }
 
 // ── Main dashboard ──────────────────────────────────────────────────────────
-export function AnalyticsDashboard({ session, onClose }: { session: Session; onClose: () => void }) {
-  const [period, setPeriod] = useState<30 | 7 | 90>(30);
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+type Preset = 7 | 14 | 30 | 90;
+const PRESETS: Preset[] = [7, 14, 30, 90];
 
-  const load = useCallback((days: number) => {
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function daysAgoStr(n: number) {
+  const d = new Date(); d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+export function AnalyticsDashboard({ session, onClose }: { session: Session; onClose: () => void }) {
+  const [preset, setPreset]   = useState<Preset | 'custom'>(30);
+  const [customFrom, setCustomFrom] = useState(daysAgoStr(30));
+  const [customTo,   setCustomTo]   = useState(todayStr);
+  const [pendingFrom, setPendingFrom] = useState(daysAgoStr(30));
+  const [pendingTo,   setPendingTo]   = useState(todayStr);
+  const [data, setData]     = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]   = useState<string | null>(null);
+
+  const load = useCallback((params: { days: number } | { from: string; to: string }) => {
     setLoading(true);
     setError(null);
-    fetch(`/api/analytics?days=${days}`, {
+    const qs = 'days' in params
+      ? `days=${params.days}`
+      : `from=${params.from}&to=${params.to}`;
+    fetch(`/api/analytics?${qs}`, {
       headers: { Authorization: `Bearer ${session.token}` },
     })
       .then(r => {
@@ -308,7 +324,16 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
       .catch(e => { setError(String(e.message)); setLoading(false); });
   }, [session.token]);
 
-  useEffect(() => { load(period); }, [period, load]);
+  useEffect(() => {
+    if (preset === 'custom') load({ from: customFrom, to: customTo });
+    else load({ days: preset });
+  }, [preset, customFrom, customTo, load]);
+
+  function applyCustom() {
+    setCustomFrom(pendingFrom);
+    setCustomTo(pendingTo);
+    setPreset('custom');
+  }
 
   const formatHour = (h: number) => {
     if (h === 0) return '12:00 AM';
@@ -349,16 +374,16 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
               CREATOR
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {([7, 30, 90] as const).map(d => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {PRESETS.map(d => (
               <button
                 key={d}
-                onClick={() => setPeriod(d)}
+                onClick={() => setPreset(d)}
                 style={{
                   height: 24, padding: '0 10px',
-                  background: period === d ? 'var(--accent)' : 'transparent',
-                  border: '1px solid', borderColor: period === d ? 'var(--accent)' : 'var(--border)',
-                  color: period === d ? '#111' : 'var(--text-dim)',
+                  background: preset === d ? 'var(--accent)' : 'transparent',
+                  border: '1px solid', borderColor: preset === d ? 'var(--accent)' : 'var(--border)',
+                  color: preset === d ? '#111' : 'var(--text-dim)',
                   fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
                   cursor: 'pointer', transition: 'all 0.12s',
                 }}
@@ -366,6 +391,69 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                 {d}D
               </button>
             ))}
+
+            {/* Custom range */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                onClick={() => { setPreset('custom'); setPendingFrom(customFrom); setPendingTo(customTo); }}
+                style={{
+                  height: 24, padding: '0 10px',
+                  background: preset === 'custom' ? 'var(--accent)' : 'transparent',
+                  border: '1px solid', borderColor: preset === 'custom' ? 'var(--accent)' : 'var(--border)',
+                  color: preset === 'custom' ? '#111' : 'var(--text-dim)',
+                  fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                  cursor: 'pointer', transition: 'all 0.12s',
+                }}
+              >
+                Custom
+              </button>
+              {preset === 'custom' && (
+                <>
+                  <input
+                    type="date"
+                    value={pendingFrom}
+                    max={pendingTo}
+                    onChange={e => setPendingFrom(e.target.value)}
+                    style={{
+                      height: 24, padding: '0 6px', fontSize: 10,
+                      fontFamily: 'var(--font-mono)',
+                      background: 'var(--surface-2, var(--surface))',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text)', cursor: 'pointer',
+                      colorScheme: 'dark',
+                    }}
+                  />
+                  <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>→</span>
+                  <input
+                    type="date"
+                    value={pendingTo}
+                    min={pendingFrom}
+                    max={todayStr()}
+                    onChange={e => setPendingTo(e.target.value)}
+                    style={{
+                      height: 24, padding: '0 6px', fontSize: 10,
+                      fontFamily: 'var(--font-mono)',
+                      background: 'var(--surface-2, var(--surface))',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text)', cursor: 'pointer',
+                      colorScheme: 'dark',
+                    }}
+                  />
+                  <button
+                    onClick={applyCustom}
+                    style={{
+                      height: 24, padding: '0 10px',
+                      background: 'var(--accent)', border: 'none',
+                      color: '#111', fontSize: 10,
+                      fontFamily: 'var(--font-mono)', fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Apply
+                  </button>
+                </>
+              )}
+            </div>
             <button
               onClick={onClose}
               style={{
@@ -401,7 +489,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Summary cards */}
               <div style={{ display: 'flex', gap: 10 }}>
-                <StatCard label="Unique Users" value={data.summary.uniqueUsers} sub={`Last ${period} days`} accent />
+                <StatCard label="Unique Users" value={data.summary.uniqueUsers} sub={preset === 'custom' ? `${customFrom} → ${customTo}` : `Last ${preset} days`} accent />
                 <StatCard label="App Opens" value={data.summary.appOpenCount} sub="Session verifications" />
                 <StatCard label="Logins" value={data.summary.loginCount} sub="OAuth completions" />
                 <StatCard label="Peak Hour" value={formatHour(data.summary.peakHour)} sub="UTC time" />
@@ -417,7 +505,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
               </div>
 
               {/* Trend chart */}
-              <Panel title={`Daily Activity — Last ${period} Days`}>
+              <Panel title={preset === 'custom' ? `Daily Activity — ${customFrom} to ${customTo}` : `Daily Activity — Last ${preset} Days`}>
                 <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 20, height: 2, background: 'var(--accent)', borderRadius: 1 }} />
@@ -428,7 +516,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                     <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>App Opens</span>
                   </div>
                 </div>
-                <TrendChart data={data.dailyTrend} days={period} />
+                <TrendChart data={data.dailyTrend} />
               </Panel>
 
               {/* Device + Countries row */}
