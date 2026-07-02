@@ -16,7 +16,19 @@ function sbHeaders() {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${SERVICE_KEY}`,
     'apikey': SERVICE_KEY,
+    'Prefer': 'count=planned',
   };
+}
+
+async function sbQuery(path: string): Promise<Array<Record<string, unknown>>> {
+  const url = `${SUPABASE_URL}/rest/v1/${path}`;
+  const r = await fetch(url, { headers: sbHeaders() });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    console.error(`Supabase HTTP ${r.status} for ${path.slice(0, 80)}:`, body.slice(0, 300));
+    throw new Error(`Supabase HTTP ${r.status}: ${body.slice(0, 120)}`);
+  }
+  return r.json() as Promise<Array<Record<string, unknown>>>;
 }
 
 async function verifyCreator(token: string): Promise<boolean> {
@@ -31,12 +43,6 @@ async function verifyCreator(token: string): Promise<boolean> {
     const email = body?.data?.customer?.emailAddress?.emailAddress ?? '';
     return CREATOR_EMAILS.has(email.toLowerCase());
   } catch { return false; }
-}
-
-async function sbQuery(path: string) {
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: sbHeaders() });
-  if (!r.ok) throw new Error(`Supabase ${path} → ${r.status}`);
-  return r.json() as Promise<Array<Record<string, unknown>>>;
 }
 
 async function getSealSubscriptionCounts(): Promise<{ active: number; trial: number; paused: number; cancelled: number; total: number }> {
@@ -84,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── Parallel fetch: Supabase events + Seal subscriptions ────────────────
     const [events, subscriptions] = await Promise.all([
       sbQuery(
-        `analytics_events?select=created_at,event_type,email,device_type,country,city&created_at=gte.${encodeURIComponent(since)}&order=created_at.asc&limit=50000`
+        `analytics_events?select=created_at,event_type,email,device_type,country,city&created_at=gte.${since}&order=created_at.asc&limit=10000`
       ),
       getSealSubscriptionCounts(),
     ]);
