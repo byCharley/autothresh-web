@@ -56,7 +56,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
             AutoThresh™ Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.2</span>
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 7, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', lineHeight: 1.9 }}>
-            Professional Color Separation<br />Trusted By Pros Worldwide
+            Professional Color Separation App<br />Trusted By Pros Worldwide<br />Community Led Improvements Weekly
           </div>
         </div>
 
