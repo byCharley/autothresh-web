@@ -499,11 +499,12 @@ function App() {
     // ── Build per-layer canvas: place artwork mask at its offset in the doc ──
     const buildLayerCanvas = (pl: typeof artLayers[number], withMarks: boolean): HTMLCanvasElement => {
       const [r, g, b] = pl.color;
+      const skipTex = !exportTexMask || isShadowColor(r, g, b);
       const data = new ImageData(docPxW, docPxH);
       for (let ay = 0; ay < artScaleH; ay++) {
         for (let ax = 0; ax < artScaleW; ax++) {
           if (pl.mask[ay * artScaleW + ax] !== 255) continue;
-          if (exportTexMask && exportTexMask[ay * artScaleW + ax] === 0) continue;
+          if (!skipTex && exportTexMask![ay * artScaleW + ax] === 0) continue;
           const dx = artOffX + ax, dy = artOffY + ay;
           if (dx < 0 || dx >= docPxW || dy < 0 || dy >= docPxH) continue;
           const pi = (dy * docPxW + dx) * 4;

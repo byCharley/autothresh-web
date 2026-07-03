@@ -1,4 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect } from 'react';
+
+function useMobile(bp = 640) {
+  const [m, setM] = useState(false);
+  useLayoutEffect(() => {
+    const h = () => setM(window.innerWidth < bp);
+    h();
+    window.addEventListener('resize', h, { passive: true });
+    return () => window.removeEventListener('resize', h);
+  }, [bp]);
+  return m;
+}
 import type { Session } from '../auth/useAuth';
 
 interface AnalyticsData {
@@ -259,7 +270,7 @@ const COUNTRY_NAMES: Record<string, string> = {
 function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
   return (
     <div style={{
-      flex: 1, padding: '14px 16px',
+      flex: '1 1 130px', minWidth: 0, padding: '14px 16px',
       background: 'var(--surface-2, var(--surface))',
       border: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column', gap: 4,
@@ -298,6 +309,7 @@ function daysAgoStr(n: number) {
 }
 
 export function AnalyticsDashboard({ session, onClose }: { session: Session; onClose: () => void }) {
+  const mobile = useMobile();
   const [preset, setPreset]   = useState<Preset | 'custom'>(30);
   const [customFrom, setCustomFrom] = useState(daysAgoStr(30));
   const [customTo,   setCustomTo]   = useState(todayStr);
@@ -369,20 +381,23 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
       background: 'rgba(0,0,0,0.75)',
       display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
       overflowY: 'auto',
-      padding: '40px 20px 60px',
+      padding: mobile ? '0' : '40px 20px 60px',
     }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
         width: '100%', maxWidth: 960,
         background: 'var(--bg, #111)',
-        border: '1px solid var(--border)',
+        border: mobile ? 'none' : '1px solid var(--border)',
         boxShadow: '0 24px 80px rgba(0,0,0,0.8)',
       }}>
         {/* Header */}
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 20px', borderBottom: '1px solid var(--border)',
+          display: 'flex', flexDirection: mobile ? 'column' : 'row',
+          alignItems: mobile ? 'flex-start' : 'center',
+          justifyContent: 'space-between', gap: mobile ? 10 : 0,
+          padding: mobile ? '12px 14px' : '16px 20px',
+          borderBottom: '1px solid var(--border)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
@@ -493,7 +508,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
         </div>
 
         {/* Body */}
-        <div style={{ padding: '20px' }}>
+        <div style={{ padding: mobile ? '12px' : '20px' }}>
           {loading && (
             <div style={{ textAlign: 'center', padding: '80px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
               Loading analytics...
@@ -507,9 +522,9 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
           )}
 
           {data && !loading && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Summary cards */}
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <StatCard label="Unique Users" value={data.summary.uniqueUsers} sub={preset === 'custom' ? `${customFrom} → ${customTo}` : `Last ${preset} days`} accent />
                 <StatCard label="App Opens" value={data.summary.appOpenCount} sub="Session verifications" />
                 <StatCard label="Logins" value={data.summary.loginCount} sub="OAuth completions" />
@@ -517,7 +532,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
               </div>
 
               {/* Subscription row */}
-              <div style={{ display: 'flex', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <StatCard label="Active Subs" value={data.subscriptions.active} accent />
                 <StatCard label="Trials" value={data.subscriptions.trial} />
                 <StatCard label="Paused" value={data.subscriptions.paused} />
@@ -541,8 +556,8 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
               </Panel>
 
               {/* Device + Countries row */}
-              <div style={{ display: 'flex', gap: 16 }}>
-                <Panel title="Device Breakdown" style={{ flex: '0 0 280px' }}>
+              <div style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 12 }}>
+                <Panel title="Device Breakdown" style={{ flex: mobile ? 'none' : '0 0 280px' }}>
                   <DonutChart
                     desktop={data.devices.desktop ?? 0}
                     mobile={data.devices.mobile ?? 0}
@@ -558,9 +573,9 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                         {data.countries.map(({ country, count }) => (
-                          <div key={country} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div key={country} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ fontSize: 14, flexShrink: 0, width: 22 }}>{countryFlag(country)}</span>
-                            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: 120, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: mobile ? 80 : 120, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {COUNTRY_NAMES[country.toUpperCase()] ?? country}
                             </span>
                             <div style={{ flex: 1, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
