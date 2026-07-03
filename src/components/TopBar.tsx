@@ -6,6 +6,12 @@ import { AppIcon } from './AppIcon';
 // Add new entries at the TOP. Each `id` must be higher than all previous ones.
 const NOTIFICATIONS = [
   {
+    id: 4,
+    date: 'Jul 2, 2026',
+    title: 'v1.0.2 — CorelDRAW Export & Layer Renaming',
+    body: 'New CDR export format produces a ZIP of numbered EPS plates with spot-color headers and a step-by-step CorelDRAW import guide — great for screen printers not on Photoshop. Double-click any layer name in Thresh, Dither, or Color mode to rename it; custom names carry through to every export format. Also fixes CMYK Pro highlight knockout (dark garments no longer show through) and makes dot gain / tone curve controls significantly more responsive.',
+  },
+  {
     id: 3,
     date: 'Jul 1, 2026',
     title: 'Texture & Export Fixes',
