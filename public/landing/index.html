@@ -322,6 +322,18 @@
     .fade-in { opacity: 0; transform: translateY(24px); transition: opacity 0.55s, transform 0.55s; }
     .fade-in.visible { opacity: 1; transform: translateY(0); }
 
+    /* ── Typewriter cursor ── */
+    .tw-cursor {
+      display: inline-block;
+      width: 3px; height: 0.78em;
+      background: var(--accent);
+      margin-left: 4px;
+      vertical-align: middle;
+      border-radius: 1px;
+      animation: tw-blink 0.65s step-end infinite;
+    }
+    @keyframes tw-blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
     @media (max-width: 900px) {
       .modes-grid { grid-template-columns: 1fr 1fr; }
       .features-grid { grid-template-columns: 1fr 1fr; }
@@ -619,6 +631,80 @@
 </footer>
 
 <script>
+  // ── Typewriter hero ────────────────────────────────────────────────────────
+  (function () {
+    const h1    = document.querySelector('.hero h1');
+    const sub   = document.querySelector('.hero-sub');
+    const pills = document.querySelector('.hero-pills');
+    const ctas  = document.querySelector('.hero-ctas');
+    if (!h1) return;
+
+    // Hide elements that reveal after typing
+    [sub, pills, ctas].forEach(el => {
+      if (!el) return;
+      el.style.opacity   = '0';
+      el.style.transform = 'translateY(12px)';
+      el.style.transition = 'opacity 0.55s ease, transform 0.55s ease';
+    });
+
+    // Clear h1 and plant cursor
+    h1.innerHTML = '';
+    const cursor = document.createElement('span');
+    cursor.className = 'tw-cursor';
+    h1.appendChild(cursor);
+
+    // Segments: null el = plain text node, 'br' = line break, 'span' = accent span
+    const segments = [
+      { text: 'Separate Colors', el: null },
+      { text: null,              el: 'br'   },
+      { text: 'Like a Pro.',     el: 'span' },
+    ];
+
+    let si = 0, ci = 0, node = null;
+
+    function tick() {
+      if (si >= segments.length) {
+        // Done — remove cursor, cascade in sub-content
+        cursor.style.transition = 'opacity 0.35s';
+        cursor.style.opacity = '0';
+        setTimeout(() => cursor.remove(), 350);
+        [sub, pills, ctas].forEach((el, i) => {
+          if (!el) return;
+          setTimeout(() => { el.style.opacity = '1'; el.style.transform = 'translateY(0)'; }, 80 + i * 130);
+        });
+        return;
+      }
+
+      const seg = segments[si];
+
+      if (seg.el === 'br') {
+        h1.insertBefore(document.createElement('br'), cursor);
+        si++; ci = 0; node = null;
+        setTimeout(tick, 55);
+        return;
+      }
+
+      if (ci === 0) {
+        node = seg.el === 'span' ? document.createElement('span') : document.createTextNode('');
+        h1.insertBefore(node, cursor);
+      }
+
+      node.textContent += seg.text[ci];
+      ci++;
+
+      if (ci >= seg.text.length) {
+        si++; ci = 0; node = null;
+        setTimeout(tick, 90); // pause between lines
+        return;
+      }
+
+      setTimeout(tick, 44);
+    }
+
+    setTimeout(tick, 220);
+  })();
+
+  // ── Nav scroll ─────────────────────────────────────────────────────────────
   const nav = document.getElementById('nav');
   window.addEventListener('scroll', () => {
     nav.classList.toggle('scrolled', window.scrollY > 40);
