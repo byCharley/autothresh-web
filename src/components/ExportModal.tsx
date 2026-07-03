@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 
-export type ExportFormat = 'png' | 'psd' | 'pdf' | 'tiff' | 'svg' | 'eps';
+export type ExportFormat = 'png' | 'psd' | 'pdf' | 'tiff' | 'svg' | 'eps' | 'cdr';
 
 export interface ExportConfig {
   mode:             'screen' | 'dtg';
@@ -26,6 +26,7 @@ const FORMATS_ALL: { value: ExportFormat; label: string; ext: string }[] = [
   { value: 'pdf',  label: 'PDF',  ext: '.pdf'  },
   { value: 'tiff', label: 'TIFF', ext: '.tiff' },
   { value: 'eps',  label: 'EPS',  ext: '.eps'  },
+  { value: 'cdr',  label: 'CDR',  ext: '.zip'  },
 ];
 
 const FORMATS_DITHER: { value: ExportFormat; label: string; ext: string }[] = [
@@ -38,6 +39,13 @@ const FORMATS_DITHER: { value: ExportFormat; label: string; ext: string }[] = [
 function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean) {
   if (format === 'svg') {
     return { pkg: 'Single file', layers: 'Scalable vector paths', bg: 'Transparent', marks: 'Not included' };
+  }
+  if (format === 'cdr') {
+    if (mode === 'screen' && !isDither) {
+      return { pkg: 'ZIP archive', layers: 'One EPS per separation, spot-color DSC headers + import guide', bg: 'Transparent', marks: 'Included' };
+    } else {
+      return { pkg: 'ZIP archive', layers: 'Composite EPS with CorelDRAW import guide', bg: 'White', marks: 'Not included' };
+    }
   }
   if (isDither) {
     switch (format) {
@@ -111,8 +119,8 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
 
   const d = details(mode, format, isDither);
   const fmt = FORMATS.find(f => f.value === format) ?? FORMATS[0];
-  // EPS in screen mode exports a ZIP; show the correct extension in the filename bar
-  const displayExt = (format === 'eps' && !isDither && mode === 'screen') ? '.zip' : fmt.ext;
+  // EPS/CDR in screen mode export a ZIP; show the correct extension in the filename bar
+  const displayExt = ((format === 'eps' && !isDither && mode === 'screen') || format === 'cdr') ? '.zip' : fmt.ext;
 
   // ── Passthrough modal: stripped to filename + export only ─────────────────────
   if (passthroughMode) {
@@ -419,7 +427,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
         <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleExport} disabled={exporting}>
-            {exporting ? 'Exporting…' : format === 'eps' && !isDither && mode === 'screen' ? 'Export EPS (ZIP)' : `Export ${fmt.label}`}
+            {exporting ? 'Exporting…' : format === 'cdr' ? 'Export CorelDRAW (ZIP)' : format === 'eps' && !isDither && mode === 'screen' ? 'Export EPS (ZIP)' : `Export ${fmt.label}`}
           </button>
         </div>
       </div>

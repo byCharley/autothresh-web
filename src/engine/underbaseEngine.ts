@@ -5,20 +5,23 @@ export interface UnderbaseOptions {
   includeShadows: boolean; // kept for non-CMYK underbase path; ignored here
 }
 
-// White underbase from total CMYK ink coverage.
-// White only exists where CMYK inks print; transparent areas stay 0.
+// White underbase covering all art pixels at full density.
+// bgMask convention: 255 = background (transparent), 0 = art pixel.
+// When bgMask is provided, every art pixel gets full white regardless of ink amount —
+// highlights (low CMYK) would otherwise receive no white and show the dark garment.
+// When bgMask is null (no bg removal), the entire image is art.
 export function generateCmykProUnderbase(
   plates: CmykProPlates,
   opts: UnderbaseOptions,
+  bgMask?: Uint8Array | null,
 ): Uint8Array {
-  const { C, M, Y, K, width: w, height: h } = plates;
-  const scale = opts.density / 100;
+  const { width: w, height: h } = plates;
+  const white = Math.round(opts.density / 100 * 255);
   const result = new Uint8Array(w * h);
 
   for (let i = 0; i < w * h; i++) {
-    // Sum all ink channels (0–1020), cap at 255 to get 0–1 coverage
-    const totalInk = Math.min(255, C[i] + M[i] + Y[i] + K[i]);
-    result[i] = Math.round((totalInk / 255) * scale * 255);
+    if (bgMask && bgMask[i] === 255) continue; // background — no white
+    result[i] = white;
   }
   return result;
 }

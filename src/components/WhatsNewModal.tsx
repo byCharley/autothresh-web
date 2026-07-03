@@ -15,6 +15,22 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-02',
+    label: 'v1.0.2 — CorelDRAW Export & Layer Renaming',
+    added: [
+      'CorelDRAW export — new CDR format produces a ZIP of numbered EPS plates with spot-color DSC headers and a step-by-step README-CorelDRAW.txt import guide. Works in all screen-print separation modes.',
+      'Layer renaming — double-click any layer name in Thresh, Dither, or Color mode to rename it. Custom names carry through to all export formats (PSD layer names, EPS/TIFF/PNG filenames, etc.).',
+    ],
+    improved: [
+      'CMYK Pro underbase now uses art presence instead of ink density — highlights with near-zero CMYK ink no longer expose dark garment fabric through a thin white layer.',
+      'CMYK Pro dot gain and tone curve controls respond instantly. Interactive adjustments now use a 2× render pass instead of 4×, giving roughly 8–16× faster feedback.',
+    ],
+    fixed: [
+      'Stats Dashboard was inaccessible on mobile for creator accounts.',
+      'CMYK Pro layer panel now shows channel cards first, then ICC Separation — consistent with all other modes.',
+    ],
+  },
+  {
     date: '2026-06-30',
     label: 'CMYK Pro Fixes',
     improved: [

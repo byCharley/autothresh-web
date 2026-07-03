@@ -167,6 +167,7 @@ export interface HistorySnapshot {
   paletteNumColors: number;
   paletteColors: RGB[];
   paletteVisibility: Record<string, boolean>;
+  paletteNames: string[];
   paletteLpi: number;
   palettePattern: PatternType;
   palettePatternScale: number;
@@ -182,6 +183,7 @@ export interface HistorySnapshot {
   colorSepPatternAngle: number;
   colorSepLockedColors: RGB[] | null;
   colorSepVisibility: Record<string, boolean>;
+  colorSepNames: string[];
   vectorNumColors: number;
   vectorDetail: number;
   vectorSmooth: number;
@@ -220,6 +222,7 @@ export function captureSnapshot(s: AppState): HistorySnapshot {
     paletteNumColors: s.paletteNumColors,
     paletteColors: s.paletteColors.map(c => [...c] as RGB),
     paletteVisibility: { ...s.paletteVisibility },
+    paletteNames: [...s.paletteNames],
     paletteLpi: s.paletteLpi,
     palettePattern: s.palettePattern,
     palettePatternScale: s.palettePatternScale,
@@ -235,6 +238,7 @@ export function captureSnapshot(s: AppState): HistorySnapshot {
     colorSepPatternAngle: s.colorSepPatternAngle,
     colorSepLockedColors: s.colorSepLockedColors ? s.colorSepLockedColors.map(c => [...c] as RGB) : null,
     colorSepVisibility: { ...s.colorSepVisibility },
+    colorSepNames: [...s.colorSepNames],
     vectorNumColors: s.vectorNumColors,
     vectorDetail: s.vectorDetail,
     vectorSmooth: s.vectorSmooth,
@@ -314,6 +318,7 @@ interface AppState {
   paletteNumColors:    number;
   paletteColors:       RGB[];
   paletteVisibility:   Record<string, boolean>;
+  paletteNames:        string[];
   paletteLpi:          number;
   palettePattern:      PatternType;
   palettePatternScale: number;
@@ -347,6 +352,7 @@ interface AppState {
   colorSepColors:        RGB[];
   colorSepLockedColors:  RGB[] | null;
   colorSepVisibility:    Record<string, boolean>;
+  colorSepNames:         string[];
 
   processedLayers: ProcessedLayer[];
   processedLayerDims: { w: number; h: number } | null;
@@ -435,6 +441,7 @@ interface AppState {
   setPaletteColors:       (v: RGB[]) => void;
   setPaletteColor:        (idx: number, color: RGB) => void;
   setPaletteVisibility:   (id: string, v: boolean) => void;
+  setPaletteNames:        (v: string[]) => void;
   setPaletteLpi:          (v: number) => void;
   setPalettePattern:      (v: PatternType) => void;
   setPalettePatternScale: (v: number) => void;
@@ -465,6 +472,7 @@ interface AppState {
   setColorSepColors:        (v: RGB[]) => void;
   setColorSepLockedColors:  (v: RGB[] | null) => void;
   setColorSepVisibility:    (id: string, v: boolean) => void;
+  setColorSepNames:         (v: string[]) => void;
 
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
   setProcessedLayerDims: (dims: { w: number; h: number } | null) => void;
@@ -541,6 +549,7 @@ export const useStore = create<AppState>((set, get) => ({
   paletteNumColors:    6,
   paletteColors:       defaultPaletteColors(6) as RGB[],
   paletteVisibility:   {},
+  paletteNames:        [],
   paletteLpi:          20,
   palettePattern:      'diffusion' as PatternType,
   palettePatternScale: 1,
@@ -571,6 +580,7 @@ export const useStore = create<AppState>((set, get) => ({
   colorSepColors:        [],
   colorSepLockedColors:  null,
   colorSepVisibility:    {},
+  colorSepNames:         [],
 
   processedLayers: [],
   processedLayerDims: null,
@@ -606,10 +616,12 @@ export const useStore = create<AppState>((set, get) => ({
       vectorSvg: null, vectorColors: [],
       paletteColors: [],
       paletteVisibility: {},
+      paletteNames: [],
       paletteAnalyzeKey: s.paletteAnalyzeKey + 1,
       colorSepColors: [],
       colorSepLockedColors: null,
       colorSepVisibility: {},
+      colorSepNames: [],
       proCmykPlates: null,
       canvasColor: '#000000',
     })),
@@ -686,6 +698,7 @@ export const useStore = create<AppState>((set, get) => ({
     paletteNumColors: 6,
     paletteColors: defaultPaletteColors(6) as RGB[],
     paletteVisibility: {},
+    paletteNames: [],
     palettePattern: 'diffusion' as const,
     palettePatternScale: 1,
     paletteColorMode: false,
@@ -700,6 +713,7 @@ export const useStore = create<AppState>((set, get) => ({
     colorSepPatternDensity: 75,
     colorSepPatternAngle: 45,
     colorSepLockedColors: null,
+    colorSepNames: [],
     vectorNumColors: 8,
     vectorDetail: 3,
     vectorSmooth: 5,
@@ -829,6 +843,7 @@ export const useStore = create<AppState>((set, get) => ({
     return { paletteColors: next };
   }),
   setPaletteVisibility: (id, v) => set((s) => ({ paletteVisibility: { ...s.paletteVisibility, [id]: v } })),
+  setPaletteNames: (paletteNames) => set({ paletteNames }),
   setPaletteLpi:          (paletteLpi) => set({ paletteLpi }),
   setPalettePattern:      (palettePattern) => set({ palettePattern }),
   setPalettePatternScale: (palettePatternScale) => set({ palettePatternScale }),
@@ -856,9 +871,10 @@ export const useStore = create<AppState>((set, get) => ({
   setColorSepPatternScale:   (colorSepPatternScale)   => set({ colorSepPatternScale }),
   setColorSepPatternDensity: (colorSepPatternDensity) => set({ colorSepPatternDensity }),
   setColorSepPatternAngle:   (colorSepPatternAngle)   => set({ colorSepPatternAngle }),
-  setColorSepColors:         (colorSepColors)         => set({ colorSepColors }),
+  setColorSepColors:         (colorSepColors)         => set({ colorSepColors, colorSepNames: [] }),
   setColorSepLockedColors:   (colorSepLockedColors)   => set({ colorSepLockedColors }),
   setColorSepVisibility: (id, v) => set((s) => ({ colorSepVisibility: { ...s.colorSepVisibility, [id]: v } })),
+  setColorSepNames: (colorSepNames) => set({ colorSepNames }),
 
   setProcessedLayers: (processedLayers) => set({ processedLayers }),
   setProcessedLayerDims: (processedLayerDims) => set({ processedLayerDims }),

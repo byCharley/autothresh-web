@@ -637,27 +637,25 @@ export function CanvasView() {
             const previewDpi = artPrevW / documentWidthIn;
             let whitePlate: Uint8Array | undefined;
             if (underbaseEnabled) {
-              const raw = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
+              const raw = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows }, cachedBgMask);
               whitePlate = chokeWhitePlate(raw, plates.width, plates.height, underbaseChoke);
             }
-            // Dot View: render at 1× using a 150 DPI reference floor so cells are ~2.3px at 65 LPI.
-            // previewDpi (~85 DPI) gives 1.3px cells — sub-pixel for the ss=4 hole test,
-            // causing K holes to be noise-level (K≈191 not 0) → colored speckles in composite.
-            // 150/lpi ≈ 2.31px: K hole diameter = 1.24px → 2.07px at 167% zoom → visible rosette.
+            // Dot View: 150 DPI floor gives ~2.3px cells — visible rosette, clean K holes.
+            // ss=2 gives 4 subsamples per cell — fast enough for interactive, quality enough for display.
             const dotViewDpi = Math.max(150, previewDpi);
-            const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, dotViewDpi, cachedBgMask, whitePlate, 4);
+            const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, dotViewDpi, cachedBgMask, whitePlate, 2);
             const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
             setProcessedLayers(allLayers.filter(l => visibleIds.includes(l.id)));
             setProcessedLayerDims({ w: artPrevW, h: artPrevH });
             let composite: ImageData;
             if (simActive) {
-              // Print Sim: 4× upsample → Neugebauer composite → area-downsample
-              const SCALE = 4;
-              const plates4x = upsampleCmykPlates(plates, SCALE);
-              const bgMask4x = cachedBgMask ? upsampleMask(cachedBgMask, artPrevW, artPrevH, SCALE) : null;
-              const wp4x = whitePlate ? upsampleMask(whitePlate, plates.width, plates.height, SCALE) : undefined;
-              const layers4x = applyHalftoneToCmykPlates(plates4x, proCmykSettings, previewDpi * SCALE, bgMask4x, wp4x);
-              const hi = compositeHalftonePlates(layers4x, artPrevW * SCALE, artPrevH * SCALE, primaries, bgMask4x, vis, garmentMode, garmentRgb);
+              // Print Sim: 2× upsample → Neugebauer composite → area-downsample (fast interactive path)
+              const SCALE = 2;
+              const plates2x = upsampleCmykPlates(plates, SCALE);
+              const bgMask2x = cachedBgMask ? upsampleMask(cachedBgMask, artPrevW, artPrevH, SCALE) : null;
+              const wp2x = whitePlate ? upsampleMask(whitePlate, plates.width, plates.height, SCALE) : undefined;
+              const layers2x = applyHalftoneToCmykPlates(plates2x, proCmykSettings, previewDpi * SCALE, bgMask2x, wp2x);
+              const hi = compositeHalftonePlates(layers2x, artPrevW * SCALE, artPrevH * SCALE, primaries, bgMask2x, vis, garmentMode, garmentRgb);
               composite = areaAverageDownsample(hi, artPrevW, artPrevH);
             } else {
               composite = compositeHalftonePlates(allLayers, artPrevW, artPrevH, primaries, cachedBgMask, vis, garmentMode, garmentRgb);
@@ -692,18 +690,18 @@ export function CanvasView() {
             const visL2 = { c: cmykVisibility['cmyk-c'], m: cmykVisibility['cmyk-m'], y: cmykVisibility['cmyk-y'], k: cmykVisibility['cmyk-k'] };
             const prevDpiL2 = artPrevW / documentWidthIn;
             let wpL2: Uint8Array | undefined;
-            if (underbaseEnabled) { const rL2 = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows }); wpL2 = chokeWhitePlate(rL2, plates.width, plates.height, underbaseChoke); }
+            if (underbaseEnabled) { const rL2 = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows }, cachedBgMask); wpL2 = chokeWhitePlate(rL2, plates.width, plates.height, underbaseChoke); }
             const dotDpiL2 = Math.max(150, prevDpiL2);
-            const allLayersL2 = applyHalftoneToCmykPlates(plates, proCmykSettings, dotDpiL2, cachedBgMask, wpL2, 4);
+            const allLayersL2 = applyHalftoneToCmykPlates(plates, proCmykSettings, dotDpiL2, cachedBgMask, wpL2, 2);
             const visIdsL2 = Object.entries(cmykVisibility).filter(([,v])=>v).map(([id])=>id);
             setProcessedLayers(allLayersL2.filter(l => visIdsL2.includes(l.id)));
             setProcessedLayerDims({ w: artPrevW, h: artPrevH });
             let compL2: ImageData;
             if (simL2) {
-              const SCALE=4; const p4=upsampleCmykPlates(plates,SCALE); const bm4=cachedBgMask?upsampleMask(cachedBgMask,artPrevW,artPrevH,SCALE):null;
-              const wp4=wpL2?upsampleMask(wpL2,plates.width,plates.height,SCALE):undefined;
-              const l4=applyHalftoneToCmykPlates(p4,proCmykSettings,prevDpiL2*SCALE,bm4,wp4);
-              const hi=compositeHalftonePlates(l4,artPrevW*SCALE,artPrevH*SCALE,primariesL2,bm4,visL2,gModeL2,gRgbL2);
+              const SCALE=2; const p2=upsampleCmykPlates(plates,SCALE); const bm2=cachedBgMask?upsampleMask(cachedBgMask,artPrevW,artPrevH,SCALE):null;
+              const wp2=wpL2?upsampleMask(wpL2,plates.width,plates.height,SCALE):undefined;
+              const l2=applyHalftoneToCmykPlates(p2,proCmykSettings,prevDpiL2*SCALE,bm2,wp2);
+              const hi=compositeHalftonePlates(l2,artPrevW*SCALE,artPrevH*SCALE,primariesL2,bm2,visL2,gModeL2,gRgbL2);
               compL2=areaAverageDownsample(hi,artPrevW,artPrevH);
             } else { compL2=compositeHalftonePlates(allLayersL2,artPrevW,artPrevH,primariesL2,cachedBgMask,visL2,gModeL2,gRgbL2); }
             setDitherComposite({ data: compL2, w: artPrevW, h: artPrevH });
@@ -759,7 +757,7 @@ export function CanvasView() {
               };
               let whitePlate2: Uint8Array | undefined;
               if (underbaseEnabled) {
-                const raw2 = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows });
+                const raw2 = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows }, localBgMask);
                 whitePlate2 = chokeWhitePlate(raw2, plates.width, plates.height, underbaseChoke);
               }
               // Dot View: 150 DPI floor gives ~2.3px cells — visible rosette, clean K holes

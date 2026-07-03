@@ -17,12 +17,12 @@ const STEPS: Step[] = [
   {
     key: 'tutorial-modes',
     title: 'Separation Mode',
-    desc: 'Choose how to split your image. Thresh separates by tone into spot color layers. Dither simulates colors with halftone patterns. Color clusters by hue. Vector traces to SVG.',
+    desc: 'Choose how to split your image. Thresh separates by tone into spot color layers. Dither simulates colors with halftone patterns. Color clusters by hue. CMYK runs a full ICC-based process separation. Vector traces to SVG.',
   },
   {
     key: 'tutorial-layers',
     title: 'Layers Panel',
-    desc: 'Each layer is one ink color. Select a layer to adjust its tonal range, rename it, change its color, or paint and erase areas manually.',
+    desc: 'Each layer is one ink color. Double-click any layer name to rename it — custom names carry through to every export format. Select a layer to adjust its tonal range, change its color, or paint and erase areas manually.',
   },
   {
     key: 'tutorial-canvas',
@@ -32,7 +32,7 @@ const STEPS: Step[] = [
   {
     key: 'tutorial-controls',
     title: 'Controls Panel',
-    desc: 'Fine-tune image settings like brightness and contrast, set your document size and DPI, and control background removal. Settings adapt to the active mode.',
+    desc: 'Fine-tune image adjustments (brightness, contrast, curves), set document size and DPI, and control background removal. In CMYK Pro mode, this panel also exposes ICC profile selection, dot gain, and halftone settings.',
   },
   {
     key: 'tutorial-presets',
@@ -47,7 +47,7 @@ const STEPS: Step[] = [
   {
     key: 'tutorial-export',
     title: 'Export',
-    desc: 'Download your separated layers as individual PNGs, a layered PSD, or a ZIP. Each layer is production-ready for your screen printer.',
+    desc: 'Download your separated layers as PNGs, a layered Photoshop PSD, a CorelDRAW EPS package (CDR), multi-page PDF, TIFF, or EPS ZIP. Custom layer names appear in every exported file.',
   },
 ];
 

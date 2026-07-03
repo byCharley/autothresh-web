@@ -546,10 +546,20 @@ const BRAND_PALETTES: { brand: string; colors: { hex: string; name: string }[] }
 
 function InksSection() {
   const [open, setOpen] = useState(false);
+  const [editingPaletteIdx, setEditingPaletteIdx] = useState<number | null>(null);
+  const [paletteDraft, setPaletteDraft] = useState('');
   const {
     paletteColors, paletteVisibility, setPaletteVisibility, setPaletteColor,
     paletteNumColors, setPaletteNumColors, setPaletteColors,
+    paletteNames, setPaletteNames,
   } = useStore();
+
+  const commitPaletteName = (ci: number) => {
+    const next = [...paletteNames];
+    next[ci] = paletteDraft.trim() || '';
+    setPaletteNames(next);
+    setEditingPaletteIdx(null);
+  };
 
   return (
     <>
@@ -662,9 +672,33 @@ function InksSection() {
                         style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
                     </div>
                     {/* Label */}
-                    <span style={{ flex: 1, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      Ink {ci + 1}
+                    {editingPaletteIdx === ci ? (
+                      <input
+                        autoFocus
+                        value={paletteDraft}
+                        style={{
+                          flex: 1, background: 'none', border: 'none',
+                          outline: '1px solid var(--accent)', color: 'var(--text)',
+                          fontSize: 11, fontFamily: 'var(--font-mono)',
+                          padding: '0 2px', borderRadius: 2,
+                        }}
+                        onChange={(e) => setPaletteDraft(e.target.value)}
+                        onBlur={() => commitPaletteName(ci)}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === 'Enter') commitPaletteName(ci);
+                          if (e.key === 'Escape') setEditingPaletteIdx(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                    <span
+                      onDoubleClick={(e) => { e.stopPropagation(); setEditingPaletteIdx(ci); setPaletteDraft(paletteNames[ci] || ''); }}
+                      title="Double-click to rename"
+                      style={{ flex: 1, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {paletteNames[ci] || `Ink ${ci + 1}`}
                     </span>
+                    )}
                     {/* Hex */}
                     <span style={{
                       fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
@@ -1057,7 +1091,7 @@ function CmykProLayerSection() {
     soloLayerId, setSoloLayerId,
   } = useStore();
 
-  const [iccOpen, setIccOpen] = useState(true);
+  const [iccOpen, setIccOpen] = useState(false);
   const [densityOpen, setDensityOpen] = useState(true);
 
   // Detect dark garment for simulation label (same threshold as CanvasView)
@@ -1086,48 +1120,6 @@ function CmykProLayerSection() {
 
   return (
     <>
-      {/* ── ICC Separation ─────────────────────────────── */}
-      <SectionHeader title="ICC Separation" open={iccOpen} onToggle={() => setIccOpen(!iccOpen)} />
-      {iccOpen && (
-        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {isProcessing && (
-            <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>
-              Separating via ICC profile…
-            </div>
-          )}
-          <div className="field">
-            <span className="field-label">Profile</span>
-            <select
-              className="at-select"
-              value={s.cmykProfile}
-              onChange={(e) => setProCmykSettings({ cmykProfile: e.target.value as typeof s.cmykProfile })}
-            >
-              {CMYK_PRO_PROFILES.map((p) => (
-                <option key={p.value} value={p.value}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <span className="field-label">Black Gen</span>
-            <select
-              className="at-select"
-              value={s.blackGeneration}
-              onChange={(e) => setProCmykSettings({ blackGeneration: e.target.value as typeof s.blackGeneration })}
-            >
-              {CMYK_PRO_BG.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-          <Slider label="Total Ink Limit" value={s.totalInkLimit} min={200} max={400} step={5}
-            onChange={(v) => setProCmykSettings({ totalInkLimit: v })} unit="%" />
-          <SwitchRow label="Preserve Pure Black" checked={s.preservePureBlack}
-            onChange={(v) => setProCmykSettings({ preservePureBlack: v })} />
-          <Slider label="Gray Balance" value={s.grayBalance} min={-50} max={50} step={1}
-            onChange={(v) => setProCmykSettings({ grayBalance: v })} />
-        </div>
-      )}
-
       {/* ── Channel cards ─────────────────────────────── */}
       <div style={{ padding: '8px 8px 0px' }}>
         <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 6, lineHeight: 1.5 }}>
@@ -1191,6 +1183,48 @@ function CmykProLayerSection() {
           </button>
         )}
       </div>
+
+      {/* ── ICC Separation ─────────────────────────────── */}
+      <SectionHeader title="ICC Separation" open={iccOpen} onToggle={() => setIccOpen(!iccOpen)} />
+      {iccOpen && (
+        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {isProcessing && (
+            <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>
+              Separating via ICC profile…
+            </div>
+          )}
+          <div className="field">
+            <span className="field-label">Profile</span>
+            <select
+              className="at-select"
+              value={s.cmykProfile}
+              onChange={(e) => setProCmykSettings({ cmykProfile: e.target.value as typeof s.cmykProfile })}
+            >
+              {CMYK_PRO_PROFILES.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <span className="field-label">Black Gen</span>
+            <select
+              className="at-select"
+              value={s.blackGeneration}
+              onChange={(e) => setProCmykSettings({ blackGeneration: e.target.value as typeof s.blackGeneration })}
+            >
+              {CMYK_PRO_BG.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <Slider label="Total Ink Limit" value={s.totalInkLimit} min={200} max={400} step={5}
+            onChange={(v) => setProCmykSettings({ totalInkLimit: v })} unit="%" />
+          <SwitchRow label="Preserve Pure Black" checked={s.preservePureBlack}
+            onChange={(v) => setProCmykSettings({ preservePureBlack: v })} />
+          <Slider label="Gray Balance" value={s.grayBalance} min={-50} max={50} step={1}
+            onChange={(v) => setProCmykSettings({ grayBalance: v })} />
+        </div>
+      )}
 
       {/* ── Density ───────────────────────────────────────── */}
       <SectionHeader
@@ -1448,6 +1482,7 @@ function ColorSepLayerSection({
   colors, visibility, onVisibilityChange,
   numColors, onNumColors, colorPriority, onColorPriority,
   lockedColors, onLockedColors, onColorChange,
+  names, onNameChange,
 }: {
   colors: RGB[];
   visibility: Record<string, boolean>;
@@ -1459,8 +1494,12 @@ function ColorSepLayerSection({
   lockedColors: RGB[] | null;
   onLockedColors: (v: RGB[] | null) => void;
   onColorChange: (ci: number, hex: string) => void;
+  names?: string[];
+  onNameChange?: (ci: number, name: string) => void;
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [editingCi, setEditingCi] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState('');
   return (
     <div style={{ borderBottom: '1px solid var(--border)' }}>
       {/* Controls */}
@@ -1550,14 +1589,38 @@ function ColorSepLayerSection({
                   height: 18, paddingLeft: 4, paddingRight: 0,
                   background: 'var(--surface-2)', borderTop: '1px solid var(--border)',
                 }}>
-                  <span style={{
-                    flex: 1, fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: hovered ? 400 : 600,
-                    color: hovered ? 'var(--text-muted)' : 'var(--text)',
-                    letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    transition: 'color 0.1s',
-                  }}>
-                    {hovered ? hex.slice(1).toUpperCase() : `C${ci + 1}`}
+                  {editingCi === ci ? (
+                    <input
+                      autoFocus
+                      value={editDraft}
+                      style={{
+                        flex: 1, background: 'none', border: 'none',
+                        outline: '1px solid var(--accent)', color: 'var(--text)',
+                        fontSize: 9, fontFamily: 'var(--font-mono)',
+                        padding: 0, borderRadius: 1, width: '100%',
+                      }}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onBlur={() => { onNameChange?.(ci, editDraft.trim()); setEditingCi(null); }}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') { onNameChange?.(ci, editDraft.trim()); setEditingCi(null); }
+                        if (e.key === 'Escape') setEditingCi(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                  <span
+                    onDoubleClick={(e) => { e.stopPropagation(); setEditingCi(ci); setEditDraft(names?.[ci] || ''); }}
+                    title="Double-click to rename"
+                    style={{
+                      flex: 1, fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: hovered ? 400 : 600,
+                      color: hovered ? 'var(--text-muted)' : 'var(--text)',
+                      letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      transition: 'color 0.1s', cursor: 'text',
+                    }}>
+                    {hovered ? hex.slice(1).toUpperCase() : (names?.[ci] || `C${ci + 1}`)}
                   </span>
+                  )}
                   <button
                     className={`vis-btn ${!visible ? 'hidden-layer' : ''}`}
                     style={{ width: 18, height: 18, flexShrink: 0 }}
@@ -1631,6 +1694,7 @@ export function LayerPanel() {
     colorSepColorPriority, setColorSepColorPriority,
     colorSepColors, colorSepVisibility, setColorSepVisibility,
     colorSepLockedColors, setColorSepLockedColors,
+    colorSepNames, setColorSepNames,
     underbaseEnabled, underbaseChoke, setUnderbaseEnabled, setUnderbaseChoke,
     underbaseIncludeShadows, setUnderbaseIncludeShadows,
     underbaseDensity, setUnderbaseDensity,
@@ -1946,6 +2010,12 @@ export function LayerPanel() {
               lockedColors={colorSepLockedColors}
               onLockedColors={setColorSepLockedColors}
               onColorChange={handleColorSepColorChange}
+              names={colorSepNames}
+              onNameChange={(ci, name) => {
+                const next = [...colorSepNames];
+                next[ci] = name;
+                setColorSepNames(next);
+              }}
             />
             <UnderbaseSection />
             <PantonePreviewSection />
@@ -2031,8 +2101,11 @@ export function LayerPanel() {
                   </button>
                 </div>
               ) : (
-                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
                   Solo a layer to verify knockout
+                  <span style={{ display: 'block', fontSize: 9, color: 'var(--text-muted)', marginTop: 1 }}>
+                    Double-click a name to rename a layer
+                  </span>
                 </div>
               )}
             </div>

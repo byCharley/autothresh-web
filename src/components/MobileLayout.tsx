@@ -19,13 +19,14 @@ interface Props {
   onExport: () => void;
   onMockup: () => void;
   onLogout: () => void;
+  onAnalytics?: () => void;
   session: Session | null;
   children?: React.ReactNode;
 }
 
 type Sheet = 'layers' | 'controls' | null;
 
-export function MobileLayout({ onExport, onMockup, onLogout, session, children }: Props) {
+export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, session, children }: Props) {
   const [activeSheet, setActiveSheet] = useState<Sheet>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewCenter, setPreviewCenter] = useState({ x: 0.5, y: 0.5 });
@@ -239,6 +240,24 @@ export function MobileLayout({ onExport, onMockup, onLogout, session, children }
                   {session?.email}
                 </div>
               </div>
+              {subStatus === 'creator' && onAnalytics && (
+                <div style={{ padding: '8px 14px 0', borderTop: '1px solid var(--border)' }}>
+                  <button
+                    onClick={() => { setMenuOpen(false); onAnalytics(); }}
+                    style={{
+                      width: '100%', background: 'none', border: '1px solid var(--border)',
+                      cursor: 'pointer', padding: '7px 10px', fontSize: 11,
+                      color: 'var(--accent)', fontFamily: 'var(--font-mono)',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                    Stats Dashboard
+                  </button>
+                </div>
+              )}
               <div style={{ padding: '10px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <button
                   onClick={() => { setMenuOpen(false); onLogout(); }}
