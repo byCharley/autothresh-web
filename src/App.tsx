@@ -142,6 +142,13 @@ function App() {
       sessionStorage.removeItem('at-pending-welcome');
     }
   }, [status]);
+
+  // Allow any component to open the contact modal via custom event.
+  useEffect(() => {
+    const handler = () => setShowContact(true);
+    window.addEventListener('at:open-contact', handler);
+    return () => window.removeEventListener('at:open-contact', handler);
+  }, []);
   const [leftOpen, setLeftOpen]   = useState(true);
   const [rightOpen, setRightOpen] = useState(() => window.innerWidth > 1100);
   const { mockupOpen, setMockupOpen, presetsOpen, setPresetsOpen } = useStore();

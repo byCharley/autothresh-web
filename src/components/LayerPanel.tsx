@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect } from 'react';
+import { useState, useRef, useLayoutEffect, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import type { GrainOverlay, GrainBlendMode } from '../store/useStore';
 import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, generateHarmonicPalettes } from '../engine/colorSeparation';
@@ -1932,6 +1932,130 @@ const MODE_INFO = [
   },
 ] as const;
 
+const MODE_OPTIONS = [
+  { value: 'threshold', label: 'Threshold' },
+  { value: 'palette',   label: 'Dither / Palette' },
+  { value: 'color-sep', label: 'Color Separation' },
+  { value: 'cmyk-pro',  label: 'CMYK Pro' },
+  { value: 'texture',   label: 'Texture', badge: 'NEW' },
+] as const;
+
+function ModeSwitcher({ value, onChange, disabled }: {
+  value: string;
+  onChange: (mode: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  const current = MODE_OPTIONS.find(m => m.value === value);
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flex: 1 }}>
+      {/* Trigger */}
+      <button
+        onClick={() => !disabled && setOpen(v => !v)}
+        style={{
+          width: '100%', height: 28,
+          background: open ? '#252525' : 'var(--surface-2)',
+          border: `1px solid ${open ? 'var(--accent)' : 'var(--border)'}`,
+          color: 'var(--accent)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11, fontWeight: 700,
+          letterSpacing: '0.07em', textTransform: 'uppercase',
+          cursor: disabled ? 'default' : 'pointer',
+          opacity: disabled ? 0.4 : 1,
+          display: 'flex', alignItems: 'center',
+          padding: '0 8px 0 10px', gap: 6,
+          textAlign: 'left',
+          transition: 'border-color 0.12s',
+        }}
+      >
+        <span style={{ flex: 1 }}>{current?.label ?? value}</span>
+        {'badge' in (current ?? {}) && (
+          <span style={{
+            fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 800,
+            color: '#000', background: 'var(--accent)',
+            padding: '1px 4px', borderRadius: 2, letterSpacing: '0.08em',
+          }}>NEW</span>
+        )}
+        <svg width="8" height="5" viewBox="0 0 8 5" fill="none" style={{
+          flexShrink: 0, transition: 'transform 0.15s',
+          transform: open ? 'rotate(180deg)' : 'none',
+          color: 'var(--accent)',
+        }}>
+          <path d="M0 0l4 5 4-5z" fill="currentColor"/>
+        </svg>
+      </button>
+
+      {/* Dropdown list */}
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
+          background: 'var(--surface-2)',
+          border: '1px solid var(--accent)',
+          borderTop: 'none',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        }}>
+          {MODE_OPTIONS.map((m) => {
+            const isActive = m.value === value;
+            const isHovered = hovered === m.value;
+            return (
+              <button
+                key={m.value}
+                onClick={() => { onChange(m.value); setOpen(false); }}
+                onMouseEnter={() => setHovered(m.value)}
+                onMouseLeave={() => setHovered(null)}
+                style={{
+                  width: '100%', padding: '7px 10px',
+                  background: isActive
+                    ? 'color-mix(in srgb, var(--accent) 12%, var(--surface-2))'
+                    : isHovered ? 'color-mix(in srgb, var(--accent) 6%, var(--surface-2))' : 'transparent',
+                  borderLeft: `2px solid ${isActive ? 'var(--accent)' : 'transparent'}`,
+                  borderBottom: '1px solid var(--border)',
+                  color: isActive ? 'var(--accent)' : 'var(--text)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10, fontWeight: isActive ? 700 : 500,
+                  letterSpacing: '0.04em',
+                  cursor: 'pointer', textAlign: 'left',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  transition: 'background 0.1s',
+                }}
+              >
+                <span style={{ flex: 1 }}>{m.label}</span>
+                {'badge' in m && (
+                  <span style={{
+                    fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 800,
+                    color: '#000', background: 'var(--accent)',
+                    padding: '1px 4px', borderRadius: 2, letterSpacing: '0.08em',
+                  }}>NEW</span>
+                )}
+                {isActive && (
+                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                    <path d="M1 3.5l2.5 2.5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function LayerPanel() {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -1970,6 +2094,8 @@ export function LayerPanel() {
   const [showPantonePanel, setShowPantonePanel] = useState(false);
   const [showCmykDisclaimer, setShowCmykDisclaimer] = useState(false);
   const [cmykDisclaimerNeverShow, setCmykDisclaimerNeverShow] = useState(false);
+  const [showTextureDisclaimer, setShowTextureDisclaimer] = useState(false);
+  const [textureDisclaimerNeverShow, setTextureDisclaimerNeverShow] = useState(false);
   const MODES = ['threshold', 'palette', 'color-sep', 'cmyk-pro', 'texture'] as const;
 
   function UnderbaseSection() {
@@ -2129,26 +2255,21 @@ export function LayerPanel() {
             <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>
               Mode
             </span>
-            <select
-              className="at-select"
+            <ModeSwitcher
               value={separationMode}
               disabled={passthroughMode}
-              onChange={(e) => {
-                const mode = e.target.value as typeof MODES[number];
-                setSeparationMode(mode);
+              onChange={(mode) => {
+                setSeparationMode(mode as typeof MODES[number]);
                 if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
                   setCmykDisclaimerNeverShow(false);
                   setTimeout(() => setShowCmykDisclaimer(true), 0);
                 }
+                if (mode === 'texture' && !localStorage.getItem('texture-disclaimer-dismissed')) {
+                  setTextureDisclaimerNeverShow(false);
+                  setTimeout(() => setShowTextureDisclaimer(true), 0);
+                }
               }}
-              style={{ flex: 1, fontSize: 11, fontWeight: 600, height: 28, opacity: passthroughMode ? 0.4 : 1 }}
-            >
-              <option value="threshold">Threshold</option>
-              <option value="palette">Dither / Palette</option>
-              <option value="color-sep">Color Separation</option>
-              <option value="cmyk-pro">CMYK Pro</option>
-              <option value="texture">Texture</option>
-            </select>
+            />
             <button
               onClick={() => setModeInfoOpen((v) => !v)}
               title="What does each mode do?"
@@ -2169,33 +2290,6 @@ export function LayerPanel() {
             </button>
           </div>
 
-          {separationMode === 'texture' && (
-            <div style={{
-              padding: '7px 10px',
-              background: 'color-mix(in srgb, var(--accent) 10%, var(--surface-2))',
-              borderTop: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))',
-              display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-            }}>
-              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', flex: 1, minWidth: 120 }}>
-                ✦ Experimental — share what you think!
-              </span>
-              <a
-                href="https://charleypangus.com/pages/support"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
-                  color: 'var(--accent)', textDecoration: 'none', letterSpacing: '0.06em',
-                  textTransform: 'uppercase', padding: '3px 7px',
-                  border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-                  borderRadius: 3, whiteSpace: 'nowrap',
-                }}
-              >
-                Send Feedback →
-              </a>
-            </div>
-          )}
-
           {modeInfoOpen && (
             <div style={{ padding: '0 8px 10px' }}>
               {MODE_INFO.map(({ mode, label, title, desc }) => (
@@ -2213,6 +2307,10 @@ export function LayerPanel() {
                     if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
                       setCmykDisclaimerNeverShow(false);
                       setTimeout(() => setShowCmykDisclaimer(true), 0);
+                    }
+                    if (mode === 'texture' && !localStorage.getItem('texture-disclaimer-dismissed')) {
+                      setTextureDisclaimerNeverShow(false);
+                      setTimeout(() => setShowTextureDisclaimer(true), 0);
                     }
                   }}
                 >
@@ -2617,6 +2715,73 @@ export function LayerPanel() {
       </div>
 
       {/* CMYK Pro disclaimer modal */}
+      {showTextureDisclaimer && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'var(--surface-1)', border: '1px solid var(--border)',
+            width: 360, padding: '28px 24px 20px',
+            display: 'flex', flexDirection: 'column', gap: 16,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', color: 'var(--text)', textTransform: 'uppercase' }}>
+                Texture Mode — Experimental
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6, margin: 0 }}>
+              Texture mode is a new experimental feature. Use it to build grunge, vintage, and hand-printed looks by layering textures directly on your artwork with advanced blend modes.
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6, margin: 0 }}>
+              We're actively refining it — your feedback shapes what we build next. Let us know what's working and what you'd love to see!
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <input
+                type="checkbox"
+                checked={textureDisclaimerNeverShow}
+                onChange={(e) => setTextureDisclaimerNeverShow(e.target.checked)}
+                style={{ accentColor: 'var(--accent)', width: 14, height: 14 }}
+              />
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                Don't show this again
+              </span>
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('at:open-contact'))}
+                style={{
+                  padding: '7px 14px', fontSize: 11, fontFamily: 'var(--font-mono)',
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-muted)', cursor: 'pointer', fontWeight: 600,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Send Feedback
+              </button>
+              <button
+                onClick={() => {
+                  if (textureDisclaimerNeverShow) localStorage.setItem('texture-disclaimer-dismissed', '1');
+                  setShowTextureDisclaimer(false);
+                }}
+                style={{
+                  padding: '7px 16px', fontSize: 11, fontFamily: 'var(--font-mono)',
+                  background: 'var(--accent)', border: 'none',
+                  color: '#000', cursor: 'pointer', fontWeight: 700,
+                }}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showCmykDisclaimer && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 9999,
