@@ -1909,7 +1909,7 @@ const MODE_INFO = [
   {
     mode: 'palette',
     label: 'Dither',
-    title: 'Dither (Palette)',
+    title: 'Dither',
     desc: 'Simulates a full range of colors using dithering patterns — fewer inks suggest more colors through optical mixing. Great for photo-realistic prints, gradients, and DTG.',
   },
   {
@@ -1934,7 +1934,7 @@ const MODE_INFO = [
 
 const MODE_OPTIONS = [
   { value: 'threshold', label: 'Threshold' },
-  { value: 'palette',   label: 'Dither / Palette' },
+  { value: 'palette',   label: 'Dither' },
   { value: 'color-sep', label: 'Color Separation' },
   { value: 'cmyk-pro',  label: 'CMYK Pro' },
 ] as const;
