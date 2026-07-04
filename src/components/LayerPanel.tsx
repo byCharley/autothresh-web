@@ -1901,6 +1901,12 @@ function ColorSepLayerSection({
 
 const MODE_INFO = [
   {
+    mode: 'threshold',
+    label: 'Thresh',
+    title: 'Threshold (Spot Color)',
+    desc: 'Separates your artwork into stacked halftone layers, one per ink color. Each layer is a discrete spot color you can fully customize. The standard choice for traditional screen printing.',
+  },
+  {
     mode: 'palette',
     label: 'Dither',
     title: 'Dither (Palette)',
@@ -1927,10 +1933,10 @@ const MODE_INFO = [
 ] as const;
 
 const MODE_OPTIONS = [
+  { value: 'threshold', label: 'Threshold' },
   { value: 'palette',   label: 'Dither / Palette' },
   { value: 'color-sep', label: 'Color Separation' },
   { value: 'cmyk-pro',  label: 'CMYK Pro' },
-  { value: 'texture',   label: 'Texture', badge: 'NEW' },
 ] as const;
 
 function ModeSwitcher({ value, onChange, disabled }: {
@@ -2181,7 +2187,7 @@ export function LayerPanel() {
   }
 
   useLayoutEffect(() => {
-    if (separationMode === 'vector') { setSeparationMode('palette'); return; }
+    if (separationMode === 'vector') { setSeparationMode('threshold'); return; }
     if (separationMode === 'cmyk') { setSeparationMode('cmyk-pro'); return; }
   }, [separationMode]);
 
