@@ -78,6 +78,7 @@ function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean
       case 'tiff': return { pkg: 'Single file',   layers: 'All colors composited',   bg: 'Transparent', marks: 'Not included' };
     }
   }
+  return { pkg: 'Single file', layers: 'Composite image', bg: 'Transparent', marks: 'Not included' };
 }
 
 const FORMATS_PASSTHROUGH = [{ value: 'png' as ExportFormat, label: 'PNG', ext: '.png' }];
