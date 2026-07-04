@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 
-export type ExportFormat = 'png' | 'psd' | 'pdf' | 'tiff' | 'svg' | 'eps' | 'cdr';
+export type ExportFormat = 'png' | 'jpg' | 'psd' | 'pdf' | 'tiff' | 'svg' | 'eps' | 'cdr';
 
 export interface ExportConfig {
   mode:             'screen' | 'dtg';
@@ -81,13 +81,22 @@ function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean
 }
 
 const FORMATS_PASSTHROUGH = [{ value: 'png' as ExportFormat, label: 'PNG', ext: '.png' }];
+const FORMATS_TEXTURE = [
+  { value: 'png' as ExportFormat, label: 'PNG', ext: '.png' },
+  { value: 'jpg' as ExportFormat, label: 'JPG', ext: '.jpg' },
+];
 
 export function ExportModal({ onClose, onExport, defaultFileName, separationMode }: Props) {
   const { passthroughMode } = useStore();
   const isDither  = !passthroughMode && separationMode === 'palette';
   const isVector  = !passthroughMode && separationMode === 'vector';
   const isCmykPro = separationMode === 'cmyk-pro';
-  const FORMATS  = passthroughMode ? FORMATS_PASSTHROUGH : isVector ? [{ value: 'svg' as ExportFormat, label: 'SVG', ext: '.svg' }] : isDither ? FORMATS_DITHER : FORMATS_ALL;
+  const isTexture = separationMode === 'texture';
+  const FORMATS  = passthroughMode ? FORMATS_PASSTHROUGH
+    : isVector   ? [{ value: 'svg' as ExportFormat, label: 'SVG', ext: '.svg' }]
+    : isTexture  ? FORMATS_TEXTURE
+    : isDither   ? FORMATS_DITHER
+    : FORMATS_ALL;
 
   const [mode,             setMode]             = useState<'screen' | 'dtg'>(isDither ? 'dtg' : 'screen');
   const [format,           setFormat]           = useState<ExportFormat>(passthroughMode ? 'png' : isVector ? 'svg' : 'png');
@@ -107,7 +116,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
     setExportError(null);
     await new Promise(r => setTimeout(r, 60));
     try {
-      await onExport({ mode: isDither ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo, usePantoneNames, underbase: includeUnderbase, underbaseChoke: undChoke });
+      await onExport({ mode: (isDither || isTexture) ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo, usePantoneNames, underbase: includeUnderbase, underbaseChoke: undChoke });
       onClose();
     } catch (err) {
       console.error('Export failed:', err);
@@ -221,7 +230,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)',
         }}>
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-            {passthroughMode ? 'Export — Passthrough' : isVector ? 'Export — Vector' : isDither ? 'Export — Dither' : isCmykPro ? 'Export — CMYK Pro' : 'Export'}
+            {passthroughMode ? 'Export — Passthrough' : isVector ? 'Export — Vector' : isDither ? 'Export — Dither' : isCmykPro ? 'Export — CMYK Pro' : isTexture ? 'Export — Texture' : 'Export'}
           </span>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -246,8 +255,20 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           </div>
         )}
 
-        {/* Mode selector — hidden for Dither, Vector, CMYK Pro, and Passthrough */}
-        {!isDither && !isVector && !isCmykPro && !passthroughMode && (
+        {/* Texture notice */}
+        {isTexture && (
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+            </svg>
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', lineHeight: 1.5 }}>
+              Texture mode — exports a flat composite image. PNG (transparent bg) or JPG (white bg).
+            </span>
+          </div>
+        )}
+
+        {/* Mode selector — hidden for Dither, Vector, CMYK Pro, Texture, and Passthrough */}
+        {!isDither && !isVector && !isCmykPro && !isTexture && !passthroughMode && (
           <div style={{ padding: '14px 16px 0', borderBottom: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
               Export Mode

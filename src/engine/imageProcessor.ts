@@ -1,6 +1,6 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SeparationMode = 'threshold' | 'cmyk' | 'cmyk-pro' | 'palette' | 'vector' | 'color-sep';
+export type SeparationMode = 'threshold' | 'cmyk' | 'cmyk-pro' | 'palette' | 'vector' | 'color-sep' | 'texture';
 
 export type PatternType =
   | 'none'
@@ -255,27 +255,35 @@ function samplePatternTexture(key: string, ow: number, oh: number, scale: number
 // ─── Noise Patterns ───────────────────────────────────────────────────────────
 
 function noiseValues(w: number, h: number, scale: number, seed: number): F32 {
-  // Block noise: each scale×scale region gets one seeded random value.
-  // 85% block + 15% per-pixel jitter gives organic edges without grid artifacts.
+  // 3-octave fBm: base scale + two higher-frequency octaves ensure fine
+  // micro-texture at every scale so the result never looks blurry.
   const vals = new Float32Array(w * h) as F32;
-  const s = Math.max(1, Math.round(scale));
+  const s = Math.max(0.5, scale);
   for (let y = 0; y < h; y++) {
-    const gy = Math.floor(y / s);
     for (let x = 0; x < w; x++) {
-      const block = pseudoRandom(Math.floor(x / s), gy, seed);
-      const pixel = pseudoRandom(x, y, seed ^ 0xDEAD);
-      vals[y * w + x] = block * 0.85 + pixel * 0.15;
+      const nx = x / s, ny = y / s;
+      let v = valueNoise(nx,       ny,       seed         ) * 0.55
+            + valueNoise(nx * 2.7, ny * 2.7, seed ^ 0xA5A5) * 0.30
+            + valueNoise(nx * 6.1, ny * 6.1, seed ^ 0x5A5A) * 0.15;
+      vals[y * w + x] = Math.max(0, Math.min(1, (v - 0.5) * 1.5 + 0.5));
     }
   }
   return vals;
 }
 
 function noiseCoarseValues(w: number, h: number, scale: number, seed: number): F32 {
+  // 3-octave fBm for coarse noise: large blobs with mid-scale and fine detail.
   const noise = new Float32Array(w * h) as F32;
-  const s = Math.max(1, scale);
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      noise[y * w + x] = pseudoRandom(Math.floor(x / s), Math.floor(y / s), seed);
+  const s = Math.max(0.5, scale);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const nx = x / s, ny = y / s;
+      let v = valueNoise(nx,       ny,       seed         ) * 0.55
+            + valueNoise(nx * 2.1, ny * 2.1, seed ^ 0xC0FFEE) * 0.30
+            + valueNoise(nx * 5.3, ny * 5.3, seed ^ 0xBEEF  ) * 0.15;
+      noise[y * w + x] = Math.max(0, Math.min(1, (v - 0.5) * 1.4 + 0.5));
+    }
+  }
   return noise;
 }
 

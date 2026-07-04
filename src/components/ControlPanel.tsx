@@ -457,7 +457,7 @@ function RegistrationSection() {
     documentBleed, setDocumentBleed,
     separationMode,
   } = useStore();
-  if (separationMode === 'vector') return null;
+  if (separationMode === 'vector' || separationMode === 'texture') return null;
   return (
     <Section title="Registration Marks" defaultOpen={false}>
       <SwitchRow
@@ -703,6 +703,62 @@ function PaletteSection() {
               transition: 'left 0.2s',
             }} />
           </button>
+        </div>
+      </Section>
+    </>
+  );
+}
+
+// ─── Grain Section (right panel: color blend + pattern + blur) ────────────────
+
+function GrainSection() {
+  const {
+    separationMode,
+    grainColorBlend, setGrainColorBlend,
+    grainColorCount, setGrainColorCount,
+    grainBlur, setGrainBlur,
+    grainPattern, setGrainPattern,
+    grainPatternScale, setGrainPatternScale,
+    grainPatternDensity, setGrainPatternDensity,
+    grainPatternAngle, setGrainPatternAngle,
+  } = useStore();
+
+  if (separationMode !== 'texture') return null;
+
+  return (
+    <>
+      <Section title="Color Blend">
+        <Slider label="B/W → Color" value={grainColorBlend} min={0} max={100} step={1}
+          onChange={setGrainColorBlend} unit="%" />
+        <Slider label="Color Count" value={grainColorCount} min={2} max={64} step={1}
+          onChange={setGrainColorCount} />
+        <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 4 }}>
+          0 = B/W · 100 = full color. Color count controls k-means zones.
+        </div>
+      </Section>
+
+      <Section title="Color Zone Pattern">
+        <PatternControls
+          pattern={grainPattern}
+          scale={grainPatternScale}
+          density={grainPatternDensity}
+          angle={grainPatternAngle}
+          onPattern={(v) => setGrainPattern(v)}
+          onScale={(v) => setGrainPatternScale(v)}
+          onDensity={(v) => setGrainPatternDensity(v)}
+          onAngle={(v) => setGrainPatternAngle(v)}
+          scaleMaxOverride={40}
+        />
+        <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 6 }}>
+          Roughens the edges between color zones with organic noise or halftone patterns. Scale sets grain size, Density sets how much bleeding occurs.
+        </div>
+      </Section>
+
+      <Section title="Pre-Grain Blur">
+        <Slider label="Blur" value={grainBlur} min={0} max={40} step={1}
+          onChange={setGrainBlur} unit="px" />
+        <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 4 }}>
+          Blurs before color analysis — softer, more painterly color zones.
         </div>
       </Section>
     </>
@@ -1305,6 +1361,8 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
           <PaletteSection />
         ) : separationMode === 'color-sep' ? (
           <ColorSepSection />
+        ) : separationMode === 'texture' ? (
+          <GrainSection />
         ) : (
           <GlobalPatternSection />
         )}

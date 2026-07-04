@@ -1,5 +1,21 @@
 import { create } from 'zustand';
 import type { LayerConfig, PatternConfig, ProcessedLayer, ImageAdjustments, SeparationMode, CmykParams, PatternType } from '../engine/imageProcessor';
+
+export type GrainBlendMode = 'multiply' | 'screen' | 'overlay' | 'soft-light' | 'hard-light' | 'color-burn' | 'color-dodge' | 'luminosity';
+
+export interface GrainOverlay {
+  id: string;
+  categoryId: string;
+  path: string;
+  label: string;
+  blendMode: GrainBlendMode;
+  opacity: number;
+  scale: number;          // 0.1–2.0 — controls texture tile size (< 1 = tiled, > 1 = zoomed in)
+  clipToArtwork: boolean; // when true, texture only shows over artwork pixels (not background)
+  visible?: boolean;      // default true — false hides without removing
+  invert?: boolean;       // invert texture colors before blending
+  levelsIn?: [number, number]; // input black/white points [0..127, 128..255] default [0,255]
+}
 import { DEFAULT_CMYK_ANGLES, DEFAULT_CMYK_PARAMS } from '../engine/imageProcessor';
 import type { RGB } from '../engine/colorSeparation';
 import { defaultPaletteColors } from '../engine/colorSeparation';
@@ -270,6 +286,7 @@ interface AppState {
 
   bgRemovalEnabled: boolean;
   bgTolerance: number;
+  bgEdgeSoftness: number;  // feather radius in px — 0 = hard edge
   bgMask: Uint8Array | null;
   bgSeedColors: string[];
   bgEyedropperActive: boolean;
@@ -354,6 +371,16 @@ interface AppState {
   colorSepVisibility:    Record<string, boolean>;
   colorSepNames:         string[];
 
+  // Grain mode
+  grainColorBlend:    number;  // 0 = B/W, 100 = full color
+  grainColorCount:    number;  // number of colors for k-means (2–64)
+  grainBlur:          number;  // pre-grain Gaussian blur radius (0–40)
+  grainPattern:       PatternType;
+  grainPatternScale:  number;
+  grainPatternDensity: number;
+  grainPatternAngle:  number;
+  grainOverlays:      GrainOverlay[];
+
   processedLayers: ProcessedLayer[];
   processedLayerDims: { w: number; h: number } | null;
   ditherComposite: { data: ImageData; w: number; h: number } | null;
@@ -384,6 +411,7 @@ interface AppState {
   updateGlobalPattern: (updates: Partial<PatternConfig>) => void;
   setBgRemovalEnabled: (v: boolean) => void;
   setBgTolerance: (v: number) => void;
+  setBgEdgeSoftness: (v: number) => void;
   setBgMask: (mask: Uint8Array | null) => void;
   setBgSeedColors: (colors: string[]) => void;
   setBgEyedropperActive: (v: boolean) => void;
@@ -474,6 +502,15 @@ interface AppState {
   setColorSepVisibility:    (id: string, v: boolean) => void;
   setColorSepNames:         (v: string[]) => void;
 
+  setGrainColorBlend:    (v: number) => void;
+  setGrainColorCount:    (v: number) => void;
+  setGrainBlur:          (v: number) => void;
+  setGrainPattern:       (v: PatternType) => void;
+  setGrainPatternScale:  (v: number) => void;
+  setGrainPatternDensity:(v: number) => void;
+  setGrainPatternAngle:  (v: number) => void;
+  setGrainOverlays:      (v: GrainOverlay[]) => void;
+
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
   setProcessedLayerDims: (dims: { w: number; h: number } | null) => void;
   setDitherComposite: (v: { data: ImageData; w: number; h: number } | null) => void;
@@ -506,6 +543,7 @@ export const useStore = create<AppState>((set, get) => ({
   globalPattern: DEFAULT_GLOBAL_PATTERN,
   bgRemovalEnabled: ((localStorage.getItem('at-mode') as string | null) === 'cmyk-pro') ? false : true,
   bgTolerance: 30,
+  bgEdgeSoftness: 0,
   bgMask: null,
   bgSeedColors: [] as string[],
   bgEyedropperActive: false,
@@ -582,6 +620,15 @@ export const useStore = create<AppState>((set, get) => ({
   colorSepVisibility:    {},
   colorSepNames:         [],
 
+  grainColorBlend:    50,
+  grainColorCount:    8,
+  grainBlur:          0,
+  grainPattern:       'none' as PatternType,
+  grainPatternScale:  1,
+  grainPatternDensity: 75,
+  grainPatternAngle:  45,
+  grainOverlays:      [],
+
   processedLayers: [],
   processedLayerDims: null,
   ditherComposite: null,
@@ -639,6 +686,7 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({ globalPattern: { ...s.globalPattern, ...updates } })),
   setBgRemovalEnabled: (bgRemovalEnabled) => set({ bgRemovalEnabled, ...(!bgRemovalEnabled ? { bgPaintMode: 'off' as const } : {}) }),
   setBgTolerance: (bgTolerance) => set({ bgTolerance }),
+  setBgEdgeSoftness: (bgEdgeSoftness) => set({ bgEdgeSoftness }),
   setBgSeedColors: (bgSeedColors) => set({ bgSeedColors }),
   setBgEyedropperActive: (bgEyedropperActive) => set({ bgEyedropperActive }),
   setBgPaintMask: (bgPaintMask, bgPaintMaskDims) => set({ bgPaintMask, bgPaintMaskDims }),
@@ -875,6 +923,15 @@ export const useStore = create<AppState>((set, get) => ({
   setColorSepLockedColors:   (colorSepLockedColors)   => set({ colorSepLockedColors }),
   setColorSepVisibility: (id, v) => set((s) => ({ colorSepVisibility: { ...s.colorSepVisibility, [id]: v } })),
   setColorSepNames: (colorSepNames) => set({ colorSepNames }),
+
+  setGrainColorBlend:    (grainColorBlend)    => set({ grainColorBlend }),
+  setGrainColorCount:    (grainColorCount)    => set({ grainColorCount }),
+  setGrainBlur:          (grainBlur)          => set({ grainBlur }),
+  setGrainPattern:       (grainPattern)       => set({ grainPattern }),
+  setGrainPatternScale:  (grainPatternScale)  => set({ grainPatternScale }),
+  setGrainPatternDensity:(grainPatternDensity)=> set({ grainPatternDensity }),
+  setGrainPatternAngle:  (grainPatternAngle)  => set({ grainPatternAngle }),
+  setGrainOverlays:      (grainOverlays)      => set({ grainOverlays }),
 
   setProcessedLayers: (processedLayers) => set({ processedLayers }),
   setProcessedLayerDims: (processedLayerDims) => set({ processedLayerDims }),

@@ -128,6 +128,20 @@ function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerCon
   );
 }
 
+function drawScaledOverlay(ctx: CanvasRenderingContext2D, img: HTMLImageElement, w: number, h: number, scale: number) {
+  const tw = Math.max(1, Math.round(w * scale));
+  const th = Math.max(1, Math.round(h * scale));
+  if (scale <= 1) {
+    for (let y = 0; y < h; y += th) {
+      for (let x = 0; x < w; x += tw) {
+        ctx.drawImage(img, x, y, tw, th);
+      }
+    }
+  } else {
+    ctx.drawImage(img, 0, 0, tw, th);
+  }
+}
+
 // Base preview resolution (zoom = 1). High-res cap: beyond this we use nearest-neighbor.
 const MAX_PREVIEW_DIM = 1200;
 const MAX_RENDER_DIM  = 3200;
@@ -177,6 +191,35 @@ export function CanvasView() {
     baseColors: import('../engine/colorSeparation').RGB[];
   } | null>(null);
 
+  // Level-0 grain cache: k-means cluster detection only (NOT pattern-dependent)
+  // Invalidated by: image, canvas size, numColors, bg settings
+  // Pattern changes hit this as a cache HIT, skipping the expensive k-means step.
+  const grainKmeansCacheRef = useRef<{
+    originalImage: ImageData;
+    key: string;
+    bgPaintMask: Uint8Array | null;
+    baseColors: import('../engine/colorSeparation').RGB[];
+  } | null>(null);
+
+  // Level-1 grain cache: pixel assignment (depends on pattern + blur + adjustments)
+  // Invalidated by: level-0 miss, blur change, pattern change, adjustment change
+  const grainLayersCacheRef = useRef<{
+    key: string;
+    bgPaintMask: Uint8Array | null;
+    layers: import('../engine/imageProcessor').ProcessedLayer[];
+  } | null>(null);
+
+  // Level-2 grain cache: rendered ImageData composite (without overlays)
+  // Invalidated by level-1 key + colorBlend
+  // Overlay changes use this directly — zero separation work needed
+  const grainBaseCompositeRef = useRef<{
+    key: string;
+    bgPaintMask: Uint8Array | null;
+    composite: ImageData;
+  } | null>(null);
+
+  const grainOverlayImagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
+
   const {
     originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     globalPattern,
@@ -202,6 +245,9 @@ export function CanvasView() {
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, setColorSepColors,
     colorSepLockedColors,
+    grainColorBlend, grainColorCount, grainBlur, grainOverlays,
+    grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
+    bgEdgeSoftness,
     splitView, setSplitView,
     proCmykSettings, setProCmykPlates,
     printSimActive, setPrintSimLoading, viewingDistance,
@@ -368,6 +414,25 @@ export function CanvasView() {
     };
     img.src = path;
   }, [fabricTexture]);
+
+  // Preload grain overlay images so they're available synchronously in the render effect.
+  const [grainOverlayVersion, setGrainOverlayVersion] = useState(0);
+  useEffect(() => {
+    if (separationMode !== 'texture' || grainOverlays.length === 0) return;
+    const paths = grainOverlays.map(o => o.path).filter(p => !grainOverlayImagesRef.current.has(p));
+    if (paths.length === 0) return;
+    let loaded = 0;
+    paths.forEach(path => {
+      const img = new Image();
+      img.onload = () => {
+        grainOverlayImagesRef.current.set(path, img);
+        loaded++;
+        if (loaded === paths.length) setGrainOverlayVersion(v => v + 1);
+      };
+      img.onerror = () => { loaded++; if (loaded === paths.length) setGrainOverlayVersion(v => v + 1); };
+      img.src = path;
+    });
+  }, [grainOverlays, separationMode]);
 
   // Keep zoomRef in sync so pinch handlers can read current zoom without stale closures.
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
@@ -1003,6 +1068,226 @@ export function CanvasView() {
 
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
+        } else if (separationMode === 'texture') {
+          // ── TEXTURE: 3-level cache for fast interactive editing ───────────────
+          //
+          // Level-0 (slowest): k-means color detection — keyed by image/numColors/bg only
+          //   Pattern changes are a cache HIT here — skips the expensive k-means step.
+          // Level-1 (moderate): pixel assignment — keyed by level-0 + pattern + blur + adjustments
+          // Level-2 (fast):     composite render — keyed by level-1 + colorBlend
+          // Overlay compositing: pure canvas ops, zero pixel math
+
+          // Level-0: k-means (no pattern, no blur, no adjustments — pure color clustering)
+          const grainKmeansKey = JSON.stringify([
+            artPrevW, artPrevH, grainColorCount,
+            bgRemovalEnabled, bgTolerance, bgSeedColors,
+          ]);
+          // bgPaintMask reference is included in each cache hit check — a new Uint8Array
+          // is created on every setBgPaintMask call, so reference inequality = mask changed.
+          const kmeansHit = grainKmeansCacheRef.current !== null &&
+            grainKmeansCacheRef.current.originalImage === originalImage &&
+            grainKmeansCacheRef.current.key === grainKmeansKey &&
+            grainKmeansCacheRef.current.bgPaintMask === bgPaintMask;
+
+          if (!kmeansHit) {
+            const baseColors = detectColorSepColors(artScaled, grainColorCount, 0.7, localBgMask, importanceMap);
+            grainKmeansCacheRef.current = { originalImage, key: grainKmeansKey, bgPaintMask, baseColors };
+            grainLayersCacheRef.current = null;
+          }
+
+          // Level-1: pixel assignment — uses locked colors so k-means never re-runs on pattern change
+          const grainLayersKey = grainKmeansKey + '|' + JSON.stringify([
+            grainBlur, grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
+            imageAdjustments,
+          ]);
+          const layersHit = grainLayersCacheRef.current !== null &&
+            grainLayersCacheRef.current.key === grainLayersKey &&
+            grainLayersCacheRef.current.bgPaintMask === bgPaintMask;
+
+          if (!layersHit) {
+            let blurredScaled = artScaled;
+            if (grainBlur > 0) {
+              const srcC = document.createElement('canvas');
+              srcC.width = artPrevW; srcC.height = artPrevH;
+              srcC.getContext('2d')!.putImageData(artScaled, 0, 0);
+              const blurC = document.createElement('canvas');
+              blurC.width = artPrevW; blurC.height = artPrevH;
+              const blurCtx = blurC.getContext('2d')!;
+              blurCtx.filter = `blur(${grainBlur}px)`;
+              blurCtx.drawImage(srcC, 0, 0);
+              blurCtx.filter = 'none';
+              blurredScaled = blurCtx.getImageData(0, 0, artPrevW, artPrevH);
+            }
+            const adjGrain = applyAdjToImage(blurredScaled, imageAdjustments);
+            const grainSettings = {
+              numColors: grainColorCount, colorPriority: 0.7,
+              pattern: grainPattern, patternScale: grainPatternScale,
+              patternDensity: grainPatternDensity, patternAngle: grainPatternAngle,
+            };
+            const { layers: newLayers } = colorSeparate(
+              adjGrain, grainSettings, localBgMask,
+              grainKmeansCacheRef.current!.baseColors, importanceMap,
+            );
+            grainLayersCacheRef.current = { key: grainLayersKey, bgPaintMask, layers: newLayers };
+            grainBaseCompositeRef.current = null;
+          }
+
+          // Level-2: composite (overlay settings excluded — applied via canvas ops below)
+          const grainCompKey = grainLayersKey + '|blend|' + grainColorBlend;
+          if (!grainBaseCompositeRef.current || grainBaseCompositeRef.current.key !== grainCompKey ||
+              grainBaseCompositeRef.current.bgPaintMask !== bgPaintMask) {
+            const t = grainColorBlend / 100;
+            const blendedColors = grainKmeansCacheRef.current!.baseColors.map(([r, g, b]): import('../engine/colorSeparation').RGB => {
+              const lum = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+              return [
+                Math.round(lum + (r - lum) * t),
+                Math.round(lum + (g - lum) * t),
+                Math.round(lum + (b - lum) * t),
+              ];
+            });
+            const composite = renderColorSepCompositeFromLayers(grainLayersCacheRef.current!.layers, blendedColors, {}, artPrevW, artPrevH);
+            if (localBgMask) {
+              for (let i = 0; i < localBgMask.length; i++) {
+                if (localBgMask[i] === 255) composite.data[i * 4 + 3] = 0;
+              }
+            }
+            grainBaseCompositeRef.current = { key: grainCompKey, bgPaintMask, composite };
+          }
+
+          // Use cached base composite — overlay changes skip all separation/recomposition
+          artComposite = new ImageData(
+            new Uint8ClampedArray(grainBaseCompositeRef.current.composite.data),
+            artPrevW, artPrevH,
+          );
+
+          // Compute soft artwork alpha for edge feathering (texture mode handles this
+          // before overlays so blend modes interact with the feathered edge, not after).
+          // softEdgeAlpha[i] = 0 (background) → 255 (interior artwork), feathered at edges.
+          let softEdgeAlpha: Uint8Array | null = null;
+          if (localBgMask && bgEdgeSoftness > 0) {
+            const fw = artPrevW, fh = artPrevH;
+            const mC = document.createElement('canvas');
+            mC.width = fw; mC.height = fh;
+            const mCtx = mC.getContext('2d')!;
+            const mImg = new ImageData(fw, fh);
+            for (let i = 0; i < localBgMask.length; i++) {
+              const v = localBgMask[i] === 255 ? 0 : 255;
+              mImg.data[i*4] = mImg.data[i*4+1] = mImg.data[i*4+2] = v;
+              mImg.data[i*4+3] = 255;
+            }
+            mCtx.putImageData(mImg, 0, 0);
+            const bC = document.createElement('canvas');
+            bC.width = fw; bC.height = fh;
+            const bCtx = bC.getContext('2d')!;
+            bCtx.filter = `blur(${bgEdgeSoftness}px)`;
+            bCtx.drawImage(mC, 0, 0);
+            bCtx.filter = 'none';
+            const bData = bCtx.getImageData(0, 0, fw, fh).data;
+            // Build binary noise-driven edge mask: interior=255, bg=0, edge zone=
+            // noise-thresholded so every pixel stays fully opaque or fully transparent.
+            // This creates a sharp, organic printed edge — the grain "bites into" the
+            // boundary instead of fading smoothly like a Gaussian blur would.
+            const paintValid = bgPaintMask && bgPaintMaskDims &&
+              bgPaintMaskDims.w === fw && bgPaintMaskDims.h === fh;
+            softEdgeAlpha = new Uint8Array(localBgMask.length);
+            for (let i = 0; i < softEdgeAlpha.length; i++) {
+              if (localBgMask[i] === 255) {
+                softEdgeAlpha[i] = 0; // hard background — never ink
+              } else if (paintValid && bgPaintMask![i] === 1) {
+                softEdgeAlpha[i] = 255; // user explicitly restored — always keep, bypass edge erosion
+              } else {
+                const blurred = bData[i * 4];
+                if (blurred >= 255) {
+                  softEdgeAlpha[i] = 255; // deep interior — always ink
+                } else if (blurred <= 0) {
+                  softEdgeAlpha[i] = 0;
+                } else {
+                  // Edge zone: hash-based per-pixel noise decides keep vs. drop.
+                  // More interior pixels (high blurred value) are more likely kept.
+                  const x = i % fw, y = Math.floor(i / fw);
+                  let h = (Math.imul(x, 1664525) + Math.imul(y, 1013904223)) | 0;
+                  h ^= (h >>> 16); h = Math.imul(h, 0x45D9F3B); h ^= (h >>> 16);
+                  const noise = (h >>> 1) / 0x7FFFFFFF;
+                  softEdgeAlpha[i] = (blurred / 255) > noise ? 255 : 0;
+                }
+              }
+            }
+            // Apply binary mask to base composite before overlays — no semi-transparent
+            // pixels; every edge pixel is sharp, with organic grain determining the boundary.
+            for (let i = 0; i < softEdgeAlpha.length; i++) {
+              if (softEdgeAlpha[i] === 0) artComposite.data[i * 4 + 3] = 0;
+            }
+          }
+
+          // Composite surface layers (overlays) — pure canvas ops, GPU-accelerated
+          if (grainOverlays.length > 0) {
+            const overlayCanvas = document.createElement('canvas');
+            overlayCanvas.width = artPrevW; overlayCanvas.height = artPrevH;
+            const oCtx = overlayCanvas.getContext('2d')!;
+            oCtx.putImageData(artComposite, 0, 0);
+
+            for (const ov of grainOverlays) {
+              if (ov.visible === false) continue;
+              const img = grainOverlayImagesRef.current.get(ov.path);
+              if (!img) continue;
+
+              const hasLevels = ov.levelsIn && (ov.levelsIn[0] !== 0 || ov.levelsIn[1] !== 255);
+              const needsTemp = (ov.clipToArtwork && (localBgMask || softEdgeAlpha)) || hasLevels || ov.invert;
+
+              if (needsTemp) {
+                const tmpC = document.createElement('canvas');
+                tmpC.width = artPrevW; tmpC.height = artPrevH;
+                const tCtx = tmpC.getContext('2d')!;
+                drawScaledOverlay(tCtx, img, artPrevW, artPrevH, ov.scale ?? 1);
+                const td = tCtx.getImageData(0, 0, artPrevW, artPrevH);
+                const [inBlack, inWhite] = ov.levelsIn ?? [0, 255];
+                const range = Math.max(1, inWhite - inBlack);
+                for (let pi = 0; pi < td.data.length; pi += 4) {
+                  if (ov.invert) {
+                    td.data[pi]     = 255 - td.data[pi];
+                    td.data[pi + 1] = 255 - td.data[pi + 1];
+                    td.data[pi + 2] = 255 - td.data[pi + 2];
+                  }
+                  if (hasLevels) {
+                    for (let c = 0; c < 3; c++) {
+                      td.data[pi + c] = Math.round(Math.max(0, Math.min(1, (td.data[pi + c] - inBlack) / range)) * 255);
+                    }
+                  }
+                  if (ov.clipToArtwork) {
+                    if (softEdgeAlpha) {
+                      // Binary clip — keeps overlay sharp at the noise-driven edge boundary
+                      if (softEdgeAlpha[pi >> 2] === 0) td.data[pi + 3] = 0;
+                    } else if (localBgMask && localBgMask[pi >> 2] === 255) {
+                      td.data[pi + 3] = 0;
+                    }
+                  }
+                }
+                tCtx.putImageData(td, 0, 0);
+                oCtx.globalAlpha = ov.opacity / 100;
+                oCtx.globalCompositeOperation = ov.blendMode as GlobalCompositeOperation;
+                oCtx.drawImage(tmpC, 0, 0);
+              } else {
+                oCtx.globalAlpha = ov.opacity / 100;
+                oCtx.globalCompositeOperation = ov.blendMode as GlobalCompositeOperation;
+                drawScaledOverlay(oCtx, img, artPrevW, artPrevH, ov.scale ?? 1);
+              }
+              oCtx.globalAlpha = 1;
+              oCtx.globalCompositeOperation = 'source-over';
+            }
+            artComposite = oCtx.getImageData(0, 0, artPrevW, artPrevH);
+          }
+
+          // Distressed texture overlay (same as other modes)
+          if (textureEnabled) {
+            const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+            for (let i = 0; i < texMask.length; i++) {
+              if (texMask[i] === 0) artComposite.data[i * 4 + 3] = 0;
+            }
+          }
+
+          setProcessedLayers([]);
+          setProcessedLayerDims({ w: artPrevW, h: artPrevH });
+
         } else if (separationMode === 'vector') {
           setDitherComposite(null);
 
@@ -1104,6 +1389,32 @@ export function CanvasView() {
             ? displayLayers.map(pl => ({ ...pl, color: nearestPantoneRgb(...pl.color) }))
             : displayLayers;
           artComposite = renderComposite(renderDisplayLayers, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
+        }
+
+        // BG edge feathering — soft alpha at artwork boundary (all modes except texture,
+        // which handles it earlier so overlay blend modes see the feathered edge).
+        if (artComposite && localBgMask && bgEdgeSoftness > 0 && separationMode !== 'texture') {
+          const fw = artPrevW, fh = artPrevH;
+          const maskC = document.createElement('canvas');
+          maskC.width = fw; maskC.height = fh;
+          const maskCtx = maskC.getContext('2d')!;
+          const maskImg = new ImageData(fw, fh);
+          for (let i = 0; i < localBgMask.length; i++) {
+            const v = localBgMask[i] === 255 ? 0 : 255;
+            maskImg.data[i*4] = maskImg.data[i*4+1] = maskImg.data[i*4+2] = v;
+            maskImg.data[i*4+3] = 255;
+          }
+          maskCtx.putImageData(maskImg, 0, 0);
+          const blurC = document.createElement('canvas');
+          blurC.width = fw; blurC.height = fh;
+          const blurCtx = blurC.getContext('2d')!;
+          blurCtx.filter = `blur(${bgEdgeSoftness}px)`;
+          blurCtx.drawImage(maskC, 0, 0);
+          blurCtx.filter = 'none';
+          const softData = blurCtx.getImageData(0, 0, fw, fh).data;
+          for (let i = 0; i < localBgMask.length; i++) {
+            artComposite.data[i*4+3] = Math.round(artComposite.data[i*4+3] * softData[i*4] / 255);
+          }
         }
 
         // Split view: left = original image, right = processed result (all modes)
@@ -1237,6 +1548,9 @@ export function CanvasView() {
     vectorNumColors, vectorDetail, vectorSmooth, vectorInkColor, vectorPathMode, vectorMinSpeckle,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, colorSepLockedColors,
+    grainColorBlend, grainColorCount, grainBlur, grainOverlays, grainOverlayVersion,
+    grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
+    bgEdgeSoftness,
     underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     proCmykSettings,
     fabricTexture, fabricBlendStrength, fabricTextureDepth, fabricVersion,

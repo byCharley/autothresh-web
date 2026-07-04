@@ -149,6 +149,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
   const modeLabel = separationMode === 'threshold' ? 'Thresh'
     : separationMode === 'palette' ? 'Dither'
     : separationMode === 'color-sep' ? 'Color'
+    : separationMode === 'texture' ? 'Texture'
     : 'Vector';
 
   return (

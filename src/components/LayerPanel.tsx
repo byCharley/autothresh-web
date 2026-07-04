@@ -1,7 +1,9 @@
 import { useState, useRef, useLayoutEffect } from 'react';
 import { useStore } from '../store/useStore';
+import type { GrainOverlay, GrainBlendMode } from '../store/useStore';
 import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, generateHarmonicPalettes } from '../engine/colorSeparation';
 import { nearestPantone, isShadowColor } from '../engine/pantoneMatch';
+import { OVERLAY_CATEGORIES } from '../engine/overlayManifest';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -733,7 +735,7 @@ function BackgroundSection() {
   const [open, setOpen] = useState(false);
   const [brand, setBrand] = useState('LA Apparel');
   const {
-    bgRemovalEnabled, bgTolerance, setBgRemovalEnabled, setBgTolerance,
+    bgRemovalEnabled, bgTolerance, bgEdgeSoftness, setBgRemovalEnabled, setBgTolerance, setBgEdgeSoftness,
     bgSeedColors, setBgSeedColors, bgEyedropperActive, setBgEyedropperActive,
     bgPaintMask, bgPaintMode, setBgPaintMask, setBgPaintMode,
     canvasColor, setCanvasColor, showFabricBg, setShowFabricBg,
@@ -757,6 +759,8 @@ function BackgroundSection() {
             <>
               <Slider label="Tolerance" value={bgTolerance} min={1} max={100}
                 onChange={setBgTolerance} unit="%" />
+              <Slider label="Edge Softness" value={bgEdgeSoftness} min={0} max={20}
+                onChange={setBgEdgeSoftness} unit="px" />
 
               {/* Eyedropper color picker */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
@@ -961,6 +965,261 @@ function BackgroundSection() {
         </div>
       )}
     </>
+  );
+}
+
+// ─── Grain Overlay Section ────────────────────────────────────────────────────
+
+const GRAIN_BLEND_MODES: { label: string; value: GrainBlendMode }[] = [
+  { label: 'Multiply',    value: 'multiply' },
+  { label: 'Screen',      value: 'screen' },
+  { label: 'Overlay',     value: 'overlay' },
+  { label: 'Soft Light',  value: 'soft-light' },
+  { label: 'Hard Light',  value: 'hard-light' },
+  { label: 'Color Burn',  value: 'color-burn' },
+  { label: 'Color Dodge', value: 'color-dodge' },
+  { label: 'Luminosity',  value: 'luminosity' },
+];
+
+const PAGE_SIZE = 4; // thumbnails per page
+
+function GrainOverlaysSection() {
+  const { grainOverlays, setGrainOverlays } = useStore();
+  const [activeCategory, setActiveCategory] = useState(OVERLAY_CATEGORIES[0].id);
+  const [open, setOpen] = useState(true);
+  const [page, setPage] = useState(0);
+
+  const allItems = OVERLAY_CATEGORIES.find(c => c.id === activeCategory)?.items ?? [];
+  const totalPages = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
+  const pageItems = allItems.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // Reset page when category changes
+  const handleCategoryChange = (id: string) => { setActiveCategory(id); setPage(0); };
+
+  const addOverlay = (path: string, label: string) => {
+    const id = `ov-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setGrainOverlays([...grainOverlays, {
+      id, categoryId: activeCategory, path, label,
+      blendMode: 'overlay', opacity: 70, scale: 1, clipToArtwork: false,
+      visible: true, levelsIn: [0, 255],
+    }]);
+  };
+
+  const removeOverlay = (id: string) => setGrainOverlays(grainOverlays.filter(ov => ov.id !== id));
+
+  const updateOverlay = (id: string, patch: Partial<GrainOverlay>) =>
+    setGrainOverlays(grainOverlays.map(ov => ov.id === id ? { ...ov, ...patch } : ov));
+
+  const moveOverlay = (id: string, dir: -1 | 1) => {
+    const idx = grainOverlays.findIndex(ov => ov.id === id);
+    if (idx < 0) return;
+    const next = idx + dir;
+    if (next < 0 || next >= grainOverlays.length) return;
+    const arr = [...grainOverlays];
+    [arr[idx], arr[next]] = [arr[next], arr[idx]];
+    setGrainOverlays(arr);
+  };
+
+  return (
+    <div style={{ borderBottom: '1px solid var(--border)' }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 10px 8px', cursor: 'pointer', userSelect: 'none' }}
+        onClick={() => setOpen(v => !v)}
+      >
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+          Surface Layers
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {grainOverlays.length > 0 && (
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 15%, transparent)', padding: '0 5px', borderRadius: 2 }}>
+              {grainOverlays.length}
+            </span>
+          )}
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+
+      {open && (
+        <div style={{ padding: '0 8px 10px' }}>
+          {/* Active surface layer stack */}
+          {grainOverlays.map((ov, idx) => {
+            const isVisible = ov.visible !== false;
+            const [inBlack, inWhite] = ov.levelsIn ?? [0, 255];
+            return (
+            <div key={ov.id} style={{
+              background: 'var(--surface-2)', border: '1px solid var(--border)',
+              borderRadius: 4, marginBottom: 6, padding: '6px 8px',
+              opacity: isVisible ? 1 : 0.45,
+            }}>
+              {/* Header row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 5 }}>
+                {/* Visibility toggle */}
+                <button
+                  onClick={() => updateOverlay(ov.id, { visible: !isVisible })}
+                  title={isVisible ? 'Hide layer' : 'Show layer'}
+                  style={{ width: 18, height: 18, flexShrink: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: isVisible ? 'var(--accent)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <EyeIcon visible={isVisible} />
+                </button>
+                {/* Invert toggle */}
+                <button
+                  onClick={() => updateOverlay(ov.id, { invert: !ov.invert })}
+                  title={ov.invert ? 'Invert: on — click to turn off' : 'Invert texture colors'}
+                  style={{ width: 18, height: 18, flexShrink: 0, border: `1px solid ${ov.invert ? 'var(--accent)' : 'transparent'}`, background: ov.invert ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'transparent', borderRadius: 2, cursor: 'pointer', color: ov.invert ? 'var(--accent)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                    <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M6 1 A5 5 0 0 1 6 11 Z" fill="currentColor"/>
+                  </svg>
+                </button>
+                {/* Up / Down reorder */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
+                  <button onClick={() => moveOverlay(ov.id, -1)} disabled={idx === 0}
+                    style={{ width: 14, height: 10, border: 'none', background: 'transparent', cursor: idx === 0 ? 'default' : 'pointer', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, lineHeight: 1, padding: 0 }}
+                    title="Move up">▲</button>
+                  <button onClick={() => moveOverlay(ov.id, 1)} disabled={idx === grainOverlays.length - 1}
+                    style={{ width: 14, height: 10, border: 'none', background: 'transparent', cursor: idx === grainOverlays.length - 1 ? 'default' : 'pointer', color: idx === grainOverlays.length - 1 ? 'var(--text-muted)' : 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, lineHeight: 1, padding: 0 }}
+                    title="Move down">▼</button>
+                </div>
+                {/* Thumbnail */}
+                <div style={{ width: 28, height: 20, borderRadius: 2, border: '1px solid var(--border-2)', overflow: 'hidden', flexShrink: 0 }}>
+                  <img src={ov.path} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                </div>
+                <span style={{ flex: 1, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>
+                  {ov.label}
+                </span>
+                <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>#{idx + 1}</span>
+                <button onClick={() => removeOverlay(ov.id)}
+                  style={{ width: 18, height: 18, flexShrink: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, lineHeight: 1 }}
+                  title="Remove">×</button>
+              </div>
+
+              {/* Blend mode */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 44 }}>Blend</span>
+                <select className="at-select" value={ov.blendMode}
+                  onChange={e => updateOverlay(ov.id, { blendMode: e.target.value as GrainBlendMode })}
+                  style={{ fontSize: 9, height: 22, flex: 1 }}>
+                  {GRAIN_BLEND_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
+
+              {/* Opacity */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 44 }}>Opacity</span>
+                <input type="range" min={0} max={100} step={1} value={ov.opacity}
+                  onChange={e => updateOverlay(ov.id, { opacity: Number(e.target.value) })}
+                  style={{ flex: 1, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 28, textAlign: 'right' }}>{ov.opacity}%</span>
+              </div>
+
+              {/* Scale */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 44 }}>Scale</span>
+                <input type="range" min={0.1} max={2} step={0.05} value={ov.scale ?? 1}
+                  onChange={e => updateOverlay(ov.id, { scale: Number(e.target.value) })}
+                  style={{ flex: 1, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 28, textAlign: 'right' }}>{Math.round((ov.scale ?? 1) * 100)}%</span>
+              </div>
+
+              {/* Levels: Shadows / Lights */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 44 }}>Shadows</span>
+                <input type="range" min={0} max={127} step={1} value={inBlack}
+                  onChange={e => updateOverlay(ov.id, { levelsIn: [Number(e.target.value), inWhite] })}
+                  style={{ flex: 1, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 28, textAlign: 'right' }}>{inBlack}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 44 }}>Lights</span>
+                <input type="range" min={128} max={255} step={1} value={inWhite}
+                  onChange={e => updateOverlay(ov.id, { levelsIn: [inBlack, Number(e.target.value)] })}
+                  style={{ flex: 1, accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 28, textAlign: 'right' }}>{inWhite}</span>
+              </div>
+
+              {/* Clip to artwork toggle */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={ov.clipToArtwork ?? false}
+                  onChange={e => updateOverlay(ov.id, { clipToArtwork: e.target.checked })}
+                  style={{ accentColor: 'var(--accent)', width: 12, height: 12, cursor: 'pointer', flexShrink: 0 }} />
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: ov.clipToArtwork ? 'var(--accent)' : 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                  Clip to artwork
+                </span>
+                <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {ov.clipToArtwork ? '(hides on bg)' : '(full canvas)'}
+                </span>
+              </label>
+            </div>
+            );
+          })}
+
+          {grainOverlays.length === 0 && (
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginBottom: 8 }}>
+              Select a surface below to add it as a layer.
+            </div>
+          )}
+
+          {/* Category dropdown */}
+          <div style={{ marginBottom: 6, marginTop: grainOverlays.length > 0 ? 4 : 0 }}>
+            <select
+              className="at-select"
+              value={activeCategory}
+              onChange={e => handleCategoryChange(e.target.value)}
+              style={{ width: '100%', fontSize: 10, height: 26 }}
+            >
+              {OVERLAY_CATEGORIES.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 2×2 thumbnail grid (4 per page) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4 }}>
+            {pageItems.map(item => (
+              <div key={item.path} onClick={() => addOverlay(item.path, item.label)} title={item.label}
+                style={{
+                  aspectRatio: '1', borderRadius: 3, overflow: 'hidden', cursor: 'pointer',
+                  border: '1px solid var(--border)', position: 'relative',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.outline = '2px solid var(--accent)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.outline = 'none'; }}>
+                <img src={item.path} alt={item.label}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  loading="lazy" />
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  background: 'linear-gradient(transparent, rgba(0,0,0,0.82))',
+                  padding: '10px 3px 3px',
+                  fontSize: 7, fontFamily: 'var(--font-mono)', color: '#fff',
+                  textAlign: 'center', lineHeight: 1.3, letterSpacing: '0.02em',
+                }}>
+                  {item.label}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 6 }}>
+              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                style={{ width: 22, height: 22, border: '1px solid var(--border-2)', background: 'transparent', cursor: page === 0 ? 'default' : 'pointer', color: page === 0 ? 'var(--text-muted)' : 'var(--text-dim)', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{page + 1} / {totalPages}</span>
+              <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page === totalPages - 1}
+                style={{ width: 22, height: 22, border: '1px solid var(--border-2)', background: 'transparent', cursor: page === totalPages - 1 ? 'default' : 'pointer', color: page === totalPages - 1 ? 'var(--text-muted)' : 'var(--text-dim)', borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1665,6 +1924,12 @@ const MODE_INFO = [
     title: 'CMYK Process (ICC Pro)',
     desc: 'Professional ICC-based RGB→CMYK separation using LittleCMS. Supports industry-standard profiles (SWOP, FOGRA39), GCR/UCR black generation, TAC ink limiting, and AM halftone screening. For process color screen printing.',
   },
+  {
+    mode: 'texture',
+    label: 'Texture',
+    title: 'Texture (Surface Layers)',
+    desc: 'Creates a full-color or B/W vintage print composite with texture overlays. Layer on grunge, film, chalkboard, and halftone surfaces with advanced blend modes. Ideal for distressed, retro, and hand-printed aesthetic looks.',
+  },
 ] as const;
 
 export function LayerPanel() {
@@ -1702,12 +1967,10 @@ export function LayerPanel() {
     processedLayers,
   } = useStore();
 
-  const modeBtnRefs = useRef<(HTMLButtonElement | null)[]>([null, null, null, null]);
-  const [sliderRect, setSliderRect] = useState<{ left: number; width: number } | null>(null);
   const [showPantonePanel, setShowPantonePanel] = useState(false);
   const [showCmykDisclaimer, setShowCmykDisclaimer] = useState(false);
   const [cmykDisclaimerNeverShow, setCmykDisclaimerNeverShow] = useState(false);
-  const MODES = ['threshold', 'palette', 'color-sep', 'cmyk-pro'] as const;
+  const MODES = ['threshold', 'palette', 'color-sep', 'cmyk-pro', 'texture'] as const;
 
   function UnderbaseSection() {
     return (
@@ -1801,9 +2064,6 @@ export function LayerPanel() {
   useLayoutEffect(() => {
     if (separationMode === 'vector') { setSeparationMode('threshold'); return; }
     if (separationMode === 'cmyk') { setSeparationMode('cmyk-pro'); return; }
-    const idx = MODES.indexOf(separationMode as typeof MODES[number]);
-    const btn = modeBtnRefs.current[idx];
-    if (btn) setSliderRect({ left: btn.offsetLeft, width: btn.offsetWidth });
   }, [separationMode]);
 
   const handleColorSepColorChange = (ci: number, hex: string) => {
@@ -1865,48 +2125,30 @@ export function LayerPanel() {
       <div className="left-scroll">
         {/* Mode Switcher */}
         <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }} data-tutorial="tutorial-modes">
-          <div style={{ display: 'flex', padding: '6px 8px', gap: 4, position: 'relative', background: 'var(--surface-2)' }}>
-            {/* Sliding active pill */}
-            {sliderRect && (
-              <div style={{
-                position: 'absolute',
-                top: 6,
-                left: sliderRect.left,
-                width: sliderRect.width,
-                height: 28,
-                background: 'var(--accent)',
-                transition: 'left 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), width 0.22s cubic-bezier(0.22, 0.61, 0.36, 1)',
-                pointerEvents: 'none',
-                zIndex: 0,
-              }} />
-            )}
-            {(['threshold', 'palette', 'color-sep', 'cmyk-pro'] as const).map((mode, i) => (
-              <button
-                key={mode}
-                ref={(el) => { modeBtnRefs.current[i] = el; }}
-                disabled={passthroughMode}
-                onClick={() => {
-                  if (passthroughMode) return;
-                  setSeparationMode(mode);
-                  if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
-                    setCmykDisclaimerNeverShow(false);
-                    setTimeout(() => setShowCmykDisclaimer(true), 0);
-                  }
-                }}
-                style={{
-                  flex: 1, height: 28, fontSize: 9, fontFamily: 'var(--font-mono)',
-                  fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
-                  cursor: passthroughMode ? 'not-allowed' : 'pointer', border: 'none',
-                  background: 'transparent',
-                  color: passthroughMode ? 'var(--text-dim)' : separationMode === mode ? '#000' : 'var(--text-muted)',
-                  opacity: passthroughMode ? 0.35 : 1,
-                  transition: 'color 0.22s cubic-bezier(0.22, 0.61, 0.36, 1)',
-                  position: 'relative', zIndex: 1,
-                }}
-              >
-                {mode === 'threshold' ? 'Thresh' : mode === 'palette' ? 'Dither' : mode === 'color-sep' ? 'Color' : 'CMYK'}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', gap: 6, background: 'var(--surface-2)' }}>
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>
+              Mode
+            </span>
+            <select
+              className="at-select"
+              value={separationMode}
+              disabled={passthroughMode}
+              onChange={(e) => {
+                const mode = e.target.value as typeof MODES[number];
+                setSeparationMode(mode);
+                if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
+                  setCmykDisclaimerNeverShow(false);
+                  setTimeout(() => setShowCmykDisclaimer(true), 0);
+                }
+              }}
+              style={{ flex: 1, fontSize: 11, fontWeight: 600, height: 28, opacity: passthroughMode ? 0.4 : 1 }}
+            >
+              <option value="threshold">Threshold</option>
+              <option value="palette">Dither / Palette</option>
+              <option value="color-sep">Color Separation</option>
+              <option value="cmyk-pro">CMYK Pro</option>
+              <option value="texture">Texture</option>
+            </select>
             <button
               onClick={() => setModeInfoOpen((v) => !v)}
               title="What does each mode do?"
@@ -1927,6 +2169,33 @@ export function LayerPanel() {
             </button>
           </div>
 
+          {separationMode === 'texture' && (
+            <div style={{
+              padding: '7px 10px',
+              background: 'color-mix(in srgb, var(--accent) 10%, var(--surface-2))',
+              borderTop: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))',
+              display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+            }}>
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', flex: 1, minWidth: 120 }}>
+                ✦ Experimental — share what you think!
+              </span>
+              <a
+                href="https://charleypangus.com/pages/support"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                  color: 'var(--accent)', textDecoration: 'none', letterSpacing: '0.06em',
+                  textTransform: 'uppercase', padding: '3px 7px',
+                  border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+                  borderRadius: 3, whiteSpace: 'nowrap',
+                }}
+              >
+                Send Feedback →
+              </a>
+            </div>
+          )}
+
           {modeInfoOpen && (
             <div style={{ padding: '0 8px 10px' }}>
               {MODE_INFO.map(({ mode, label, title, desc }) => (
@@ -1939,7 +2208,7 @@ export function LayerPanel() {
                     cursor: 'pointer',
                   }}
                   onClick={() => {
-                    setSeparationMode(mode as 'threshold' | 'palette' | 'color-sep' | 'cmyk-pro');
+                    setSeparationMode(mode as 'threshold' | 'palette' | 'color-sep' | 'cmyk-pro' | 'texture');
                     setModeInfoOpen(false);
                     if (mode === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
                       setCmykDisclaimerNeverShow(false);
@@ -2019,6 +2288,12 @@ export function LayerPanel() {
             />
             <UnderbaseSection />
             <PantonePreviewSection />
+            <TextureSection />
+            <BackgroundSection />
+          </>
+        ) : separationMode === 'texture' ? (
+          <>
+            <GrainOverlaysSection />
             <TextureSection />
             <BackgroundSection />
           </>

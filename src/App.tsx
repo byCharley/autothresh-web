@@ -676,11 +676,27 @@ function App() {
       '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
     const layerNameHex = (pl: ProcessedLayer) => `${layerName(pl)} · ${toHex(pl.color)}`;
 
+    // ── JPG (texture mode flat composite) ────────────────────────────────────
+    if (format === 'jpg') {
+      const c = buildCompositeCanvas(false);
+      // Flatten transparency to white before JPEG (no alpha channel support)
+      const flat = document.createElement('canvas');
+      flat.width = c.width; flat.height = c.height;
+      const fCtx = flat.getContext('2d')!;
+      fCtx.fillStyle = '#ffffff';
+      fCtx.fillRect(0, 0, flat.width, flat.height);
+      fCtx.drawImage(c, 0, 0);
+      const jpegBlob = await new Promise<Blob>((res) => flat.toBlob((b) => res(b!), 'image/jpeg', 0.95));
+      saveAs(jpegBlob, `${baseName}-texture.jpg`);
+      return;
+    }
+
     // ── PNG ──────────────────────────────────────────────────────────────────
     const pngOf = (c: HTMLCanvasElement) => canvasToBlobWithDpi(c, documentDpi);
     if (format === 'png') {
-      if (mode === 'dtg') {
-        saveAs(await pngOf(buildCompositeCanvas(true)), `${baseName}-dtg.png`);
+      if (mode === 'dtg' || separationMode === 'texture') {
+        const suffix = separationMode === 'texture' ? 'texture' : 'dtg';
+        saveAs(await pngOf(buildCompositeCanvas(separationMode !== 'texture')), `${baseName}-${suffix}.png`);
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         // Plates (grayscale positives) + proofs on white and on garment
         const zip    = new JSZip();
