@@ -2040,7 +2040,6 @@ export function CanvasView() {
     <div
       ref={containerRef}
       className="canvas-view"
-      style={dotGridStyle}
       data-tutorial="tutorial-canvas"
       onWheel={handleWheel}
       onPointerDown={(e) => {
@@ -2143,6 +2142,7 @@ export function CanvasView() {
       }}
       onClick={bgEyedropperActive ? handleEyedropperClick : undefined}
       style={{
+        ...dotGridStyle,
         cursor: bgEyedropperActive
           ? 'crosshair'
           : (bgPaintMode !== 'off' || paintMode !== 'off') && !isSpacePanning
