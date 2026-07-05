@@ -339,10 +339,9 @@ function DocumentSection() {
     documentDpi, setDocumentDpi,
     documentWidthIn, documentHeightIn,
     setDocumentWidth, setDocumentHeight,
-    originalImage, globalPattern, separationMode,
+    originalImage, globalPattern,
   } = useStore();
 
-  const isVector = separationMode === 'vector';
   const docPxW = Math.round(documentWidthIn * documentDpi);
   const docPxH = Math.round(documentHeightIn * documentDpi);
   const lpi = Math.round(documentDpi / Math.max(1, globalPattern.patternScale));
@@ -413,35 +412,26 @@ function DocumentSection() {
         </div>
       </div>
 
-      {/* DPI — hidden for vector since SVG is resolution-independent */}
-      {!isVector && (
-        <div className="field">
-          <span className="field-label">Output DPI</span>
-          <select className="at-select" value={documentDpi}
-            onChange={(e) => setDocumentDpi(Number(e.target.value))}>
-            {DPI_OPTIONS.map((d) => (
-              <option key={d} value={d}>
-                {d} DPI{d === 300 ? ' · standard' : d === 72 ? ' · screen' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* DPI */}
+      <div className="field">
+        <span className="field-label">Output DPI</span>
+        <select className="at-select" value={documentDpi}
+          onChange={(e) => setDocumentDpi(Number(e.target.value))}>
+          {DPI_OPTIONS.map((d) => (
+            <option key={d} value={d}>
+              {d} DPI{d === 300 ? ' · standard' : d === 72 ? ' · screen' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Info */}
       <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8, marginTop: 4 }}>
-        {isVector ? (
-          <div>SVG · resolution independent · scales to any size</div>
-        ) : (
-          <>
-            <div>Output: {docPxW.toLocaleString()} × {docPxH.toLocaleString()} px</div>
-            <div>Pattern: {globalPattern.patternScale}px scale → ~{lpi} LPI</div>
-          </>
-        )}
+        <div>Output: {docPxW.toLocaleString()} × {docPxH.toLocaleString()} px</div>
+        <div>Pattern: {globalPattern.patternScale}px scale → ~{lpi} LPI</div>
         {artWIn && artHIn && (
           <div style={{ color: 'var(--text-dim)', marginTop: 2 }}>
-            Artwork: {artWIn}" × {artHIn}"
-            {!isVector && ` @ ${documentDpi} DPI`}
+            Artwork: {artWIn}" × {artHIn}" @ {documentDpi} DPI
           </div>
         )}
       </div>
@@ -456,7 +446,7 @@ function RegistrationSection() {
     documentBleed, setDocumentBleed,
     separationMode,
   } = useStore();
-  if (separationMode === 'vector' || separationMode === 'texture') return null;
+  if (separationMode === 'texture') return null;
   return (
     <Section title="Registration Marks" defaultOpen={false}>
       <SwitchRow
@@ -1366,7 +1356,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         ) : (
           <GlobalPatternSection />
         )}
-        {separationMode !== 'vector' && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && <ImageAdjustmentsSection />}
+        {separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && <ImageAdjustmentsSection />}
 
         {/* Per-layer controls — threshold mode only */}
         {separationMode === 'threshold' && layer ? (

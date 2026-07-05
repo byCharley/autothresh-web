@@ -165,7 +165,6 @@ function App() {
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepLockedColors, colorSepVisibility, colorSepNames,
     paintMasks,
-    vectorSvg,
     underbaseIncludeShadows, underbaseEnabled, underbaseDensity, underbaseChoke: storeUnderbaseChoke,
     passthroughMode, bgSeedColors, bgPaintMask, bgPaintMaskDims,
     fabricTexture, fabricBlendStrength, fabricTextureDepth,
@@ -236,13 +235,6 @@ function App() {
   const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke }: ExportConfig) => {
     if (!originalImage) return;
 
-    // ── Vector mode: download the traced SVG directly ────────────────────────
-    if (separationMode === 'vector') {
-      if (!vectorSvg) return;
-      const blob = new Blob([vectorSvg], { type: 'image/svg+xml' });
-      saveAs(blob, `${fileName || 'vector'}.svg`);
-      return;
-    }
     const mode = _mode;
 
     // ── Document geometry ────────────────────────────────────────────────────

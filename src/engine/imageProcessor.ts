@@ -1,6 +1,6 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SeparationMode = 'threshold' | 'cmyk' | 'cmyk-pro' | 'palette' | 'vector' | 'color-sep' | 'texture';
+export type SeparationMode = 'threshold' | 'cmyk' | 'cmyk-pro' | 'palette' | 'color-sep' | 'texture';
 
 export type PatternType =
   | 'none'

@@ -2068,7 +2068,7 @@ function ModeSwitcher({ value, onChange, disabled }: {
   );
 }
 
-export function LayerPanel() {
+export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolean } = {}) {
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [modeInfoOpen, setModeInfoOpen] = useState(false);
@@ -2200,7 +2200,6 @@ export function LayerPanel() {
   }
 
   useLayoutEffect(() => {
-    if (separationMode === 'vector') { setSeparationMode('threshold'); return; }
     if (separationMode === 'cmyk') { setSeparationMode('cmyk-pro'); return; }
   }, [separationMode]);
 
@@ -2262,7 +2261,7 @@ export function LayerPanel() {
       {/* Single scrollable column */}
       <div className="left-scroll">
         {/* Mode Switcher */}
-        <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }} data-tutorial="tutorial-modes">
+        {!hideModeSwitch && <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }} data-tutorial="tutorial-modes">
           <div style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', gap: 6, background: 'var(--surface-2)' }}>
             <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>
               Mode
@@ -2345,7 +2344,7 @@ export function LayerPanel() {
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
         {passthroughMode ? (
           <div className="at-mode-content">

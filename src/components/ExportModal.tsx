@@ -37,9 +37,6 @@ const FORMATS_DITHER: { value: ExportFormat; label: string; ext: string }[] = [
 ];
 
 function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean) {
-  if (format === 'svg') {
-    return { pkg: 'Single file', layers: 'Scalable vector paths', bg: 'Transparent', marks: 'Not included' };
-  }
   if (format === 'cdr') {
     if (mode === 'screen' && !isDither) {
       return { pkg: 'ZIP archive', layers: 'One EPS per separation, spot-color DSC headers + import guide', bg: 'Transparent', marks: 'Included' };
@@ -90,17 +87,15 @@ const FORMATS_TEXTURE = [
 export function ExportModal({ onClose, onExport, defaultFileName, separationMode }: Props) {
   const { passthroughMode } = useStore();
   const isDither  = !passthroughMode && separationMode === 'palette';
-  const isVector  = !passthroughMode && separationMode === 'vector';
   const isCmykPro = separationMode === 'cmyk-pro';
   const isTexture = separationMode === 'texture';
   const FORMATS  = passthroughMode ? FORMATS_PASSTHROUGH
-    : isVector   ? [{ value: 'svg' as ExportFormat, label: 'SVG', ext: '.svg' }]
     : isTexture  ? FORMATS_TEXTURE
     : isDither   ? FORMATS_DITHER
     : FORMATS_ALL;
 
   const [mode,             setMode]             = useState<'screen' | 'dtg'>(isDither ? 'dtg' : 'screen');
-  const [format,           setFormat]           = useState<ExportFormat>(passthroughMode ? 'png' : isVector ? 'svg' : 'png');
+  const [format,           setFormat]           = useState<ExportFormat>(passthroughMode ? 'png' : 'png');
   const [fileName,         setFileName]         = useState(defaultFileName);
   const { underbaseEnabled, underbaseChoke: storeChoke, setUnderbaseEnabled, setUnderbaseChoke } = useStore();
   const [exporting,        setExporting]        = useState(false);
@@ -231,7 +226,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)',
         }}>
           <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>
-            {passthroughMode ? 'Export — Passthrough' : isVector ? 'Export — Vector' : isDither ? 'Export — Dither' : isCmykPro ? 'Export — CMYK Pro' : isTexture ? 'Export — Texture' : 'Export'}
+            {passthroughMode ? 'Export — Passthrough' : isDither ? 'Export — Dither' : isCmykPro ? 'Export — CMYK Pro' : isTexture ? 'Export — Texture' : 'Export'}
           </span>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -268,8 +263,8 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           </div>
         )}
 
-        {/* Mode selector — hidden for Dither, Vector, CMYK Pro, Texture, and Passthrough */}
-        {!isDither && !isVector && !isCmykPro && !isTexture && !passthroughMode && (
+        {/* Mode selector — hidden for Dither, CMYK Pro, Texture, and Passthrough */}
+        {!isDither && !isCmykPro && !isTexture && !passthroughMode && (
           <div style={{ padding: '14px 16px 0', borderBottom: '1px solid var(--border)' }}>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
               Export Mode
@@ -359,8 +354,8 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
           </div>
         </div>
 
-        {/* Color info toggle — not applicable for vector */}
-        {!isVector && (
+        {/* Color info toggle */}
+        {(
           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
@@ -386,8 +381,8 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
 
         {/* Pantone names toggle hidden pending licensing */}
 
-        {/* Underbase — not for vector mode */}
-        {!isVector && (
+        {/* Underbase */}
+        {(
           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: includeUnderbase ? 10 : 0 }}>
               <div>

@@ -13,7 +13,6 @@ import { generateTextureMask } from '../engine/textureGenerator';
 import { buildImportanceMap } from '../engine/analysisPass';
 import { loadAllTextures } from '../engine/textureLoader';
 import { getCachedOverlay, setCachedOverlay } from '../engine/overlayCache';
-import { traceImageToSVG } from '../engine/vectorTracer';
 import { isShadowColor, nearestPantoneRgb } from '../engine/pantoneMatch';
 import { iccSeparateRaw, applyPostIcc, applyHalftoneToCmykPlates } from '../engine/cmykProEngine';
 import type { RawIccPlanes } from '../engine/cmykProEngine';
@@ -146,8 +145,6 @@ function drawScaledOverlay(ctx: CanvasRenderingContext2D, img: HTMLImageElement,
 // Base preview resolution (zoom = 1). High-res cap: beyond this we use nearest-neighbor.
 const MAX_PREVIEW_DIM = 1200;
 const MAX_RENDER_DIM  = 3200;
-// Vector tracing uses a higher base resolution to preserve fine detail.
-const MAX_VECTOR_DIM  = 2400;
 
 function RegMark({ x, y, size }: { x: number; y: number; size: number }) {
   const r = size / 2;
@@ -242,7 +239,6 @@ export function CanvasView() {
     isProcessing, setOriginalImage, setProcessedLayers, setProcessedLayerDims, setDitherComposite, setIsProcessing, setCanvasColor, setImageAdjustment,
     setPaintMask, setPaintMode, setBrushSize, clearPaintMask,
     soloLayerId, setCmykQuality,
-    vectorNumColors, vectorDetail, vectorSmooth, vectorInkColor, vectorPathMode, vectorMinSpeckle, vectorSvg, setVectorSvg, setVectorColors,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, setColorSepColors,
     colorSepLockedColors,
@@ -584,7 +580,6 @@ export function CanvasView() {
   useEffect(() => {
     if (!originalImage) return;
     let cancelled = false;
-    let vectorTraceRunning = false;
     let cmykProRunning = false;
     let rafId: number | undefined;
     const delay = separationMode === 'cmyk-pro' ? 200 : 40;
@@ -1279,55 +1274,7 @@ export function CanvasView() {
           setProcessedLayers([]);
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
-        } else if (separationMode === 'vector') {
-          setDitherComposite(null);
-
-          // Vector tracing uses a higher-res scale for better path detail.
-          const vectorLayout = computeDocLayout(MAX_VECTOR_DIM);
-          const vectorScaled = vectorLayout
-            ? scaleImageDataExact(originalImage, vectorLayout.artPrevW, vectorLayout.artPrevH)
-            : artScaled;
-          const vectorBgMask = (localBgMask && vectorLayout)
-            ? (() => { const m = computeBackgroundMask(vectorScaled, bgTolerance, bgSeedColors.length > 0 ? bgSeedColors : undefined); return m; })()
-            : localBgMask;
-
-          // Build pre-processed imageData with bg pixels made transparent
-          const traceData = new ImageData(
-            new Uint8ClampedArray(vectorScaled.data), vectorScaled.width, vectorScaled.height,
-          );
-          if (vectorBgMask) {
-            for (let i = 0; i < vectorBgMask.length; i++) {
-              if (vectorBgMask[i] === 255) traceData.data[i * 4 + 3] = 0;
-            }
-          }
-
-          // Keep the processing spinner up until VTracer finishes.
-          // setIsProcessing(false) is skipped at the end of the RAF for this mode.
-          vectorTraceRunning = true;
-          traceImageToSVG(traceData, {
-            numColors: vectorNumColors,
-            detail: vectorDetail,
-            smooth: vectorSmooth,
-            inkColor: vectorInkColor,
-            pathMode: vectorPathMode,
-            minSpeckle: vectorMinSpeckle,
-          }).then(result => {
-            if (!cancelled) {
-              setVectorSvg(result.svgString);
-              setVectorColors(result.colors);
-              setIsProcessing(false);
-            }
-          }).catch(err => {
-            console.error('[VTracer] trace failed:', err);
-            if (!cancelled) setIsProcessing(false);
-          });
-
-          // Show the original image while tracing so the canvas is never blank.
-          // The SVG overlay renders on top once VTracer finishes.
-          artComposite = traceData;
-
         } else {
-          if (vectorSvg !== null) { setVectorSvg(null); setVectorColors([]); }
           setDitherComposite(null);
           const resolved = resolvePatterns(layers, globalPattern);
           // Run without internal knockout so paint masks can be applied first,
@@ -1454,7 +1401,7 @@ export function CanvasView() {
 
         // Build underbase mask (shared for both normal draw and solo view)
         const underbaseSolo = soloLayerId === '__underbase__';
-        const shouldDrawUnderbase = underbaseEnabled && separationMode !== 'vector' && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro'
+        const shouldDrawUnderbase = underbaseEnabled && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro'
           && (!soloLayerId || underbaseSolo);
 
         let ubCanvas: HTMLCanvasElement | null = null;
@@ -1520,7 +1467,7 @@ export function CanvasView() {
           setRenderedAtDim(MAX_PREVIEW_DIM);
           setArtworkBounds({ x: artPrevOffX, y: artPrevOffY, w: artPrevW, h: artPrevH });
         }
-        if (!vectorTraceRunning && !cmykProRunning) setIsProcessing(false);
+        if (!cmykProRunning) setIsProcessing(false);
       });
     }, delay);
     return () => { cancelled = true; clearTimeout(tid); if (rafId !== undefined) cancelAnimationFrame(rafId); };
@@ -1537,7 +1484,6 @@ export function CanvasView() {
     splitView,
     paintMasks,
     soloLayerId,
-    vectorNumColors, vectorDetail, vectorSmooth, vectorInkColor, vectorPathMode, vectorMinSpeckle,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, colorSepLockedColors,
     grainColorBlend, grainColorCount, grainBlur, grainOverlays, grainOverlayVersion,
@@ -2242,28 +2188,12 @@ export function CanvasView() {
                     strokeWidth={1.5} strokeDasharray="6 4" opacity={0.5}
                   />
                 )}
-                {showRegistrationMarks && separationMode !== 'vector' && regMarkData.positions.map((pos, i) => (
+                {showRegistrationMarks && regMarkData.positions.map((pos, i) => (
                   <RegMark key={i} x={pos.x} y={pos.y} size={regMarkData.markSize} />
                 ))}
               </svg>
             )}
 
-            {/* Vector SVG overlay — absolutely positioned over artworkBounds, inherits pan/zoom */}
-            {separationMode === 'vector' && vectorSvg && artworkBounds && (
-              <img
-                src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(vectorSvg)}`}
-                style={{
-                  position: 'absolute',
-                  top: artworkBounds.y,
-                  left: artworkBounds.x,
-                  width: artworkBounds.w,
-                  height: artworkBounds.h,
-                  pointerEvents: 'none',
-                  display: 'block',
-                  imageRendering: 'auto',
-                }}
-              />
-            )}
           </div>
 
           {/* CMYK Inspect Grid — 2×2 channel overlay for Inspect mode */}

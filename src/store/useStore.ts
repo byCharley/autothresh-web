@@ -201,12 +201,6 @@ export interface HistorySnapshot {
   colorSepLockedColors: RGB[] | null;
   colorSepVisibility: Record<string, boolean>;
   colorSepNames: string[];
-  vectorNumColors: number;
-  vectorDetail: number;
-  vectorSmooth: number;
-  vectorInkColor: string;
-  vectorPathMode: 'spline' | 'polygon';
-  vectorMinSpeckle: number;
   proCmykSettings: ProCmykSettings;
 }
 
@@ -256,12 +250,6 @@ export function captureSnapshot(s: AppState): HistorySnapshot {
     colorSepLockedColors: s.colorSepLockedColors ? s.colorSepLockedColors.map(c => [...c] as RGB) : null,
     colorSepVisibility: { ...s.colorSepVisibility },
     colorSepNames: [...s.colorSepNames],
-    vectorNumColors: s.vectorNumColors,
-    vectorDetail: s.vectorDetail,
-    vectorSmooth: s.vectorSmooth,
-    vectorInkColor: s.vectorInkColor,
-    vectorPathMode: s.vectorPathMode,
-    vectorMinSpeckle: s.vectorMinSpeckle,
     proCmykSettings: { ...s.proCmykSettings },
   };
 }
@@ -350,16 +338,6 @@ interface AppState {
   // CMYK Pro mode
   proCmykSettings: ProCmykSettings;
   proCmykPlates: CmykProPlates | null;
-
-  // Vector mode
-  vectorNumColors: number;
-  vectorDetail: number;
-  vectorSmooth: number;
-  vectorInkColor: string;
-  vectorPathMode: 'spline' | 'polygon';
-  vectorMinSpeckle: number;
-  vectorSvg: string | null;
-  vectorColors: string[];
 
   // Color Separation mode
   colorSepNumColors:    number;
@@ -485,15 +463,6 @@ interface AppState {
   setProCmykSettings: (s: Partial<ProCmykSettings>) => void;
   setProCmykPlates: (p: CmykProPlates | null) => void;
 
-  setVectorNumColors: (v: number) => void;
-  setVectorDetail: (v: number) => void;
-  setVectorSmooth: (v: number) => void;
-  setVectorInkColor: (v: string) => void;
-  setVectorPathMode: (v: 'spline' | 'polygon') => void;
-  setVectorMinSpeckle: (v: number) => void;
-  setVectorSvg: (svg: string | null) => void;
-  setVectorColors: (colors: string[]) => void;
-
   setColorSepNumColors:     (v: number) => void;
   setColorSepColorPriority: (v: number) => void;
   setColorSepPattern:       (v: PatternType) => void;
@@ -604,15 +573,6 @@ export const useStore = create<AppState>((set, get) => ({
   proCmykSettings: { ...DEFAULT_PRO_CMYK_SETTINGS },
   proCmykPlates: null,
 
-  vectorNumColors: 8,
-  vectorDetail: 3,
-  vectorSmooth: 5,
-  vectorInkColor: '#ffffff',
-  vectorPathMode: 'spline' as 'spline' | 'polygon',
-  vectorMinSpeckle: 0,
-  vectorSvg: null,
-  vectorColors: [],
-
   colorSepNumColors:     4,
   colorSepColorPriority: 70,
   colorSepPattern:       'noise' as PatternType,
@@ -664,7 +624,6 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({
       originalImage: null, previewImage: null, processedLayers: [], imageFileName: '',
       bgMask: null, bgPaintMask: null, bgPaintMaskDims: null, bgPaintMode: 'off', palettePool: [], activePaletteIdx: 0, paintMasks: {},
-      vectorSvg: null, vectorColors: [],
       paletteColors: [],
       paletteVisibility: {},
       paletteNames: [],
@@ -767,10 +726,6 @@ export const useStore = create<AppState>((set, get) => ({
     colorSepPatternAngle: 45,
     colorSepLockedColors: null,
     colorSepNames: [],
-    vectorNumColors: 8,
-    vectorDetail: 3,
-    vectorSmooth: 5,
-    vectorInkColor: '#ffffff',
     proCmykSettings: { ...DEFAULT_PRO_CMYK_SETTINGS },
     proCmykPlates: null,
     paintMasks: {},
@@ -908,15 +863,6 @@ export const useStore = create<AppState>((set, get) => ({
 
   setProCmykSettings: (updates) => set((s) => ({ proCmykSettings: { ...s.proCmykSettings, ...updates } })),
   setProCmykPlates: (proCmykPlates) => set({ proCmykPlates }),
-
-  setVectorNumColors: (vectorNumColors) => set({ vectorNumColors }),
-  setVectorDetail: (vectorDetail) => set({ vectorDetail }),
-  setVectorSmooth: (vectorSmooth) => set({ vectorSmooth }),
-  setVectorInkColor: (vectorInkColor) => set({ vectorInkColor }),
-  setVectorPathMode: (vectorPathMode) => set({ vectorPathMode }),
-  setVectorMinSpeckle: (vectorMinSpeckle) => set({ vectorMinSpeckle }),
-  setVectorSvg: (vectorSvg) => set({ vectorSvg }),
-  setVectorColors: (vectorColors) => set({ vectorColors }),
 
   setColorSepNumColors:      (colorSepNumColors)      => set((s) => ({ historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20), colorSepNumColors })),
   setColorSepColorPriority:  (colorSepColorPriority)  => set({ colorSepColorPriority }),

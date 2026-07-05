@@ -298,6 +298,278 @@ function Panel({ title, children, style }: { title: string; children: React.Reac
   );
 }
 
+// ── Security panel ──────────────────────────────────────────────────────────
+
+interface SecurityFlag {
+  id: number;
+  created_at: string;
+  email: string;
+  ip: string | null;
+  first_name: string | null;
+  related_emails: string[];
+  reason: string | null;
+  confidence: 'low' | 'medium' | 'high';
+  reviewed: boolean;
+  expired: boolean;
+  auto_flagged: boolean;
+  notes: string | null;
+}
+
+interface SecurityData {
+  flags: SecurityFlag[];
+  summary: {
+    total: number;
+    unreviewed: number;
+    expired: number;
+    highConfidence: number;
+    sharedIpsLast7d: number;
+  };
+}
+
+function ConfidenceBadge({ level }: { level: string }) {
+  const color = level === 'high' ? '#f87171' : level === 'medium' ? '#faad14' : '#6b7280';
+  return (
+    <span style={{
+      fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em',
+      textTransform: 'uppercase', padding: '2px 6px',
+      background: `${color}22`, color, border: `1px solid ${color}44`,
+    }}>
+      {level}
+    </span>
+  );
+}
+
+function SecurityPanel({ session }: { session: Session }) {
+  const [data, setData]       = useState<SecurityData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+  const [acting, setActing]   = useState<string | null>(null);
+  const [notes, setNotes]     = useState<Record<string, string>>({});
+  const [filter, setFilter]   = useState<'all' | 'unreviewed' | 'expired'>('unreviewed');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch('/api/security', { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<SecurityData>; })
+      .then(d => { setData(d); setLoading(false); })
+      .catch(e => { setError(String(e.message)); setLoading(false); });
+  }, [session.token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function act(action: string, email: string) {
+    setActing(email + action);
+    try {
+      await fetch('/api/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ action, email, notes: notes[email] ?? null }),
+      });
+      load();
+    } catch { /* ignore */ }
+    setActing(null);
+  }
+
+  const filtered = data?.flags.filter(f => {
+    if (filter === 'unreviewed') return !f.reviewed && !f.expired;
+    if (filter === 'expired') return f.expired;
+    return true;
+  }) ?? [];
+
+  const CONF_ORDER = { high: 0, medium: 1, low: 2 };
+  const sorted = [...filtered].sort((a, b) =>
+    (CONF_ORDER[a.confidence] ?? 3) - (CONF_ORDER[b.confidence] ?? 3)
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+          Loading security data…
+        </div>
+      )}
+      {error && (
+        <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: '#f87171' }}>
+          {error}
+        </div>
+      )}
+      {data && !loading && (
+        <>
+          {/* Summary */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <StatCard label="Flagged Accounts" value={data.summary.total} accent={data.summary.unreviewed > 0} />
+            <StatCard label="Needs Review" value={data.summary.unreviewed} sub="Not yet actioned" accent={data.summary.unreviewed > 0} />
+            <StatCard label="High Confidence" value={data.summary.highConfidence} sub="IP + name match" />
+            <StatCard label="Expired" value={data.summary.expired} sub="Access blocked" />
+            <StatCard label="Shared IPs (7d)" value={data.summary.sharedIpsLast7d} sub="IPs with 2+ accounts" />
+          </div>
+
+          {/* Filter tabs */}
+          <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)' }}>
+            {(['unreviewed', 'all', 'expired'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                style={{
+                  padding: '7px 14px', border: 'none',
+                  borderBottom: filter === f ? '2px solid var(--accent)' : '2px solid transparent',
+                  background: 'transparent',
+                  color: filter === f ? 'var(--accent)' : 'var(--text-dim)',
+                  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                  letterSpacing: '0.07em', textTransform: 'uppercase', cursor: 'pointer',
+                }}
+              >
+                {f === 'unreviewed' ? `Needs Review (${data.summary.unreviewed})` : f === 'expired' ? `Blocked (${data.summary.expired})` : `All (${data.summary.total})`}
+              </button>
+            ))}
+          </div>
+
+          {/* Flag list */}
+          {sorted.length === 0 ? (
+            <div style={{
+              padding: '40px 20px', textAlign: 'center',
+              fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+              border: '1px solid var(--border)',
+            }}>
+              {filter === 'unreviewed' ? 'No accounts need review — all clear.' : 'No flagged accounts.'}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {sorted.map(flag => (
+                <div key={flag.id} style={{
+                  background: flag.expired ? 'rgba(248,113,113,0.04)' : 'var(--surface)',
+                  border: `1px solid ${flag.expired ? 'rgba(248,113,113,0.25)' : flag.confidence === 'high' ? 'rgba(248,113,113,0.2)' : 'var(--border)'}`,
+                  padding: '14px 16px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    {/* Left: identity */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: flag.expired ? '#f87171' : 'var(--text)' }}>
+                          {flag.email}
+                        </span>
+                        <ConfidenceBadge level={flag.confidence} />
+                        {flag.expired && (
+                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}>
+                            BLOCKED
+                          </span>
+                        )}
+                        {!flag.auto_flagged && (
+                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(168,85,247,0.12)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.25)' }}>
+                            MANUAL
+                          </span>
+                        )}
+                      </div>
+                      {flag.first_name && (
+                        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                          {flag.first_name} · IP: {flag.ip ?? 'unknown'}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                        {flag.reason}
+                      </span>
+                      {flag.related_emails?.length > 0 && (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+                          {flag.related_emails.map(e => (
+                            <span key={e} style={{ fontSize: 9, fontFamily: 'var(--font-mono)', padding: '1px 6px', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                              {e}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 2 }}>
+                        Flagged {new Date(flag.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    </div>
+
+                    {/* Right: actions */}
+                    {!flag.expired && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                        <input
+                          type="text"
+                          placeholder="Notes (optional)"
+                          value={notes[flag.email] ?? ''}
+                          onChange={e => setNotes(n => ({ ...n, [flag.email]: e.target.value }))}
+                          style={{
+                            height: 24, padding: '0 8px', fontSize: 10,
+                            fontFamily: 'var(--font-mono)',
+                            background: 'var(--surface-2)', border: '1px solid var(--border)',
+                            color: 'var(--text)', width: 180,
+                          }}
+                        />
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            onClick={() => act('expire', flag.email)}
+                            disabled={acting === flag.email + 'expire'}
+                            style={{
+                              flex: 1, height: 24, padding: '0 8px', fontSize: 10,
+                              fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                              background: '#f87171', border: 'none', color: '#000',
+                              cursor: 'pointer', opacity: acting === flag.email + 'expire' ? 0.5 : 1,
+                            }}
+                          >
+                            Block
+                          </button>
+                          <button
+                            onClick={() => act('review', flag.email)}
+                            disabled={acting === flag.email + 'review'}
+                            style={{
+                              flex: 1, height: 24, padding: '0 8px', fontSize: 10,
+                              fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                              background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)',
+                              cursor: 'pointer', opacity: acting === flag.email + 'review' ? 0.5 : 1,
+                            }}
+                          >
+                            Dismiss
+                          </button>
+                          <button
+                            onClick={() => act('unflag', flag.email)}
+                            disabled={acting === flag.email + 'unflag'}
+                            title="Remove flag entirely"
+                            style={{
+                              width: 24, height: 24, padding: 0, fontSize: 10,
+                              fontFamily: 'var(--font-mono)',
+                              background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)',
+                              cursor: 'pointer', opacity: acting === flag.email + 'unflag' ? 0.5 : 1,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {flag.expired && (
+                      <button
+                        onClick={() => act('unflag', flag.email)}
+                        style={{
+                          height: 24, padding: '0 10px', fontSize: 10,
+                          fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                          background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)',
+                          cursor: 'pointer', flexShrink: 0,
+                        }}
+                      >
+                        Unblock
+                      </button>
+                    )}
+                  </div>
+                  {flag.notes && (
+                    <div style={{ marginTop: 8, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                      Note: {flag.notes}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main dashboard ──────────────────────────────────────────────────────────
 type Preset = 7 | 14 | 30 | 90;
 const PRESETS: Preset[] = [7, 14, 30, 90];
@@ -341,11 +613,23 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     else load({ days: preset });
   }, [preset, customFrom, customTo, load]);
 
+  useEffect(() => {
+    fetch('/api/security', { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { summary?: { unreviewed?: number } } | null) => {
+        if (d?.summary?.unreviewed) setSecurityUnreviewed(d.summary.unreviewed);
+      })
+      .catch(() => {});
+  }, [session.token]);
+
   function applyCustom() {
     setCustomFrom(pendingFrom);
     setCustomTo(pendingTo);
     setPreset('custom');
   }
+
+  const [activeTab, setActiveTab] = useState<'stats' | 'security'>('stats');
+  const [securityUnreviewed, setSecurityUnreviewed] = useState(0);
 
   const [snapping, setSnapping] = useState(false);
   const [snapMsg, setSnapMsg]   = useState<string | null>(null);
@@ -411,7 +695,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            {PRESETS.map(d => (
+            {activeTab === 'stats' && PRESETS.map(d => (
               <button
                 key={d}
                 onClick={() => setPreset(d)}
@@ -429,7 +713,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
             ))}
 
             {/* Custom range */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {activeTab === 'stats' && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <button
                 onClick={() => { setPreset('custom'); setPendingFrom(customFrom); setPendingTo(customTo); }}
                 style={{
@@ -489,7 +773,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                   </button>
                 </>
               )}
-            </div>
+            </div>}
             <button
               onClick={onClose}
               style={{
@@ -507,21 +791,58 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
           </div>
         </div>
 
+        {/* Tab bar */}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px' }}>
+          {(['stats', 'security'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                position: 'relative',
+                padding: '10px 16px',
+                border: 'none',
+                borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
+                background: 'transparent',
+                color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)',
+                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.07em', textTransform: 'uppercase',
+                cursor: 'pointer', marginBottom: -1,
+              }}
+            >
+              {tab === 'stats' ? 'Stats' : 'Security'}
+              {tab === 'security' && securityUnreviewed > 0 && (
+                <span style={{
+                  marginLeft: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 16, height: 16, padding: '0 4px',
+                  background: '#f87171', color: '#000',
+                  fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)',
+                }}>
+                  {securityUnreviewed > 99 ? '99+' : securityUnreviewed}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
         {/* Body */}
         <div style={{ padding: mobile ? '12px' : '20px' }}>
-          {loading && (
+          {activeTab === 'security' && (
+            <SecurityPanel session={session} />
+          )}
+
+          {activeTab === 'stats' && loading && (
             <div style={{ textAlign: 'center', padding: '80px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
               Loading analytics...
             </div>
           )}
 
-          {error && (
+          {activeTab === 'stats' && error && (
             <div style={{ textAlign: 'center', padding: '80px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: '#f87171' }}>
               {error}
             </div>
           )}
 
-          {data && !loading && (
+          {activeTab === 'stats' && data && !loading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Summary cards */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

@@ -17,13 +17,76 @@ function detectDevice(ua: string): string {
   return 'desktop';
 }
 
-function logEvent(data: Record<string, unknown>) {
+function sbPost(table: string, data: Record<string, unknown>) {
   if (!SUPABASE_URL || !SERVICE_KEY) return;
-  fetch(`${SUPABASE_URL}/rest/v1/analytics_events`, {
+  fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}`, 'apikey': SERVICE_KEY },
     body: JSON.stringify(data),
   }).catch(() => { /* non-blocking */ });
+}
+
+function logEvent(data: Record<string, unknown>) {
+  sbPost('analytics_events', data);
+}
+
+async function checkSecurityFlag(email: string): Promise<boolean> {
+  if (!SUPABASE_URL || !SERVICE_KEY) return false;
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/security_flags?email=eq.${encodeURIComponent(email.toLowerCase())}&expired=eq.true&select=email`,
+      { headers: { 'Authorization': `Bearer ${SERVICE_KEY}`, 'apikey': SERVICE_KEY } }
+    );
+    if (!r.ok) return false;
+    const rows = await r.json() as unknown[];
+    return rows.length > 0;
+  } catch { return false; }
+}
+
+function runFraudCheck(email: string, ip: string, firstName: string, subscriptionStatus: string) {
+  if (!ip || !SUPABASE_URL || !SERVICE_KEY) return;
+  // Only check trial accounts — no point flagging active paid subscribers
+  if (subscriptionStatus !== 'trial') return;
+
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  fetch(
+    `${SUPABASE_URL}/rest/v1/security_events?ip=eq.${encodeURIComponent(ip)}&subscription_status=eq.trial&created_at=gte.${since}&select=email,first_name&limit=50`,
+    { headers: { 'Authorization': `Bearer ${SERVICE_KEY}`, 'apikey': SERVICE_KEY } }
+  ).then(r => r.json()).then((rows: Array<{ email: string; first_name: string }>) => {
+    const others = rows.filter(r => r.email.toLowerCase() !== email.toLowerCase());
+    if (!others.length) return;
+
+    const nameMatch = others.some(r =>
+      r.first_name && firstName && r.first_name.toLowerCase() === firstName.toLowerCase()
+    );
+    const confidence = nameMatch ? 'high' : 'low';
+    const relatedEmails = [...new Set(others.map(r => r.email.toLowerCase()))];
+    const reason = nameMatch
+      ? `Same IP and first name as ${relatedEmails.length} other trial account(s): ${relatedEmails.join(', ')}`
+      : `Same IP as ${relatedEmails.length} other trial account(s): ${relatedEmails.join(', ')}`;
+
+    // Upsert flag (insert if not exists, skip if already flagged)
+    fetch(`${SUPABASE_URL}/rest/v1/security_flags`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SERVICE_KEY}`,
+        'apikey': SERVICE_KEY,
+        'Prefer': 'resolution=ignore-duplicates',
+      },
+      body: JSON.stringify({
+        email: email.toLowerCase(),
+        ip,
+        first_name: firstName,
+        related_emails: relatedEmails,
+        reason,
+        confidence,
+        auto_flagged: true,
+        reviewed: false,
+        expired: false,
+      }),
+    }).catch(() => {});
+  }).catch(() => {});
 }
 
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
@@ -113,6 +176,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { token } = req.body as { token?: string };
   if (!token) return res.status(400).json({ valid: false, error: 'Token required' });
 
+  const clientIp = String(
+    req.headers['x-real-ip'] ??
+    req.headers['x-forwarded-for']?.toString().split(',')[0] ??
+    ''
+  ).trim();
+
   // ── Validate token + get customer info ────────────────────────────────────
   let custData: { data?: Record<string, unknown>; errors?: unknown[] } = {};
   let rawCust = '';
@@ -151,15 +220,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   console.log('Verify result:', { email, hasSub, isCreator, isTester, finalHasSub, finalStatus, nextBillingDate, planTitle });
 
-  // ── Log analytics event (fire-and-forget) ─────────────────────────────────
+  // ── Check if account has been security-expired ────────────────────────────
+  const isSecurityExpired = (!isCreator && !isTester) ? await checkSecurityFlag(emailLower) : false;
+
+  // ── Log analytics + security events (fire-and-forget) ────────────────────
   const ua = String(req.headers['user-agent'] ?? '');
+  const country = String(req.headers['x-vercel-ip-country'] ?? req.headers['x-vercel-ip-country-region'] ?? '');
+  const city    = req.headers['x-vercel-ip-city'] ? decodeURIComponent(String(req.headers['x-vercel-ip-city'])) : '';
+
   logEvent({
     event_type:  'app_open',
     email:       emailLower,
     device_type: detectDevice(ua),
-    country:     req.headers['x-vercel-ip-country'] ?? req.headers['x-vercel-ip-country-region'] ?? null,
-    city:        req.headers['x-vercel-ip-city'] ? decodeURIComponent(String(req.headers['x-vercel-ip-city'])) : null,
+    country:     country || null,
+    city:        city || null,
   });
+
+  sbPost('security_events', {
+    email:                emailLower,
+    ip:                   clientIp || null,
+    first_name:           cust.firstName ?? '',
+    subscription_status:  finalStatus ?? 'none',
+    country:              country || null,
+    city:                 city || null,
+  });
+
+  if (!isCreator && !isTester) {
+    runFraudCheck(emailLower, clientIp, cust.firstName ?? '', finalStatus ?? '');
+  }
+
+  if (isSecurityExpired) {
+    return res.status(200).json({
+      valid:              true,
+      hasSubscription:    false,
+      subscriptionStatus: 'expired',
+      email,
+      firstName:          cust.firstName ?? '',
+    });
+  }
 
   return res.status(200).json({
     valid:                 true,

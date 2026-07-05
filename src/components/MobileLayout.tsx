@@ -33,9 +33,16 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
   const menuRef = useRef<HTMLDivElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewDragRef = useRef({ active: false, sx: 0, sy: 0, cx: 0.5, cy: 0.5 });
-  const { originalImage, imageFileName, separationMode, cmykQuality,
+  const { originalImage, imageFileName, separationMode, setSeparationMode,
+          passthroughMode, cmykQuality,
           processedLayers, processedLayerDims, ditherComposite,
           canvasColor, proCmykSettings } = useStore();
+
+  const [modePickerOpen, setModePickerOpen] = useState(false);
+  const [showCmykDisclaimer, setShowCmykDisclaimer] = useState(false);
+  const [cmykDisclaimerNeverShow, setCmykDisclaimerNeverShow] = useState(false);
+  const [showTextureDisclaimer, setShowTextureDisclaimer] = useState(false);
+  const [textureDisclaimerNeverShow, setTextureDisclaimerNeverShow] = useState(false);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -146,11 +153,13 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
     : subStatus === 'paused' || subStatus === 'cancelled' ? '#e6a817'
     : '#3ecf4f';
 
-  const modeLabel = separationMode === 'threshold' ? 'Thresh'
-    : separationMode === 'palette' ? 'Dither'
-    : separationMode === 'color-sep' ? 'Color'
-    : separationMode === 'texture' ? 'Texture'
-    : 'Vector';
+  const MODE_OPTS = [
+    { value: 'threshold', label: 'Threshold' },
+    { value: 'palette',   label: 'Dither' },
+    { value: 'color-sep', label: 'Color Sep' },
+    { value: 'cmyk-pro',  label: 'CMYK Pro' },
+    { value: 'texture',   label: 'Texture' },
+  ] as const;
 
   return (
     <div style={{
@@ -186,17 +195,6 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
           )}
         </div>
 
-        {/* Active mode badge */}
-        {originalImage && (
-          <div style={{
-            fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
-            textTransform: 'uppercase', letterSpacing: '0.07em',
-            background: 'var(--accent)', color: '#000',
-            padding: '3px 8px', flexShrink: 0,
-          }}>
-            {modeLabel}
-          </div>
-        )}
 
 
         {/* Account button */}
@@ -279,6 +277,87 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
           )}
         </div>
       </div>
+
+      {/* ─── Mode dropdown row ───────────────────────────────── */}
+      {originalImage && (
+        <div style={{
+          flexShrink: 0, position: 'relative',
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 14px',
+          background: 'var(--surface-2)',
+          borderBottom: '1px solid var(--border)',
+        }}>
+          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', flexShrink: 0 }}>
+            Mode
+          </span>
+          <button
+            onClick={() => !passthroughMode && setModePickerOpen(v => !v)}
+            style={{
+              flex: 1, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '0 10px',
+              background: modePickerOpen ? '#252525' : 'var(--surface)',
+              border: `1px solid ${modePickerOpen ? 'var(--accent)' : 'var(--border)'}`,
+              color: 'var(--accent)',
+              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.07em', textTransform: 'uppercase',
+              cursor: passthroughMode ? 'default' : 'pointer',
+              opacity: passthroughMode ? 0.4 : 1,
+              WebkitTapHighlightColor: 'transparent',
+            } as React.CSSProperties}
+          >
+            <span>{MODE_OPTS.find(m => m.value === separationMode)?.label ?? separationMode}</span>
+            <svg width="8" height="5" viewBox="0 0 8 5" fill="none" style={{ flexShrink: 0, transform: modePickerOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+              <path d="M0 0l4 5 4-5z" fill="var(--accent)"/>
+            </svg>
+          </button>
+
+          {modePickerOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 2px)', left: 14, right: 14,
+              background: 'var(--surface)', border: '1px solid var(--accent)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              zIndex: 200,
+            }}>
+              {MODE_OPTS.map((m, i) => (
+                <button
+                  key={m.value}
+                  onClick={() => {
+                    setSeparationMode(m.value as Parameters<typeof setSeparationMode>[0]);
+                    if (m.value === 'cmyk-pro' && !localStorage.getItem('cmyk-disclaimer-dismissed')) {
+                      setCmykDisclaimerNeverShow(false);
+                      setTimeout(() => setShowCmykDisclaimer(true), 0);
+                    }
+                    if (m.value === 'texture' && !localStorage.getItem('texture-disclaimer-dismissed')) {
+                      setTextureDisclaimerNeverShow(false);
+                      setTimeout(() => setShowTextureDisclaimer(true), 0);
+                    }
+                    setModePickerOpen(false);
+                  }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '11px 14px',
+                    background: separationMode === m.value ? 'color-mix(in srgb, var(--accent) 10%, var(--surface))' : 'transparent',
+                    border: 'none',
+                    borderBottom: i < MODE_OPTS.length - 1 ? '1px solid var(--border)' : 'none',
+                    color: separationMode === m.value ? 'var(--accent)' : 'var(--text-muted)',
+                    fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
+                    letterSpacing: '0.07em', textTransform: 'uppercase',
+                    cursor: 'pointer', textAlign: 'left',
+                    WebkitTapHighlightColor: 'transparent',
+                  } as React.CSSProperties}
+                >
+                  {m.label}
+                  {separationMode === m.value && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ─── Canvas ──────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0, position: 'relative' }}>
@@ -365,7 +444,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
 
         {/* Scrollable content */}
         <div className="mobile-sheet-content" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-          {activeSheet === 'layers' && <LayerPanel />}
+          {activeSheet === 'layers' && <LayerPanel hideModeSwitch />}
           {activeSheet === 'controls' && <ControlPanel cmykQuality={cmykQuality} />}
         </div>
       </div>
@@ -409,6 +488,74 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
           accent
         />
       </div>
+
+      {/* Close mode picker when tapping outside */}
+      {modePickerOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 199 }} onClick={() => setModePickerOpen(false)} />
+      )}
+
+      {/* Texture disclaimer */}
+      {showTextureDisclaimer && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', width: '100%', maxWidth: 360, padding: '28px 24px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', color: 'var(--text)', textTransform: 'uppercase' }}>
+                Texture Mode — Experimental
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6, margin: 0 }}>
+              Texture mode is a new experimental feature. Use it to build grunge, vintage, and hand-printed looks by layering textures directly on your artwork.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <input type="checkbox" checked={textureDisclaimerNeverShow} onChange={(e) => setTextureDisclaimerNeverShow(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Don't show this again</span>
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { if (textureDisclaimerNeverShow) localStorage.setItem('texture-disclaimer-dismissed', '1'); setShowTextureDisclaimer(false); }}
+                style={{ padding: '8px 18px', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--accent)', border: 'none', color: '#000', cursor: 'pointer', fontWeight: 700 }}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CMYK Pro disclaimer */}
+      {showCmykDisclaimer && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', width: '100%', maxWidth: 360, padding: '28px 24px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '0.05em', color: 'var(--text)', textTransform: 'uppercase' }}>
+                CMYK Pro — Work in Progress
+              </span>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6, margin: 0 }}>
+              CMYK Pro mode is under active development. Use it for experimentation and proofing — always verify with a physical press proof before final production.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <input type="checkbox" checked={cmykDisclaimerNeverShow} onChange={(e) => setCmykDisclaimerNeverShow(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 14, height: 14 }} />
+              <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Don't show this again</span>
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { if (cmykDisclaimerNeverShow) localStorage.setItem('cmyk-disclaimer-dismissed', '1'); setShowCmykDisclaimer(false); }}
+                style={{ padding: '8px 18px', fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--accent)', border: 'none', color: '#000', cursor: 'pointer', fontWeight: 700 }}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals (passed from App.tsx) */}
       {children}
