@@ -18,7 +18,7 @@ export const CHANGELOG: Entry[] = [
     date: '2026-07-05',
     label: 'Canvas Controls & Edge Softness',
     added: [
-      'Canvas dot grid toggle — new button in the canvas toolbar turns the background dot grid on/off. A color picker next to it lets you change the dot color.',
+      'Canvas border toggle — new button in the canvas toolbar hides or shows the orange dashed outline around your artwork area.',
       'B/W button on texture overlays — desaturates any texture to black & white before blending, ideal for monotone fabric prints.',
     ],
     improved: [
