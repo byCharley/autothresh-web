@@ -298,6 +298,277 @@ function Panel({ title, children, style }: { title: string; children: React.Reac
   );
 }
 
+// ── Videos panel ────────────────────────────────────────────────────────────
+
+interface TutorialRow {
+  id: number;
+  title: string;
+  description: string;
+  duration: string;
+  youtube_id: string;
+  coming_soon: boolean;
+  sort_order: number;
+}
+
+const EMPTY_FORM = { title: '', description: '', duration: '', youtube_id: '', coming_soon: false };
+
+function youtubeThumb(id: string) {
+  return `https://img.youtube.com/vi/${id}/mqdefault.jpg`;
+}
+
+function extractYoutubeId(input: string): string {
+  const patterns = [
+    /youtu\.be\/([A-Za-z0-9_-]{11})/,
+    /youtube\.com\/watch\?.*v=([A-Za-z0-9_-]{11})/,
+    /youtube\.com\/embed\/([A-Za-z0-9_-]{11})/,
+    /^([A-Za-z0-9_-]{11})$/,
+  ];
+  for (const p of patterns) {
+    const m = input.match(p);
+    if (m) return m[1];
+  }
+  return input.trim();
+}
+
+function VideosPanel({ session }: { session: Session }) {
+  const [rows, setRows]         = useState<TutorialRow[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const [acting, setActing]     = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<Omit<TutorialRow, 'id' | 'sort_order'>>(EMPTY_FORM);
+  const [addForm, setAddForm]   = useState(EMPTY_FORM);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [showAdd, setShowAdd]   = useState(false);
+
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` };
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch('/api/tutorials')
+      .then(r => r.ok ? r.json() as Promise<TutorialRow[]> : Promise.reject(`HTTP ${r.status}`))
+      .then(d => { setRows(d); setLoading(false); })
+      .catch(e => { setError(String(e)); setLoading(false); });
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function save(id: number) {
+    setActing(`save-${id}`);
+    await fetch('/api/tutorials', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ id, ...editForm, youtube_id: extractYoutubeId(editForm.youtube_id) }),
+    });
+    setEditingId(null);
+    load();
+    setActing(null);
+  }
+
+  async function remove(id: number) {
+    setActing(`del-${id}`);
+    await fetch(`/api/tutorials?id=${id}`, { method: 'DELETE', headers });
+    load();
+    setActing(null);
+  }
+
+  async function move(id: number, dir: -1 | 1) {
+    const idx = rows.findIndex(r => r.id === id);
+    const swap = rows[idx + dir];
+    if (!swap) return;
+    setActing(`move-${id}`);
+    await Promise.all([
+      fetch('/api/tutorials', { method: 'PATCH', headers, body: JSON.stringify({ id, sort_order: swap.sort_order }) }),
+      fetch('/api/tutorials', { method: 'PATCH', headers, body: JSON.stringify({ id: swap.id, sort_order: rows[idx].sort_order }) }),
+    ]);
+    load();
+    setActing(null);
+  }
+
+  async function add() {
+    setAddError(null);
+    if (!addForm.title.trim()) { setAddError('Title is required'); return; }
+    if (!addForm.youtube_id.trim() && !addForm.coming_soon) { setAddError('YouTube URL or ID is required (or mark as Coming Soon)'); return; }
+    setActing('add');
+    const r = await fetch('/api/tutorials', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        ...addForm,
+        youtube_id: extractYoutubeId(addForm.youtube_id),
+        sort_order: rows.length * 10,
+      }),
+    });
+    if (r.ok) {
+      setAddForm(EMPTY_FORM);
+      setShowAdd(false);
+      load();
+    } else {
+      setAddError('Failed to add video');
+    }
+    setActing(null);
+  }
+
+  const inputStyle: React.CSSProperties = {
+    height: 28, padding: '0 8px', fontSize: 11,
+    fontFamily: 'var(--font-mono)',
+    background: 'var(--surface-2)', border: '1px solid var(--border)',
+    color: 'var(--text)',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+          {rows.length} video{rows.length !== 1 ? 's' : ''}
+        </span>
+        <button
+          onClick={() => { setShowAdd(v => !v); setAddError(null); }}
+          style={{
+            height: 28, padding: '0 14px', fontSize: 10,
+            fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+            background: showAdd ? 'var(--surface-2)' : 'var(--accent)',
+            border: showAdd ? '1px solid var(--border)' : 'none',
+            color: showAdd ? 'var(--text-muted)' : '#000', cursor: 'pointer',
+          }}
+        >
+          {showAdd ? 'Cancel' : '+ Add Video'}
+        </button>
+      </div>
+
+      {/* Add form */}
+      {showAdd && (
+        <div style={{ padding: '14px 16px', border: '1px solid var(--accent)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)' }}>New Video</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <input style={{ ...inputStyle, flex: '1 1 180px' }} placeholder="Title *" value={addForm.title} onChange={e => setAddForm(f => ({ ...f, title: e.target.value }))} />
+            <input style={{ ...inputStyle, flex: '2 1 220px' }} placeholder="YouTube URL or video ID" value={addForm.youtube_id} onChange={e => setAddForm(f => ({ ...f, youtube_id: e.target.value }))} />
+            <input style={{ ...inputStyle, width: 70 }} placeholder="Duration" value={addForm.duration} onChange={e => setAddForm(f => ({ ...f, duration: e.target.value }))} />
+          </div>
+          <input style={{ ...inputStyle, width: '100%' }} placeholder="Description (optional)" value={addForm.description} onChange={e => setAddForm(f => ({ ...f, description: e.target.value }))} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+              <input type="checkbox" checked={addForm.coming_soon} onChange={e => setAddForm(f => ({ ...f, coming_soon: e.target.checked }))} />
+              Mark as Coming Soon
+            </label>
+            <button
+              onClick={add}
+              disabled={acting === 'add'}
+              style={{
+                height: 28, padding: '0 20px', fontSize: 10,
+                fontFamily: 'var(--font-mono)', fontWeight: 700,
+                background: 'var(--accent)', border: 'none', color: '#000',
+                cursor: 'pointer', opacity: acting === 'add' ? 0.5 : 1,
+              }}
+            >
+              {acting === 'add' ? 'Adding…' : 'Add'}
+            </button>
+          </div>
+          {addError && <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#f87171' }}>{addError}</span>}
+        </div>
+      )}
+
+      {loading && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Loading…</div>}
+      {error   && <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 11, fontFamily: 'var(--font-mono)', color: '#f87171' }}>{error}</div>}
+
+      {!loading && rows.length === 0 && (
+        <div style={{ padding: '40px 20px', textAlign: 'center', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', border: '1px solid var(--border)' }}>
+          No videos yet — add your first one above.
+        </div>
+      )}
+
+      {/* Video rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {rows.map((row, idx) => {
+          const isEditing = editingId === row.id;
+          return (
+            <div key={row.id} style={{
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              padding: '12px 14px',
+            }}>
+              {isEditing ? (
+                /* Edit mode */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <input style={{ ...inputStyle, flex: '1 1 160px' }} placeholder="Title" value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} />
+                    <input style={{ ...inputStyle, flex: '2 1 200px' }} placeholder="YouTube URL or video ID" value={editForm.youtube_id} onChange={e => setEditForm(f => ({ ...f, youtube_id: e.target.value }))} />
+                    <input style={{ ...inputStyle, width: 70 }} placeholder="Duration" value={editForm.duration} onChange={e => setEditForm(f => ({ ...f, duration: e.target.value }))} />
+                  </div>
+                  <input style={{ ...inputStyle, width: '100%' }} placeholder="Description" value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                      <input type="checkbox" checked={editForm.coming_soon} onChange={e => setEditForm(f => ({ ...f, coming_soon: e.target.checked }))} />
+                      Coming Soon
+                    </label>
+                    <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+                      <button onClick={() => setEditingId(null)} style={{ height: 26, padding: '0 12px', fontSize: 10, fontFamily: 'var(--font-mono)', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={() => save(row.id)} disabled={acting === `save-${row.id}`} style={{ height: 26, padding: '0 14px', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'var(--accent)', border: 'none', color: '#000', cursor: 'pointer', opacity: acting === `save-${row.id}` ? 0.5 : 1 }}>Save</button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* View mode */
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* Thumbnail */}
+                  {!row.coming_soon && row.youtube_id && (
+                    <img
+                      src={youtubeThumb(row.youtube_id)}
+                      alt=""
+                      style={{ width: 72, height: 40, objectFit: 'cover', flexShrink: 0, background: '#000' }}
+                    />
+                  )}
+                  {row.coming_soon && (
+                    <div style={{ width: 72, height: 40, flexShrink: 0, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.3 }}>COMING<br/>SOON</span>
+                    </div>
+                  )}
+
+                  {/* Info */}
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.title}</span>
+                      {row.coming_soon && <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', padding: '1px 5px', background: 'rgba(250,173,20,0.12)', color: '#faad14', border: '1px solid rgba(250,173,20,0.3)', flexShrink: 0 }}>COMING SOON</span>}
+                    </div>
+                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      {row.youtube_id || '—'}{row.duration ? ` · ${row.duration}` : ''}
+                    </span>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
+                    {/* Up/Down */}
+                    <button onClick={() => move(row.id, -1)} disabled={idx === 0 || !!acting} title="Move up" style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.3 : 1 }}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+                    </button>
+                    <button onClick={() => move(row.id, 1)} disabled={idx === rows.length - 1 || !!acting} title="Move down" style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: idx === rows.length - 1 ? 'not-allowed' : 'pointer', opacity: idx === rows.length - 1 ? 0.3 : 1 }}>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <button
+                      onClick={() => { setEditingId(row.id); setEditForm({ title: row.title, description: row.description, duration: row.duration, youtube_id: row.youtube_id, coming_soon: row.coming_soon }); }}
+                      style={{ height: 24, padding: '0 10px', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => remove(row.id)}
+                      disabled={acting === `del-${row.id}`}
+                      title="Delete"
+                      style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid var(--border)', color: '#f87171', cursor: 'pointer', opacity: acting === `del-${row.id}` ? 0.5 : 1 }}
+                    >
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Security panel ──────────────────────────────────────────────────────────
 
 interface SecurityFlag {
@@ -739,7 +1010,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     setPreset('custom');
   }
 
-  const [activeTab, setActiveTab] = useState<'stats' | 'security'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'videos'>('stats');
   const [securityUnreviewed, setSecurityUnreviewed] = useState(0);
 
   const [snapping, setSnapping] = useState(false);
@@ -904,7 +1175,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
         {/* Tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px' }}>
-          {(['stats', 'security'] as const).map(tab => (
+          {(['stats', 'security', 'videos'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -920,7 +1191,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                 cursor: 'pointer', marginBottom: -1,
               }}
             >
-              {tab === 'stats' ? 'Stats' : 'Security'}
+              {tab === 'stats' ? 'Stats' : tab === 'security' ? 'Security' : 'Videos'}
               {tab === 'security' && securityUnreviewed > 0 && (
                 <span style={{
                   marginLeft: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -939,6 +1210,10 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
         <div style={{ padding: mobile ? '12px' : '20px' }}>
           {activeTab === 'security' && (
             <SecurityPanel session={session} />
+          )}
+
+          {activeTab === 'videos' && (
+            <VideosPanel session={session} />
           )}
 
           {activeTab === 'stats' && loading && (

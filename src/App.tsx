@@ -21,6 +21,7 @@ import { FaqModal } from './components/FaqModal';
 import { BetaNoticeModal, shouldShowBetaNotice } from './components/BetaNoticeModal';
 import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components/WhatsNewModal';
 import { ContactModal } from './components/ContactModal';
+import { TutorialsModal } from './components/TutorialsModal';
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { LoginSplash } from './components/LoginSplash';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
@@ -1090,6 +1091,7 @@ function App() {
         {showEula     && <EulaModal     onClose={() => setShowEula(false)} />}
         {showContact  && <ContactModal  onClose={() => setShowContact(false)} />}
         {showTutorial && <TutorialOverlay onClose={() => setShowTutorial(false)} />}
+        {showVideo    && <TutorialsModal  onClose={() => setShowVideo(false)} />}
         {showSplash   && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
         {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
       </MobileLayout>
@@ -1247,40 +1249,9 @@ function App() {
       {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} onContact={() => { setShowWhatsNew(false); setShowContact(true); }} />}
       {showContact  && <ContactModal  onClose={() => setShowContact(false)}  />}
       {showTutorial && <TutorialOverlay onClose={() => setShowTutorial(false)} />}
+      {showVideo    && <TutorialsModal  onClose={() => setShowVideo(false)} />}
       {showSplash && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
       {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
-      {showVideo && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9980, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          onClick={() => setShowVideo(false)}
-        >
-          <div style={{ position: 'relative', width: 'min(900px, 92vw)' }} onClick={(e) => e.stopPropagation()}>
-            <button
-              onClick={() => setShowVideo(false)}
-              style={{
-                position: 'absolute', top: -36, right: 0,
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 5,
-                fontSize: 11, fontFamily: 'var(--font-mono)',
-              }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-              Close
-            </button>
-            <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0 }}>
-              <iframe
-                src="https://www.youtube.com/embed/80Fogz8q5_U?autoplay=1&rel=0"
-                title="AutoThresh Tutorial"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

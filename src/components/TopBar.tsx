@@ -481,14 +481,14 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
       <button
         className="btn btn-ghost"
         onClick={onVideo}
-        title="Watch the full video tutorial"
+        title="Watch video tutorials"
         style={{ height: 26 }}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
           <circle cx="12" cy="12" r="10"/>
           <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
         </svg>
-        Watch Tutorial
+        Watch Tutorials
       </button>
       <button
         className="btn btn-ghost"
