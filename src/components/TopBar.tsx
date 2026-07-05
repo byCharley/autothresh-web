@@ -6,6 +6,12 @@ import { AppIcon } from './AppIcon';
 // Add new entries at the TOP. Each `id` must be higher than all previous ones.
 const NOTIFICATIONS = [
   {
+    id: 5,
+    date: 'Jul 5, 2026',
+    title: 'Canvas Controls & Edge Softness',
+    body: 'New canvas border toggle in the toolbar hides the orange dashed outline around your artwork. B/W button on texture overlays converts any texture to black & white before blending. Edge softness now blurs the artwork mask before patterns are applied — consistent soft edges across all modes.',
+  },
+  {
     id: 4,
     date: 'Jul 2, 2026',
     title: 'v1.0.2 — CorelDRAW Export & Layer Renaming',
