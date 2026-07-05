@@ -55,7 +55,7 @@ function resolvePatterns(layers: LayerConfig[], global: PatternConfig): LayerCon
 function canvasFromImageData(imageData: ImageData): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = imageData.width; c.height = imageData.height;
-  c.getContext('2d')!.putImageData(imageData, 0, 0);
+  (c.getContext('2d', { colorSpace: 'srgb' }) as CanvasRenderingContext2D).putImageData(imageData, 0, 0);
   return c;
 }
 
@@ -266,8 +266,9 @@ function App() {
     const artSrcCanvas = canvasFromImageData(originalImage);
     const artExpCanvas = document.createElement('canvas');
     artExpCanvas.width = artScaleW; artExpCanvas.height = artScaleH;
-    artExpCanvas.getContext('2d')!.drawImage(artSrcCanvas, 0, 0, artScaleW, artScaleH);
-    const artImageData = artExpCanvas.getContext('2d')!.getImageData(0, 0, artScaleW, artScaleH);
+    const artExpCtx = artExpCanvas.getContext('2d', { colorSpace: 'srgb' }) as CanvasRenderingContext2D;
+    artExpCtx.drawImage(artSrcCanvas, 0, 0, artScaleW, artScaleH);
+    const artImageData = artExpCtx.getImageData(0, 0, artScaleW, artScaleH);
 
     const artBgMask = bgRemovalEnabled ? computeBackgroundMask(artImageData, bgTolerance) : null;
 

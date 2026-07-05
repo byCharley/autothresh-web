@@ -219,11 +219,10 @@ function PatternControls({
   onAngle: (v: number) => void;
   scaleMaxOverride?: number;
 }) {
-  const isHalftone = pattern.startsWith('halftone-');
-  const isGrain = pattern.startsWith('grain') || pattern.startsWith('noise');
-  const isMicro = pattern === 'grain-micro';
+  const isHalftone  = pattern.startsWith('halftone-');
+  const isGrain     = pattern.startsWith('grain') || pattern.startsWith('noise');
+  const isMicro     = pattern === 'grain-micro';
   const hasPattern = pattern !== 'none';
-  const scaleMin  = 1;
   const scaleMax  = scaleMaxOverride ?? (isGrain ? 6 : 40);
   const scaleStep = isGrain ? 0.5 : 1;
   return (
@@ -239,7 +238,7 @@ function PatternControls({
       {hasPattern && (
         <>
           {!isMicro && (
-            <Slider label="Scale" value={Math.min(scale, scaleMax)} min={scaleMin} max={scaleMax} step={scaleStep} onChange={onScale} />
+            <Slider label="Scale" value={Math.min(scale, scaleMax)} min={1} max={scaleMax} step={scaleStep} onChange={onScale} />
           )}
           <Slider label="Density" value={density} min={5} max={100} onChange={onDensity} unit="%" />
           {isHalftone && (
@@ -644,6 +643,7 @@ function PaletteSection() {
           <DitherPatternBtn id="blue-noise" label="Blue Noise" active={palettePattern === 'blue-noise'} onSelect={handlePatternSelect} />
           <DitherPatternBtn id="none" label="Solid" active={palettePattern === 'none'} onSelect={handlePatternSelect} />
         </div>
+
 
         {/* Controls — vary by pattern family */}
         {!isNone && (

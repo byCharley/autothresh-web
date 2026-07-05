@@ -9,11 +9,14 @@ export interface OverlayCategory {
   items: OverlayEntry[];
 }
 
+const CDN = 'https://fsmqocvxzzokcmcnnspj.supabase.co/storage/v1/object/public/overlays';
+
 function range(count: number, label: string, folder: string, prefix: string, ext: string, start = 1, pad = 2): OverlayEntry[] {
+  const encodedFolder = encodeURIComponent(folder);
   return Array.from({ length: count }, (_, i) => {
     const n = start + i;
     const num = String(n).padStart(pad, '0');
-    return { label: `${label} ${String(n).padStart(2, '0')}`, path: `/overlays/${folder}/${prefix}${num}${ext}` };
+    return { label: `${label} ${String(n).padStart(2, '0')}`, path: `${CDN}/${encodedFolder}/${prefix}${num}${ext}` };
   });
 }
 
@@ -28,7 +31,7 @@ export const OVERLAY_CATEGORIES: OverlayCategory[] = [
     label: 'Chalkboard',
     items: [
       ...range(99, 'Chalk', 'chalkboard', '', '.jpg', 1, 2),
-      { label: 'Chalk 100', path: '/overlays/chalkboard/100.jpg' },
+      { label: 'Chalk 100', path: `${CDN}/chalkboard/100.jpg` },
     ],
   },
   {
@@ -41,7 +44,7 @@ export const OVERLAY_CATEGORIES: OverlayCategory[] = [
     label: 'Film',
     items: Array.from({ length: 10 }, (_, i) => ({
       label: `Film ${String(i + 1).padStart(2, '0')}`,
-      path: `/overlays/film/AU-FG-Texture${i + 1}-8K.jpg`,
+      path: `${CDN}/film/AU-FG-Texture${i + 1}-8K.jpg`,
     })),
   },
   {
@@ -49,7 +52,7 @@ export const OVERLAY_CATEGORIES: OverlayCategory[] = [
     label: 'Halftone',
     items: Array.from({ length: 10 }, (_, i) => ({
       label: `Halftone ${String(i + 1).padStart(2, '0')}`,
-      path: `/overlays/halftones/Texture-${String(i + 1).padStart(2, '0')}.png`,
+      path: `${CDN}/halftones/Texture-${String(i + 1).padStart(2, '0')}.png`,
     })),
   },
   {
@@ -57,7 +60,7 @@ export const OVERLAY_CATEGORIES: OverlayCategory[] = [
     label: 'Rust',
     items: Array.from({ length: 50 }, (_, i) => ({
       label: `Rust ${String(i + 1).padStart(2, '0')}`,
-      path: `/overlays/rust/${i + 1}.jpg`,
+      path: `${CDN}/rust/${i + 1}.jpg`,
     })),
   },
 ];

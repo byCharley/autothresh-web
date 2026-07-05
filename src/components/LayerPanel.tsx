@@ -4,6 +4,7 @@ import type { GrainOverlay, GrainBlendMode } from '../store/useStore';
 import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, generateHarmonicPalettes } from '../engine/colorSeparation';
 import { nearestPantone, isShadowColor } from '../engine/pantoneMatch';
 import { OVERLAY_CATEGORIES } from '../engine/overlayManifest';
+import { preloadOverlay } from '../engine/overlayCache';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -1075,6 +1076,14 @@ function GrainOverlaysSection() {
                     <path d="M6 1 A5 5 0 0 1 6 11 Z" fill="currentColor"/>
                   </svg>
                 </button>
+                {/* B/W toggle */}
+                <button
+                  onClick={() => updateOverlay(ov.id, { grayscale: !ov.grayscale })}
+                  title={ov.grayscale ? 'B/W: on — click to restore color' : 'Convert texture to black & white'}
+                  style={{ width: 18, height: 18, flexShrink: 0, border: `1px solid ${ov.grayscale ? 'var(--accent)' : 'transparent'}`, background: ov.grayscale ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'transparent', borderRadius: 2, cursor: 'pointer', color: ov.grayscale ? 'var(--accent)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <span style={{ fontSize: 7, fontWeight: 700, letterSpacing: '-0.5px', fontFamily: 'var(--font-mono)', lineHeight: 1 }}>B/W</span>
+                </button>
                 {/* Up / Down reorder */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
                   <button onClick={() => moveOverlay(ov.id, -1)} disabled={idx === 0}
@@ -1185,9 +1194,12 @@ function GrainOverlaysSection() {
                   aspectRatio: '1', borderRadius: 3, overflow: 'hidden', cursor: 'pointer',
                   border: '1px solid var(--border)', position: 'relative',
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.outline = '2px solid var(--accent)'; }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.outline = '2px solid var(--accent)';
+                  preloadOverlay(item.path);
+                }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.outline = 'none'; }}>
-                <img src={item.path} alt={item.label}
+                <img src={item.path} alt={item.label} crossOrigin="anonymous"
                   style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   loading="lazy" />
                 <div style={{
@@ -1933,10 +1945,11 @@ const MODE_INFO = [
 ] as const;
 
 const MODE_OPTIONS = [
-  { value: 'threshold', label: 'Threshold' },
-  { value: 'palette',   label: 'Dither' },
-  { value: 'color-sep', label: 'Color Separation' },
-  { value: 'cmyk-pro',  label: 'CMYK Pro' },
+  { value: 'threshold', label: 'THRESHOLD' },
+  { value: 'palette',   label: 'DITHER' },
+  { value: 'color-sep', label: 'COLOR SEPARATION' },
+  { value: 'cmyk-pro',  label: 'CMYK PRO' },
+  { value: 'texture',   label: 'TEXTURE' },
 ] as const;
 
 function ModeSwitcher({ value, onChange, disabled }: {

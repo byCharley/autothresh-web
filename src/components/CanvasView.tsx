@@ -12,6 +12,7 @@ import type { LayerConfig, PatternConfig, ImageAdjustments } from '../engine/ima
 import { generateTextureMask } from '../engine/textureGenerator';
 import { buildImportanceMap } from '../engine/analysisPass';
 import { loadAllTextures } from '../engine/textureLoader';
+import { getCachedOverlay, setCachedOverlay } from '../engine/overlayCache';
 import { traceImageToSVG } from '../engine/vectorTracer';
 import { isShadowColor, nearestPantoneRgb } from '../engine/pantoneMatch';
 import { iccSeparateRaw, applyPostIcc, applyHalftoneToCmykPlates } from '../engine/cmykProEngine';
@@ -249,6 +250,7 @@ export function CanvasView() {
     grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
     bgEdgeSoftness,
     splitView, setSplitView,
+    showDotGrid, setShowDotGrid, dotGridColor, setDotGridColor,
     proCmykSettings, setProCmykPlates,
     printSimActive, setPrintSimLoading, viewingDistance,
   } = useStore();
@@ -416,22 +418,34 @@ export function CanvasView() {
   }, [fabricTexture]);
 
   // Preload grain overlay images so they're available synchronously in the render effect.
+  // Checks the shared module-level cache first — if the user hovered the thumbnail
+  // before clicking, the image is already loaded and this is instant.
   const [grainOverlayVersion, setGrainOverlayVersion] = useState(0);
   useEffect(() => {
     if (separationMode !== 'texture' || grainOverlays.length === 0) return;
     const paths = grainOverlays.map(o => o.path).filter(p => !grainOverlayImagesRef.current.has(p));
     if (paths.length === 0) return;
-    let loaded = 0;
+    let pending = 0;
     paths.forEach(path => {
+      const cached = getCachedOverlay(path);
+      if (cached) {
+        grainOverlayImagesRef.current.set(path, cached);
+        return;
+      }
+      pending++;
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.onload = () => {
+        setCachedOverlay(path, img);
         grainOverlayImagesRef.current.set(path, img);
-        loaded++;
-        if (loaded === paths.length) setGrainOverlayVersion(v => v + 1);
+        pending--;
+        if (pending === 0) setGrainOverlayVersion(v => v + 1);
       };
-      img.onerror = () => { loaded++; if (loaded === paths.length) setGrainOverlayVersion(v => v + 1); };
+      img.onerror = () => { pending--; if (pending === 0) setGrainOverlayVersion(v => v + 1); };
       img.src = path;
     });
+    // All resolved from cache — trigger re-render immediately
+    if (pending === 0) setGrainOverlayVersion(v => v + 1);
   }, [grainOverlays, separationMode]);
 
   // Keep zoomRef in sync so pinch handlers can read current zoom without stale closures.
@@ -1160,9 +1174,9 @@ export function CanvasView() {
             artPrevW, artPrevH,
           );
 
-          // Compute soft artwork alpha for edge feathering (texture mode handles this
-          // before overlays so blend modes interact with the feathered edge, not after).
-          // softEdgeAlpha[i] = 0 (background) → 255 (interior artwork), feathered at edges.
+          // Compute soft artwork alpha for edge feathering. Gaussian-blur the BG mask
+          // so edge pixels get intermediate alpha values; the pattern/texture on top
+          // naturally interacts with the feathered edge without any extra screening.
           let softEdgeAlpha: Uint8Array | null = null;
           if (localBgMask && bgEdgeSoftness > 0) {
             const fw = artPrevW, fh = artPrevH;
@@ -1183,39 +1197,13 @@ export function CanvasView() {
             bCtx.drawImage(mC, 0, 0);
             bCtx.filter = 'none';
             const bData = bCtx.getImageData(0, 0, fw, fh).data;
-            // Build binary noise-driven edge mask: interior=255, bg=0, edge zone=
-            // noise-thresholded so every pixel stays fully opaque or fully transparent.
-            // This creates a sharp, organic printed edge — the grain "bites into" the
-            // boundary instead of fading smoothly like a Gaussian blur would.
-            const paintValid = bgPaintMask && bgPaintMaskDims &&
-              bgPaintMaskDims.w === fw && bgPaintMaskDims.h === fh;
             softEdgeAlpha = new Uint8Array(localBgMask.length);
             for (let i = 0; i < softEdgeAlpha.length; i++) {
-              if (localBgMask[i] === 255) {
-                softEdgeAlpha[i] = 0; // hard background — never ink
-              } else if (paintValid && bgPaintMask![i] === 1) {
-                softEdgeAlpha[i] = 255; // user explicitly restored — always keep, bypass edge erosion
-              } else {
-                const blurred = bData[i * 4];
-                if (blurred >= 255) {
-                  softEdgeAlpha[i] = 255; // deep interior — always ink
-                } else if (blurred <= 0) {
-                  softEdgeAlpha[i] = 0;
-                } else {
-                  // Edge zone: hash-based per-pixel noise decides keep vs. drop.
-                  // More interior pixels (high blurred value) are more likely kept.
-                  const x = i % fw, y = Math.floor(i / fw);
-                  let h = (Math.imul(x, 1664525) + Math.imul(y, 1013904223)) | 0;
-                  h ^= (h >>> 16); h = Math.imul(h, 0x45D9F3B); h ^= (h >>> 16);
-                  const noise = (h >>> 1) / 0x7FFFFFFF;
-                  softEdgeAlpha[i] = (blurred / 255) > noise ? 255 : 0;
-                }
-              }
+              softEdgeAlpha[i] = bData[i * 4];
             }
-            // Apply binary mask to base composite before overlays — no semi-transparent
-            // pixels; every edge pixel is sharp, with organic grain determining the boundary.
+            // Multiply artwork alpha by the blurred mask — edges fade to transparent.
             for (let i = 0; i < softEdgeAlpha.length; i++) {
-              if (softEdgeAlpha[i] === 0) artComposite.data[i * 4 + 3] = 0;
+              artComposite.data[i * 4 + 3] = Math.round(artComposite.data[i * 4 + 3] * softEdgeAlpha[i] / 255);
             }
           }
 
@@ -1232,7 +1220,7 @@ export function CanvasView() {
               if (!img) continue;
 
               const hasLevels = ov.levelsIn && (ov.levelsIn[0] !== 0 || ov.levelsIn[1] !== 255);
-              const needsTemp = (ov.clipToArtwork && (localBgMask || softEdgeAlpha)) || hasLevels || ov.invert;
+              const needsTemp = (ov.clipToArtwork && (localBgMask || softEdgeAlpha)) || hasLevels || ov.invert || ov.grayscale;
 
               if (needsTemp) {
                 const tmpC = document.createElement('canvas');
@@ -1248,6 +1236,10 @@ export function CanvasView() {
                     td.data[pi + 1] = 255 - td.data[pi + 1];
                     td.data[pi + 2] = 255 - td.data[pi + 2];
                   }
+                  if (ov.grayscale) {
+                    const lum = Math.round(td.data[pi] * 0.299 + td.data[pi + 1] * 0.587 + td.data[pi + 2] * 0.114);
+                    td.data[pi] = td.data[pi + 1] = td.data[pi + 2] = lum;
+                  }
                   if (hasLevels) {
                     for (let c = 0; c < 3; c++) {
                       td.data[pi + c] = Math.round(Math.max(0, Math.min(1, (td.data[pi + c] - inBlack) / range)) * 255);
@@ -1255,8 +1247,7 @@ export function CanvasView() {
                   }
                   if (ov.clipToArtwork) {
                     if (softEdgeAlpha) {
-                      // Binary clip — keeps overlay sharp at the noise-driven edge boundary
-                      if (softEdgeAlpha[pi >> 2] === 0) td.data[pi + 3] = 0;
+                      td.data[pi + 3] = Math.round(td.data[pi + 3] * softEdgeAlpha[pi >> 2] / 255);
                     } else if (localBgMask && localBgMask[pi >> 2] === 255) {
                       td.data[pi + 3] = 0;
                     }
@@ -1391,8 +1382,9 @@ export function CanvasView() {
           artComposite = renderComposite(renderDisplayLayers, artPrevW, artPrevH, true, '#ffffff', !knockoutEnabled);
         }
 
-        // BG edge feathering — soft alpha at artwork boundary (all modes except texture,
-        // which handles it earlier so overlay blend modes see the feathered edge).
+        // BG edge softness — Gaussian-blur the BG mask so edge pixels get intermediate
+        // alpha values. The artwork pattern (halftone, threshold dots) sits on top and
+        // naturally interacts with the feathered alpha — no separate edge screen needed.
         if (artComposite && localBgMask && bgEdgeSoftness > 0 && separationMode !== 'texture') {
           const fw = artPrevW, fh = artPrevH;
           const maskC = document.createElement('canvas');
@@ -1789,8 +1781,9 @@ export function CanvasView() {
     img.onload = () => {
       const c = document.createElement('canvas');
       c.width = img.naturalWidth; c.height = img.naturalHeight;
-      c.getContext('2d')!.drawImage(img, 0, 0);
-      const original = c.getContext('2d')!.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+      const cCtx = c.getContext('2d', { colorSpace: 'srgb' }) as CanvasRenderingContext2D;
+      cCtx.drawImage(img, 0, 0);
+      const original = cCtx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
       const preview  = scaleImageData(original, MAX_PREVIEW_DIM);
       setOriginalImage(original, preview, file.name);
       setCanvasColor(detectBackgroundColor(preview));
@@ -2039,10 +2032,15 @@ export function CanvasView() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
+  const dotGridStyle = showDotGrid
+    ? { backgroundImage: `radial-gradient(circle, ${dotGridColor}26 1px, transparent 1px)`, backgroundSize: '28px 28px' }
+    : {};
+
   return (
     <div
       ref={containerRef}
       className="canvas-view"
+      style={dotGridStyle}
       data-tutorial="tutorial-canvas"
       onWheel={handleWheel}
       onPointerDown={(e) => {
@@ -2479,6 +2477,39 @@ export function CanvasView() {
                 )}
               </>
             )}
+            {/* Dot grid toggle — pushed to far right */}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 }}>
+              <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+              <button
+                className="btn btn-ghost btn-icon"
+                title={showDotGrid ? 'Hide dot grid' : 'Show dot grid'}
+                style={{
+                  width: 26, height: 26,
+                  color: showDotGrid ? 'var(--accent)' : 'var(--text-muted)',
+                  border: showDotGrid ? '1px solid var(--accent)' : '1px solid transparent',
+                  background: showDotGrid ? 'var(--accent-dim)' : undefined,
+                }}
+                onClick={() => setShowDotGrid(!showDotGrid)}
+              >
+                <svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor">
+                  <circle cx="3" cy="3" r="1.4"/><circle cx="10" cy="3" r="1.4"/><circle cx="17" cy="3" r="1.4"/>
+                  <circle cx="3" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="17" cy="10" r="1.4"/>
+                  <circle cx="3" cy="17" r="1.4"/><circle cx="10" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/>
+                </svg>
+              </button>
+              {showDotGrid && (
+                <input
+                  type="color"
+                  value={dotGridColor}
+                  onChange={(e) => setDotGridColor(e.target.value)}
+                  title="Dot grid color"
+                  style={{
+                    width: 20, height: 20, padding: 1, border: '1px solid var(--border)',
+                    borderRadius: 2, cursor: 'pointer', background: 'none', flexShrink: 0,
+                  }}
+                />
+              )}
+            </div>
           </div>
 
           <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}

@@ -161,7 +161,11 @@ export function kMeansOklab(
 ): RGB[] {
   const { data, width, height } = imageData;
   const n = width * height;
-  const step = Math.max(1, Math.floor(n / 6000));
+  let step = Math.max(1, Math.floor(n / 6000));
+  // When step is an exact multiple of image width, every sampled pixel lands on
+  // column 0. If that column is entirely background the sample set is empty and
+  // the fallback returns hardcoded grays. Nudge by 1 to break the alignment.
+  if (width > 0 && step > 1 && step % width === 0) step++;
 
   const effectiveK  = k;
   const chromaBoost = colorPriority * 2;
@@ -172,6 +176,15 @@ export function kMeansOklab(
     if (bgMask?.[i] === 255 || data[i * 4 + 3] < 128) continue;
     samples.push(rgbToOklab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]));
     weights.push(importanceMap ? 0.5 + importanceMap[i] * 1.5 : 1);
+  }
+  // If every sampled pixel was background, retry without the mask so we still
+  // extract meaningful colors rather than returning hardcoded grays.
+  if (samples.length === 0) {
+    for (let i = 0; i < n; i += step) {
+      if (data[i * 4 + 3] < 128) continue;
+      samples.push(rgbToOklab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]));
+      weights.push(1);
+    }
   }
   if (samples.length === 0) return [[20, 20, 20], [120, 120, 120], [220, 220, 220]].slice(0, effectiveK) as RGB[];
 
@@ -258,25 +271,16 @@ export function colorSeparate(
   const patVals = usePattern ? (buildPatternValues(w, h, stub, 0) as Float32Array | null) : null;
 
   // How far to nudge a pixel's effective L position before nearest-cluster lookup.
-  // At density=100 or pattern=none: 0 (hard edges).
-  // As density decreases: grows, widening the organic blend zone at boundaries.
   const perturbStrength = usePattern ? (1 - patternDensity / 100) * MAX_PERTURB : 0;
 
   // 3. Assign every pixel to nearest cluster, with pattern-driven L perturbation.
-  //
-  // Pixels deep inside a color zone are unaffected — the nudge can't bridge the
-  // full distance to the next cluster. Only pixels near a boundary "tip" one way
-  // or the other based on the pattern value, producing organic, dithered transitions
-  // that blend gradients naturally instead of creating holes in solid regions.
   const assignment = new Int32Array(n).fill(-1);
+
   for (let i = 0; i < n; i++) {
     if (bgMask?.[i] === 255) continue;
     if (data[i * 4 + 3] < 128) continue;
     const ri = data[i * 4], gi = data[i * 4 + 1], bi = data[i * 4 + 2];
     const lab = rgbToOklab(ri, gi, bi);
-    // Perturb the L axis by the pattern value before nearest-cluster lookup.
-    // Pixels deep inside a zone are unaffected; boundary pixels tip one way or
-    // the other based on the pattern, creating organic shaped edges.
     const dL = patVals ? (patVals[i] - 0.5) * 2 * perturbStrength : 0;
     const labQ: OKLab = [lab[0] + dL, lab[1], lab[2]];
     let minD = Infinity, nearest = 0;
@@ -287,9 +291,8 @@ export function colorSeparate(
     assignment[i] = nearest;
   }
 
-  // 4. Build one mask per cluster — every assigned pixel is solid ink.
-  // No secondary threshold, no holes. The pattern's influence is entirely in
-  // where the boundaries fall, not in whether a pixel prints at all.
+  // 4. Standard path: every assigned pixel is solid ink.
+  // The pattern's influence is entirely in where boundaries fall.
   const layers: ProcessedLayer[] = colors.map(([cr, cg, cb], ci) => {
     const mask = new Uint8Array(n);
     for (let i = 0; i < n; i++) {

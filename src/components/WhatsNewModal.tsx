@@ -15,6 +15,20 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-05',
+    label: 'Canvas Controls & Edge Softness',
+    added: [
+      'Canvas dot grid toggle — new button in the canvas toolbar turns the background dot grid on/off. A color picker next to it lets you change the dot color.',
+      'B/W button on texture overlays — desaturates any texture to black & white before blending, ideal for monotone fabric prints.',
+    ],
+    improved: [
+      'Edge softness now blurs the artwork\'s alpha mask before any pattern is applied — the selected halftone or texture naturally creates the soft edge, giving consistent results across all separation modes.',
+    ],
+    changed: [
+      'True AM Halftone patterns removed — they weren\'t producing reliable output and will return in a future update.',
+    ],
+  },
+  {
     date: '2026-07-02',
     label: 'v1.0.2 — CorelDRAW Export & Layer Renaming',
     added: [
