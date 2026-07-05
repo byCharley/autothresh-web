@@ -94,10 +94,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       if (action === 'expire') {
+        // Upsert: works whether the user is already flagged or brand new
+        const r = await sb('security_flags', 'POST', {
+          email: email.toLowerCase(),
+          reason: notes ?? 'Manually blocked by creator',
+          confidence: 'high',
+          auto_flagged: false,
+          reviewed: true,
+          expired: true,
+        });
+        if (!r.ok) {
+          // Row already exists — patch it instead
+          await sb(
+            `security_flags?email=eq.${encodeURIComponent(email.toLowerCase())}`,
+            'PATCH',
+            { expired: true, reviewed: true, notes: notes ?? null },
+          );
+        }
+        return res.status(200).json({ ok: true });
+      }
+
+      if (action === 'unblock') {
         await sb(
           `security_flags?email=eq.${encodeURIComponent(email)}`,
           'PATCH',
-          { expired: true, reviewed: true, notes: notes ?? null },
+          { expired: false, reviewed: true, notes: notes ?? null },
         );
         return res.status(200).json({ ok: true });
       }
@@ -120,13 +141,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (action === 'flag') {
-        // Manual flag from creator dashboard
         await sb('security_flags', 'POST', {
           email: email.toLowerCase(),
           reason: notes ?? 'Manually flagged by creator',
           confidence: 'high',
           auto_flagged: false,
-          reviewed: true,
+          reviewed: false,
+          expired: false,
         });
         return res.status(200).json({ ok: true });
       }

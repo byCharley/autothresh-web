@@ -340,12 +340,16 @@ function ConfidenceBadge({ level }: { level: string }) {
 }
 
 function SecurityPanel({ session }: { session: Session }) {
-  const [data, setData]       = useState<SecurityData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-  const [acting, setActing]   = useState<string | null>(null);
-  const [notes, setNotes]     = useState<Record<string, string>>({});
-  const [filter, setFilter]   = useState<'all' | 'unreviewed' | 'expired'>('unreviewed');
+  const [data, setData]         = useState<SecurityData | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const [acting, setActing]     = useState<string | null>(null);
+  const [notes, setNotes]       = useState<Record<string, string>>({});
+  const [filter, setFilter]     = useState<'all' | 'unreviewed' | 'expired'>('unreviewed');
+  const [manualEmail, setManualEmail] = useState('');
+  const [manualNote, setManualNote]   = useState('');
+  const [manualActing, setManualActing] = useState(false);
+  const [manualError, setManualError]   = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -368,6 +372,27 @@ function SecurityPanel({ session }: { session: Session }) {
       load();
     } catch { /* ignore */ }
     setActing(null);
+  }
+
+  async function manualBlock(action: 'flag' | 'expire') {
+    const email = manualEmail.trim().toLowerCase();
+    if (!email) return;
+    setManualActing(true);
+    setManualError(null);
+    try {
+      const r = await fetch('/api/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ action, email, notes: manualNote || null }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setManualEmail('');
+      setManualNote('');
+      load();
+    } catch (e) {
+      setManualError(e instanceof Error ? e.message : 'Failed');
+    }
+    setManualActing(false);
   }
 
   const filtered = data?.flags.filter(f => {
@@ -395,6 +420,75 @@ function SecurityPanel({ session }: { session: Session }) {
       )}
       {data && !loading && (
         <>
+          {/* Manual user management */}
+          <div style={{
+            padding: '12px 14px', border: '1px solid var(--border)',
+            background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8,
+          }}>
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
+              Manual User Management
+            </span>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="email"
+                placeholder="user@email.com"
+                value={manualEmail}
+                onChange={e => { setManualEmail(e.target.value); setManualError(null); }}
+                style={{
+                  height: 28, padding: '0 10px', fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  background: 'var(--surface-2)', border: '1px solid var(--border)',
+                  color: 'var(--text)', flex: '1 1 200px', minWidth: 180,
+                }}
+              />
+              <input
+                type="text"
+                placeholder="Reason / notes (optional)"
+                value={manualNote}
+                onChange={e => setManualNote(e.target.value)}
+                style={{
+                  height: 28, padding: '0 10px', fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  background: 'var(--surface-2)', border: '1px solid var(--border)',
+                  color: 'var(--text)', flex: '2 1 220px', minWidth: 160,
+                }}
+              />
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                <button
+                  onClick={() => manualBlock('expire')}
+                  disabled={manualActing || !manualEmail.trim()}
+                  title="Block immediately — flags and expires access"
+                  style={{
+                    height: 28, padding: '0 14px', fontSize: 10,
+                    fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                    background: '#f87171', border: 'none', color: '#000',
+                    cursor: manualActing || !manualEmail.trim() ? 'not-allowed' : 'pointer',
+                    opacity: manualActing || !manualEmail.trim() ? 0.5 : 1,
+                  }}
+                >
+                  Block
+                </button>
+                <button
+                  onClick={() => manualBlock('flag')}
+                  disabled={manualActing || !manualEmail.trim()}
+                  title="Flag for review without blocking access yet"
+                  style={{
+                    height: 28, padding: '0 14px', fontSize: 10,
+                    fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                    background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)',
+                    cursor: manualActing || !manualEmail.trim() ? 'not-allowed' : 'pointer',
+                    opacity: manualActing || !manualEmail.trim() ? 0.5 : 1,
+                  }}
+                >
+                  Flag Only
+                </button>
+              </div>
+            </div>
+            {manualError && (
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#f87171' }}>{manualError}</span>
+            )}
+          </div>
+
           {/* Summary */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <StatCard label="Flagged Accounts" value={data.summary.total} accent={data.summary.unreviewed > 0} />
@@ -542,17 +636,34 @@ function SecurityPanel({ session }: { session: Session }) {
                       </div>
                     )}
                     {flag.expired && (
-                      <button
-                        onClick={() => act('unflag', flag.email)}
-                        style={{
-                          height: 24, padding: '0 10px', fontSize: 10,
-                          fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                          background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)',
-                          cursor: 'pointer', flexShrink: 0,
-                        }}
-                      >
-                        Unblock
-                      </button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                        <button
+                          onClick={() => act('unblock', flag.email)}
+                          disabled={acting === flag.email + 'unblock'}
+                          title="Restore access — keeps flag for monitoring"
+                          style={{
+                            height: 24, padding: '0 12px', fontSize: 10,
+                            fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                            background: '#4ade80', border: 'none', color: '#000',
+                            cursor: 'pointer', opacity: acting === flag.email + 'unblock' ? 0.5 : 1,
+                          }}
+                        >
+                          Unblock
+                        </button>
+                        <button
+                          onClick={() => act('unflag', flag.email)}
+                          disabled={acting === flag.email + 'unflag'}
+                          title="Fully activate — restores access and removes flag entirely"
+                          style={{
+                            height: 24, padding: '0 12px', fontSize: 10,
+                            fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                            background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)',
+                            cursor: 'pointer', opacity: acting === flag.email + 'unflag' ? 0.5 : 1,
+                          }}
+                        >
+                          Activate
+                        </button>
+                      </div>
                     )}
                   </div>
                   {flag.notes && (
