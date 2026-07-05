@@ -1977,7 +1977,7 @@ export function CanvasView() {
     const padH = regMarkPadding * (canvasDims.w / totalDocW);
     const padV = regMarkPadding * (canvasDims.h / totalDocH);
     return {
-      markSize: Math.max(10, Math.min(36, padH * 0.65)),
+      markSize: Math.min(padH * 0.65, 0.22 * (canvasDims.w / totalDocW)),
       positions: [
         { x: padH,               y: padV },
         { x: canvasDims.w - padH, y: padV },

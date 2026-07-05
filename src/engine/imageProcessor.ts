@@ -1125,10 +1125,11 @@ export function drawRegistrationMarks(
   canvasW: number,
   canvasH: number,
   padding: number,  // pixels from each document edge to mark center
-  color = '#000000'
+  color = '#000000',
+  dpi = 300,        // used to fix mark size to a consistent physical dimension
 ) {
-  // Marks placed inside each corner and at top/bottom center of the document
-  const markSize = Math.max(16, Math.min(60, padding * 0.65));
+  // Cap at 0.22" physical diameter so marks are identical between preview and Photoshop
+  const markSize = Math.min(padding * 0.65, 0.22 * dpi);
   const positions = [
     [padding, padding],
     [canvasW - padding, padding],

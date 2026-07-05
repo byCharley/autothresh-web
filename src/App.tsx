@@ -199,8 +199,11 @@ function App() {
     return <SubscribePage firstName={session?.firstName} email={session?.email} onLogout={logout} onSwitchAccount={switchAccount} />;
   }
 
-  function buildColorRefCanvas(refColors: RGB[]): HTMLCanvasElement {
-    const S = 56, labelH = 28, gap = 6, pad = 14;
+  function buildColorRefCanvas(refColors: RGB[], dpi = 72): HTMLCanvasElement {
+    // Scale swatch dimensions by DPI so the reference card is the same physical
+    // size regardless of document resolution (readable in Photoshop at 300 DPI).
+    const sc = dpi / 72;
+    const S = Math.round(56 * sc), labelH = Math.round(28 * sc), gap = Math.round(6 * sc), pad = Math.round(14 * sc);
     const cols = Math.min(refColors.length, 5);
     const rows = Math.ceil(refColors.length / cols);
     const w = pad * 2 + cols * S + (cols - 1) * gap;
@@ -217,15 +220,15 @@ function App() {
       ctx.fillStyle = hexVal;
       ctx.fillRect(x, y, S, S);
       ctx.strokeStyle = 'rgba(0,0,0,0.12)';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = Math.max(1, sc);
       ctx.strokeRect(x + 0.5, y + 0.5, S - 1, S - 1);
       ctx.fillStyle = '#111111';
-      ctx.font = 'bold 9px monospace';
+      ctx.font = `bold ${Math.round(9 * sc)}px monospace`;
       ctx.textAlign = 'center';
-      ctx.fillText(`Color ${i + 1}`, x + S / 2, y + S + 11);
+      ctx.fillText(`Color ${i + 1}`, x + S / 2, y + S + Math.round(11 * sc));
       ctx.fillStyle = '#666666';
-      ctx.font = '8px monospace';
-      ctx.fillText(hexVal, x + S / 2, y + S + 22);
+      ctx.font = `${Math.round(8 * sc)}px monospace`;
+      ctx.fillText(hexVal, x + S / 2, y + S + Math.round(22 * sc));
     });
     return c;
   }
@@ -521,7 +524,7 @@ function App() {
       }
       const canvas = canvasFromImageData(data);
       if (withMarks && showRegistrationMarks) {
-        drawRegistrationMarks(canvas.getContext('2d')!, docPxW, docPxH, regPaddingPx, contrastColor(canvasColor));
+        drawRegistrationMarks(canvas.getContext('2d')!, docPxW, docPxH, regPaddingPx, contrastColor(canvasColor), documentDpi);
       }
       return canvas;
     };
@@ -544,7 +547,7 @@ function App() {
       }
       const c = canvasFromImageData(data);
       if (showRegistrationMarks) {
-        drawRegistrationMarks(c.getContext('2d')!, docPxW, docPxH, regPaddingPx, '#000000');
+        drawRegistrationMarks(c.getContext('2d')!, docPxW, docPxH, regPaddingPx, '#000000', documentDpi);
       }
       return c;
     };
@@ -597,7 +600,7 @@ function App() {
       }
       dCtx.drawImage(canvasFromImageData(artComposite), artOffX, artOffY);
       if (withMarks && showRegistrationMarks) {
-        drawRegistrationMarks(dCtx, docPxW, docPxH, regPaddingPx, '#000000');
+        drawRegistrationMarks(dCtx, docPxW, docPxH, regPaddingPx, '#000000', documentDpi);
       }
       return docCanvas;
     };
@@ -708,7 +711,7 @@ function App() {
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         // Plates (grayscale positives) + proofs on white and on garment
         const zip    = new JSZip();
-        const plates = zip.folder('plates')!;
+        const plates = zip.folder(baseName)!;
         for (const pl of visibleLayers) {
           plates.file(`${layerName(pl).toLowerCase().replace(/\s*·\s*/g, '-')}.png`, await pngOf(buildCmykPlateCanvas(pl)));
         }
@@ -727,7 +730,7 @@ function App() {
         }
       } else {
         const zip    = new JSZip();
-        const folder = zip.folder('screen-print')!;
+        const folder = zip.folder(baseName)!;
         if (underbase) folder.file('underbase.png', await pngOf(buildUnderbaseCanvas(underbaseChoke)));
         for (const pl of visibleLayers) {
           folder.file(`${layerName(pl).toLowerCase()}.png`, await pngOf(buildLayerCanvas(pl, true)));
@@ -736,7 +739,7 @@ function App() {
         if (includeColorInfo) {
           const refColors: RGB[] = separationMode === 'color-sep' ? csExportColors
             : artLayers.map(l => l.color as RGB);
-          if (refColors.length > 0) folder.file('color-reference.png', await pngOf(buildColorRefCanvas(refColors)));
+          if (refColors.length > 0) folder.file('color-reference.png', await pngOf(buildColorRefCanvas(refColors, documentDpi)));
         }
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen.zip`);
       }
@@ -795,7 +798,7 @@ function App() {
           const pCtx = proofCanvas.getContext('2d')!;
           pCtx.drawImage(canvasFromImageData(proofData), artOffX, artOffY);
           if (showRegistrationMarks) {
-            drawRegistrationMarks(pCtx, docPxW, docPxH, regPaddingPx, '#000000');
+            drawRegistrationMarks(pCtx, docPxW, docPxH, regPaddingPx, '#000000', documentDpi);
           }
 
           const buffer = writePsd({
@@ -860,7 +863,7 @@ function App() {
           : artLayers.map(l => l.color as RGB);
         const colorRefLayer = (includeColorInfo && refColors.length > 0) ? [{
           name: 'Color Reference',
-          canvas: buildColorRefCanvas(refColors),
+          canvas: buildColorRefCanvas(refColors, documentDpi),
           top: 0, left: 0,
           blendMode: 'normal' as const,
           opacity: 1,
@@ -911,7 +914,7 @@ function App() {
         saveAs(new Blob([buf], { type: 'image/tiff' }), `${baseName}-dtg.tiff`);
       } else {
         const zip    = new JSZip();
-        const folder = zip.folder('screen-print-tiff')!;
+        const folder = zip.folder(baseName)!;
         if (underbase) folder.file('underbase.tiff', encodeTiff(getPixels(buildUnderbaseCanvas(underbaseChoke)), documentDpi));
         for (const pl of visibleLayers) {
           const buf = encodeTiff(getPixels(buildLayerCanvas(pl, true)), documentDpi);
@@ -921,7 +924,7 @@ function App() {
         if (includeColorInfo) {
           const refColors: RGB[] = separationMode === 'color-sep' ? csExportColors
             : artLayers.map(l => l.color as RGB);
-          if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors)));
+          if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors, documentDpi)));
         }
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-tiff.zip`);
       }
@@ -945,7 +948,7 @@ function App() {
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         // One grayscale plate EPS per CMYK channel
         const zip    = new JSZip();
-        const folder = zip.folder('plates-eps')!;
+        const folder = zip.folder(baseName)!;
         for (const pl of visibleLayers) {
           const name = layerName(pl).toLowerCase().replace(/\s*·\s*/g, '-');
           folder.file(`${name}.eps`, epsOf(buildCmykPlateCanvas(pl), layerName(pl)));
@@ -956,7 +959,7 @@ function App() {
       } else {
         // Screen-print separation modes: one EPS per color layer + optional underbase
         const zip    = new JSZip();
-        const folder = zip.folder('screen-print-eps')!;
+        const folder = zip.folder(baseName)!;
         if (underbase) {
           folder.file('underbase.eps', epsOf(buildUnderbaseCanvas(underbaseChoke), 'Underbase · #FFFFFF', [255, 255, 255]));
         }
@@ -966,7 +969,7 @@ function App() {
         }
         if (includeColorInfo) {
           const refColors: RGB[] = separationMode === 'color-sep' ? csExportColors : artLayers.map(l => l.color as RGB);
-          if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors)));
+          if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors, documentDpi)));
         }
         saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-eps.zip`);
       }
@@ -978,7 +981,7 @@ function App() {
     // import guide. Intended for screen printers who work in CorelDRAW.
     if (format === 'cdr') {
       const zip    = new JSZip();
-      const folder = zip.folder('corel-separations')!;
+      const folder = zip.folder(baseName)!;
 
       const epsOf = (canvas: HTMLCanvasElement, title: string, spotColor?: [number,number,number] | null) =>
         encodeEps(canvas, { dpi: documentDpi, title, spotColor: spotColor ?? null, grayscale: true });
