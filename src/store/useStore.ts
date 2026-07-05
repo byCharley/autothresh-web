@@ -282,8 +282,7 @@ interface AppState {
   underbaseDensity: number;
   pantonePreviewActive: boolean;
   splitView: boolean;
-  showDotGrid: boolean;
-  dotGridColor: string;
+  showCanvasBorder: boolean;
 
   globalPattern: PatternConfig;
 
@@ -411,8 +410,7 @@ interface AppState {
   setUnderbaseDensity: (v: number) => void;
   setPantonePreviewActive: (v: boolean) => void;
   setSplitView: (v: boolean) => void;
-  setShowDotGrid: (v: boolean) => void;
-  setDotGridColor: (v: string) => void;
+  setShowCanvasBorder: (v: boolean) => void;
   updateGlobalPattern: (updates: Partial<PatternConfig>) => void;
   setBgRemovalEnabled: (v: boolean) => void;
   setBgTolerance: (v: number) => void;
@@ -545,8 +543,7 @@ export const useStore = create<AppState>((set, get) => ({
   underbaseDensity: 85,
   pantonePreviewActive: false,
   splitView: false,
-  showDotGrid: true,
-  dotGridColor: '#ffffff',
+  showCanvasBorder: true,
   globalPattern: DEFAULT_GLOBAL_PATTERN,
   bgRemovalEnabled: ((localStorage.getItem('at-mode') as string | null) === 'cmyk-pro') ? false : true,
   bgTolerance: 30,
@@ -689,8 +686,7 @@ export const useStore = create<AppState>((set, get) => ({
   setUnderbaseDensity: (underbaseDensity) => set({ underbaseDensity }),
   setPantonePreviewActive: (pantonePreviewActive) => set({ pantonePreviewActive }),
   setSplitView: (splitView) => set({ splitView }),
-  setShowDotGrid: (showDotGrid) => set({ showDotGrid }),
-  setDotGridColor: (dotGridColor) => set({ dotGridColor }),
+  setShowCanvasBorder: (showCanvasBorder) => set({ showCanvasBorder }),
   updateGlobalPattern: (updates) =>
     set((s) => ({ globalPattern: { ...s.globalPattern, ...updates } })),
   setBgRemovalEnabled: (bgRemovalEnabled) => set({ bgRemovalEnabled, ...(!bgRemovalEnabled ? { bgPaintMode: 'off' as const } : {}) }),

@@ -250,7 +250,7 @@ export function CanvasView() {
     grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
     bgEdgeSoftness,
     splitView, setSplitView,
-    showDotGrid, setShowDotGrid, dotGridColor, setDotGridColor,
+    showCanvasBorder, setShowCanvasBorder,
     proCmykSettings, setProCmykPlates,
     printSimActive, setPrintSimLoading, viewingDistance,
   } = useStore();
@@ -2032,10 +2032,6 @@ export function CanvasView() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  const dotGridStyle = showDotGrid
-    ? { backgroundImage: `radial-gradient(circle, ${dotGridColor}26 1px, transparent 1px)`, backgroundSize: '28px 28px' }
-    : {};
-
   return (
     <div
       ref={containerRef}
@@ -2142,7 +2138,6 @@ export function CanvasView() {
       }}
       onClick={bgEyedropperActive ? handleEyedropperClick : undefined}
       style={{
-        ...dotGridStyle,
         cursor: bgEyedropperActive
           ? 'crosshair'
           : (bgPaintMode !== 'off' || paintMode !== 'off') && !isSpacePanning
@@ -2239,7 +2234,7 @@ export function CanvasView() {
                 width: canvasDims.w, height: canvasDims.h,
                 pointerEvents: 'none', color: contrastColor(canvasColor),
               }}>
-                {artworkBounds && (
+                {artworkBounds && showCanvasBorder && (
                   <rect
                     x={artworkBounds.x} y={artworkBounds.y}
                     width={artworkBounds.w} height={artworkBounds.h}
@@ -2477,38 +2472,24 @@ export function CanvasView() {
                 )}
               </>
             )}
-            {/* Dot grid toggle — pushed to far right */}
+            {/* Canvas border toggle — pushed to far right */}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2 }}>
               <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
               <button
                 className="btn btn-ghost btn-icon"
-                title={showDotGrid ? 'Hide dot grid' : 'Show dot grid'}
+                title={showCanvasBorder ? 'Hide canvas border' : 'Show canvas border'}
                 style={{
                   width: 26, height: 26,
-                  color: showDotGrid ? 'var(--accent)' : 'var(--text-muted)',
-                  border: showDotGrid ? '1px solid var(--accent)' : '1px solid transparent',
-                  background: showDotGrid ? 'var(--accent-dim)' : undefined,
+                  color: showCanvasBorder ? 'var(--accent)' : 'var(--text-muted)',
+                  border: showCanvasBorder ? '1px solid var(--accent)' : '1px solid transparent',
+                  background: showCanvasBorder ? 'var(--accent-dim)' : undefined,
                 }}
-                onClick={() => setShowDotGrid(!showDotGrid)}
+                onClick={() => setShowCanvasBorder(!showCanvasBorder)}
               >
-                <svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor">
-                  <circle cx="3" cy="3" r="1.4"/><circle cx="10" cy="3" r="1.4"/><circle cx="17" cy="3" r="1.4"/>
-                  <circle cx="3" cy="10" r="1.4"/><circle cx="10" cy="10" r="1.4"/><circle cx="17" cy="10" r="1.4"/>
-                  <circle cx="3" cy="17" r="1.4"/><circle cx="10" cy="17" r="1.4"/><circle cx="17" cy="17" r="1.4"/>
+                <svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="3 2">
+                  <rect x="1" y="1" width="18" height="18"/>
                 </svg>
               </button>
-              {showDotGrid && (
-                <input
-                  type="color"
-                  value={dotGridColor}
-                  onChange={(e) => setDotGridColor(e.target.value)}
-                  title="Dot grid color"
-                  style={{
-                    width: 20, height: 20, padding: 1, border: '1px solid var(--border)',
-                    borderRadius: 2, cursor: 'pointer', background: 'none', flexShrink: 0,
-                  }}
-                />
-              )}
             </div>
           </div>
 
