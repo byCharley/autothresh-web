@@ -398,7 +398,57 @@
       footer { flex-direction: column; align-items: flex-start; padding: 28px 16px; gap: 16px; }
       .footer-links { gap: 16px; flex-wrap: wrap; }
       .footer-copy { font-size: 9px; }
+
+      /* ─ Download ─ */
+      .download-grid { grid-template-columns: 1fr; max-width: 280px; }
     }
+  </style>
+
+  <style>
+    /* ── DOWNLOAD SECTION ── */
+    .download-section {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .download-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    .download-card {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 14px; padding: 32px 24px;
+      border: 1px solid var(--border); background: var(--surface);
+      transition: border-color 0.2s, transform 0.15s;
+      text-decoration: none; color: inherit; cursor: pointer;
+    }
+    .download-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .download-os-name {
+      font-family: var(--mono); font-size: 13px; font-weight: 700;
+      letter-spacing: 0.06em; color: var(--text);
+    }
+    .download-meta {
+      font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em;
+      color: var(--muted); text-transform: uppercase; text-align: center;
+    }
+    .download-btn {
+      font-family: var(--mono); font-size: 11px; font-weight: 700;
+      padding: 9px 20px; background: var(--accent); color: #000;
+      border: none; cursor: pointer; letter-spacing: 0.04em;
+      display: inline-flex; align-items: center; gap: 6px;
+      transition: background 0.15s;
+    }
+    .download-card:hover .download-btn { background: var(--accent-h); }
+    .download-note {
+      margin-top: 28px; text-align: center;
+      font-family: var(--mono); font-size: 10px; color: var(--muted);
+      letter-spacing: 0.04em; line-height: 1.8;
+    }
+    .download-note a { color: var(--accent); text-decoration: none; }
+    .download-note a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -612,6 +662,50 @@
         </a>
         <p class="price-fine">$90.95 billed after trial · Cancel anytime</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── DESKTOP DOWNLOAD ─── -->
+<section class="download-section">
+  <div class="container">
+    <div class="section-header fade-in" style="text-align:center">
+      <div class="section-label">Desktop App</div>
+      <h2 class="section-title">Also available as a<br />native desktop app.</h2>
+      <p class="section-sub" style="margin:0 auto">Download AutoThresh for Mac or Windows. Same tool, native window — no browser needed. Free with your active subscription.</p>
+    </div>
+    <div class="download-grid fade-in">
+
+      <!-- Mac -->
+      <a class="download-card" href="https://github.com/byCharley/autothresh-web/releases/latest" target="_blank" rel="noopener">
+        <svg class="download-os-icon" width="44" height="44" viewBox="0 0 814 1000" fill="currentColor">
+          <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-37.5-157.2-105.6C120.7 749.5 79 614 79 479.7c0-199.7 130.3-305.1 259.6-305.1 69.5 0 127.2 45.5 171.9 45.5 43 0 110.1-48.2 190.5-48.2 30.7 0 108.2 2.6 163.9 68.3zm-109.8-78.7c-22.7-36.2-66.2-64.3-116.4-64.3-7.4 0-14.8.6-22.1 1.9 1.9-15.6 2.6-31.3 2.6-46.9 0-57.4-19.5-117.9-57.4-163.3C452.5 47.5 380.6 15 312.1 15c-2.6 0-5.2.1-7.8.2 49.9 62.5 71.6 133.4 71.6 207 0 39.5-6.5 79-19.5 116.5 24.7 6.5 49.4 9.7 74.1 9.7 69.5 0 130.9-22.7 167.8-56.4z"/>
+        </svg>
+        <div class="download-os-name">Mac</div>
+        <div class="download-meta">Universal · Intel + Apple Silicon<br/>macOS 10.15+</div>
+        <div class="download-btn">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download .dmg
+        </div>
+      </a>
+
+      <!-- Windows -->
+      <a class="download-card" href="https://github.com/byCharley/autothresh-web/releases/latest" target="_blank" rel="noopener">
+        <svg class="download-os-icon" width="44" height="44" viewBox="0 0 88 88" fill="currentColor">
+          <path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529l.028 34.453L.028 75.48.026 45.7zm4.326-39.025L87.314 0v41.527l-47.318.376zm47.329 39.349l-.011 41.344-47.318-6.633-.066-34.752z"/>
+        </svg>
+        <div class="download-os-name">Windows</div>
+        <div class="download-meta">64-bit Installer · NSIS<br/>Windows 10+</div>
+        <div class="download-btn">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download .exe
+        </div>
+      </a>
+
+    </div>
+    <div class="download-note fade-in">
+      Free with any active subscription &nbsp;·&nbsp; Always up to date automatically<br/>
+      <a href="https://github.com/byCharley/autothresh-web/releases" target="_blank" rel="noopener">View all releases on GitHub →</a>
     </div>
   </div>
 </section>
