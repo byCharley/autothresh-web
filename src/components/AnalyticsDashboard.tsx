@@ -1367,7 +1367,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
             </svg>
             <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', letterSpacing: '0.04em' }}>
-              ANALYTICS
+              COMMAND CENTER
             </span>
             <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', background: 'rgba(var(--accent-rgb,255,200,0),0.1)', border: '1px solid var(--accent)', padding: '1px 6px', letterSpacing: '0.08em' }}>
               CREATOR

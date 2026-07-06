@@ -371,7 +371,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
       {subscriptionStatus === 'creator' && onAnalytics && (
         <button
           className="btn btn-ghost btn-icon"
-          title="Analytics dashboard"
+          title="Command Center"
           onClick={onAnalytics}
           style={{ height: 26, width: 30 }}
         >
