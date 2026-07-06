@@ -311,11 +311,12 @@ export function CurvesEditor({ points, onChange }: { points: CurvePoint[]; onCha
 
 interface Props {
   adj: import('../engine/imageProcessor').ImageAdjustments;
-  onAdjMode:  (m: AdjMode)          => void;
-  onLevels:   (lv: LevelsAdjustment) => void;
-  onCurves:   (pts: CurvePoint[])    => void;
-  onReset:    () => void;
-  onBasic:    (key: string, v: number) => void;
+  onAdjMode:      (m: AdjMode)          => void;
+  onLevels:       (lv: LevelsAdjustment) => void;
+  onCurves:       (pts: CurvePoint[])    => void;
+  onReset:        () => void;
+  onBasic:        (key: string, v: number) => void;
+  showSaturation?: boolean;
 }
 
 function TabBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -391,11 +392,11 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
   );
 }
 
-export function ImageAdjustPanel({ adj, onAdjMode, onLevels, onCurves, onReset, onBasic }: Props) {
+export function ImageAdjustPanel({ adj, onAdjMode, onLevels, onCurves, onReset, onBasic, showSaturation }: Props) {
   const mode    = adj.adjMode ?? 'basic';
   const isDirty = mode !== 'basic'
     ? true
-    : adj.exposure !== 0 || adj.contrast !== 0 || adj.shadows !== 0 || adj.highlights !== 0 || adj.blur !== 0;
+    : adj.exposure !== 0 || adj.contrast !== 0 || adj.shadows !== 0 || adj.highlights !== 0 || (adj.saturation ?? 0) !== 0 || adj.blur !== 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -417,10 +418,11 @@ export function ImageAdjustPanel({ adj, onAdjMode, onLevels, onCurves, onReset, 
       {/* Basic */}
       {mode === 'basic' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <Slider label="Exposure"   value={adj.exposure}   min={-100} max={100} onChange={v => onBasic('exposure', v)} />
-          <Slider label="Contrast"   value={adj.contrast}   min={-100} max={100} onChange={v => onBasic('contrast', v)} />
-          <Slider label="Shadows"    value={adj.shadows}    min={-100} max={100} onChange={v => onBasic('shadows', v)} />
-          <Slider label="Highlights" value={adj.highlights} min={-100} max={100} onChange={v => onBasic('highlights', v)} />
+          <Slider label="Exposure"   value={adj.exposure}          min={-100} max={100} onChange={v => onBasic('exposure', v)} />
+          <Slider label="Contrast"   value={adj.contrast}          min={-100} max={100} onChange={v => onBasic('contrast', v)} />
+          <Slider label="Shadows"    value={adj.shadows}           min={-100} max={100} onChange={v => onBasic('shadows', v)} />
+          <Slider label="Highlights" value={adj.highlights}        min={-100} max={100} onChange={v => onBasic('highlights', v)} />
+          {showSaturation && <Slider label="Saturation" value={adj.saturation ?? 0} min={-100} max={100} onChange={v => onBasic('saturation', v)} />}
         </div>
       )}
 

@@ -5,6 +5,7 @@ import { rgbToHex, hexToRgb, defaultPaletteColors, COLOR_PRESETS, kMeansColors, 
 import { nearestPantone, isShadowColor } from '../engine/pantoneMatch';
 import { OVERLAY_CATEGORIES } from '../engine/overlayManifest';
 import { preloadOverlay } from '../engine/overlayCache';
+import { detectDtgBgColor } from '../engine/dtgEngine';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -732,10 +733,11 @@ function InksSection() {
 
 // ─── Fabric Section ───────────────────────────────────────────────────────────
 
-function BackgroundSection() {
-  const [open, setOpen] = useState(false);
+function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [brand, setBrand] = useState('LA Apparel');
   const {
+    originalImage, separationMode,
     bgRemovalEnabled, bgTolerance, bgEdgeSoftness, setBgRemovalEnabled, setBgTolerance, setBgEdgeSoftness,
     bgSeedColors, setBgSeedColors, bgEyedropperActive, setBgEyedropperActive,
     bgPaintMask, bgPaintMode, setBgPaintMask, setBgPaintMode,
@@ -823,8 +825,8 @@ function BackgroundSection() {
                 </div>
               )}
 
-              {/* Paint-fix brush */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+              {/* Paint-fix brush — hidden in DTG mode (dedicated DtgPaintSection handles it) */}
+              <div style={{ display: separationMode === 'dtg' ? 'none' : 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
                 <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                   Paint Fix
                 </span>
@@ -855,12 +857,12 @@ function BackgroundSection() {
                   >Remove</button>
                 </div>
               </div>
-              {bgPaintMode !== 'off' && (
+              {bgPaintMode !== 'off' && separationMode !== 'dtg' && (
                 <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 1 }}>
                   Drag on image to {bgPaintMode} · [ ] to resize brush
                 </div>
               )}
-              {bgPaintMask && (
+              {bgPaintMask && separationMode !== 'dtg' && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
@@ -881,7 +883,19 @@ function BackgroundSection() {
           <SwitchRow
             label="Realistic View"
             checked={realisticOn}
-            onChange={(v) => setFabricTexture(v ? 'light' : 'none')}
+            onChange={(v) => {
+              if (!v) { setFabricTexture('none'); return; }
+              // When toggling on in DTG mode, auto-pick light/dark from artwork bg
+              if (separationMode === 'dtg' && originalImage) {
+                const [r, g, b] = detectDtgBgColor(originalImage);
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                setFabricTexture(lum < 128 ? 'dark' : 'light');
+              } else {
+                setFabricTexture('light');
+              }
+              // Realistic view requires Show Background to be on
+              if (!showFabricBg) setShowFabricBg(true);
+            }}
           />
           {realisticOn && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1232,6 +1246,97 @@ function GrainOverlaysSection() {
         </div>
       )}
     </div>
+  );
+}
+
+// ─── DTG Paint Section ────────────────────────────────────────────────────────
+
+function DtgPaintSection() {
+  const [open, setOpen] = useState(true);
+  const {
+    dtgPaintMask, dtgPaintMode, setDtgPaintMask, setDtgPaintMode,
+    brushSize, setBrushSize,
+    originalImage,
+  } = useStore();
+
+  const disabled = !originalImage;
+
+  return (
+    <>
+      <SectionHeader title="Paint Mask" open={open} onToggle={() => setOpen(!open)} />
+      {open && (
+        <div style={{
+          padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10,
+          opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? 'none' : 'auto',
+        }}>
+          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, opacity: 0.75 }}>
+            Paint directly on the canvas to erase or restore any part of the DTG image.
+          </div>
+
+          {/* Erase / Restore / Off buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+              Mode
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                onClick={() => setDtgPaintMode(dtgPaintMode === 'erase' ? 'off' : 'erase')}
+                title="Paint to erase (make transparent)"
+                style={{
+                  padding: '4px 8px', fontSize: 9,
+                  fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                  background: dtgPaintMode === 'erase' ? '#cc4400' : 'var(--surface-2)',
+                  color: dtgPaintMode === 'erase' ? '#fff' : 'var(--text-dim)',
+                  border: `1px solid ${dtgPaintMode === 'erase' ? '#cc4400' : 'var(--border)'}`,
+                  borderRadius: 3, cursor: 'pointer',
+                }}
+              >Erase</button>
+              <button
+                onClick={() => setDtgPaintMode(dtgPaintMode === 'restore' ? 'off' : 'restore')}
+                title="Paint to restore (make opaque)"
+                style={{
+                  padding: '4px 8px', fontSize: 9,
+                  fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                  background: dtgPaintMode === 'restore' ? '#1a7a40' : 'var(--surface-2)',
+                  color: dtgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
+                  border: `1px solid ${dtgPaintMode === 'restore' ? '#1a7a40' : 'var(--border)'}`,
+                  borderRadius: 3, cursor: 'pointer',
+                }}
+              >Restore</button>
+            </div>
+          </div>
+
+          {dtgPaintMode !== 'off' && (
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: -4 }}>
+              Drag on image to {dtgPaintMode} · [ ] to resize brush
+            </div>
+          )}
+
+          {/* Brush size slider */}
+          <Slider
+            label="Brush Size"
+            value={brushSize}
+            min={2} max={120} step={1}
+            onChange={setBrushSize}
+            unit="px"
+          />
+
+          {/* Clear painted overrides */}
+          {dtgPaintMask && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setDtgPaintMask(null, null); setDtgPaintMode('off'); }}
+                style={{
+                  fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  textDecoration: 'underline', padding: '0 2px',
+                }}
+              >clear paint</button>
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1937,6 +2042,12 @@ const MODE_INFO = [
     desc: 'Professional ICC-based RGB→CMYK separation using LittleCMS. Supports industry-standard profiles (SWOP, FOGRA39), GCR/UCR black generation, TAC ink limiting, and AM halftone screening. For process color screen printing.',
   },
   {
+    mode: 'dtg',
+    label: 'DTG/DTF',
+    title: 'DTG / DTF (Background Knockout)',
+    desc: 'Intelligently knocks out heavy backgrounds from artwork for Direct to Garment and Direct to Film printing. Pattern-based alpha reduction preserves edge detail while fading background areas to transparent.',
+  },
+  {
     mode: 'texture',
     label: 'Texture',
     title: 'Texture (Surface Layers)',
@@ -1949,6 +2060,7 @@ const MODE_OPTIONS = [
   { value: 'palette',   label: 'DITHER' },
   { value: 'color-sep', label: 'COLOR SEPARATION' },
   { value: 'cmyk-pro',  label: 'CMYK PRO' },
+  { value: 'dtg',       label: 'DTG / DTF' },
   { value: 'texture',   label: 'TEXTURE' },
 ] as const;
 
@@ -2108,7 +2220,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
   const [cmykDisclaimerNeverShow, setCmykDisclaimerNeverShow] = useState(false);
   const [showTextureDisclaimer, setShowTextureDisclaimer] = useState(false);
   const [textureDisclaimerNeverShow, setTextureDisclaimerNeverShow] = useState(false);
-  const MODES = ['threshold', 'palette', 'color-sep', 'cmyk-pro', 'texture'] as const;
+  const MODES = ['threshold', 'palette', 'color-sep', 'cmyk-pro', 'dtg', 'texture'] as const;
 
   function UnderbaseSection() {
     return (
@@ -2405,6 +2517,11 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
             <GrainOverlaysSection />
             <TextureSection />
             <BackgroundSection />
+          </>
+        ) : separationMode === 'dtg' ? (
+          <>
+            <BackgroundSection defaultOpen={true} />
+            <DtgPaintSection />
           </>
         ) : separationMode === 'cmyk' ? (
           <>

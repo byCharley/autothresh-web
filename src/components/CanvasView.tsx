@@ -22,6 +22,7 @@ import {
 } from '../engine/inkSimulator';
 import { generateCmykProUnderbase, chokeWhitePlate } from '../engine/underbaseEngine';
 import { applyFabricBlend } from '../engine/fabricBlend';
+import { applyDtgHalftone, detectDtgBgColor } from '../engine/dtgEngine';
 
 
 // ── CMYK Inspect Grid ─────────────────────────────────────────────────────────
@@ -178,6 +179,9 @@ export function CanvasView() {
   const bgPaintDraftRef     = useRef<Uint8Array | null>(null);
   const bgPaintDraftDimsRef = useRef({ w: 0, h: 0 });
   const isBgPaintingRef     = useRef(false);
+  const dtgPaintDraftRef     = useRef<Uint8Array | null>(null);
+  const dtgPaintDraftDimsRef = useRef({ w: 0, h: 0 });
+  const isDtgPaintingRef     = useRef(false);
   const spaceHeldRef     = useRef(false);
   const undoStackRef     = useRef<Record<string, Array<Uint8Array | null>>>({});
   // Cache K-means base colors (from unadjusted image) for color-sep.
@@ -221,11 +225,11 @@ export function CanvasView() {
   const {
     originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     globalPattern,
-    bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgSeedColors, setBgEyedropperActive,
+    bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgRemovalEnabled, setBgSeedColors, setBgEyedropperActive,
     bgPaintMask, bgPaintMaskDims, bgPaintMode, setBgPaintMask,
     showRegistrationMarks, regMarkPadding, documentBleed,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
-    canvasColor, showFabricBg, fabricTexture, fabricBlendStrength, fabricTextureDepth,
+    canvasColor, showFabricBg, setShowFabricBg, fabricTexture, setFabricTexture, fabricBlendStrength, fabricTextureDepth,
     imageAdjustments,
     documentDpi, documentWidthIn, documentHeightIn,
     separationMode, cmykLpi, cmykVisibility, cmykAngles, cmykParams, cmykViewMode,
@@ -249,6 +253,8 @@ export function CanvasView() {
     showCanvasBorder, setShowCanvasBorder,
     proCmykSettings, setProCmykPlates,
     printSimActive, setPrintSimLoading, viewingDistance,
+    dtgMethod, dtgFrequency, dtgAngle, dtgEdgesOnly, dtgDespeckle, dtgDespeckleRadius,
+    dtgPaintMask, dtgPaintMaskDims, dtgPaintMode, setDtgPaintMask, pushHistory,
   } = useStore();
 
   // Raw ICC planes cache — keyed by image+profile+adjustments only.
@@ -521,31 +527,41 @@ export function CanvasView() {
     ];
   }
 
-  // Apply image adjustments to a full RGB ImageData (used by color-sep mode).
-  // Adjusts each pixel's luminance proportionally, preserving hue/saturation.
+  // Apply image adjustments to a full RGB ImageData (used by color-sep mode and DTG).
+  // Applies luminance adjustments (exposure/contrast/shadows/highlights) then saturation.
   function applyAdjToImage(img: ImageData, adj: ImageAdjustments): ImageData {
+    const sat = adj.saturation ?? 0;
     const isNoop = adj.adjMode === 'basic' &&
       adj.exposure === 0 && adj.contrast === 0 &&
-      adj.shadows === 0 && adj.highlights === 0 && adj.blur === 0;
+      adj.shadows === 0 && adj.highlights === 0 && adj.blur === 0 && sat === 0;
     if (isNoop) return img;
     const { data, width, height } = img;
     const result = new ImageData(new Uint8ClampedArray(data), width, height);
     const rd = result.data;
     const n = width * height;
+    const satFactor = 1 + sat / 100;
     for (let i = 0; i < n; i++) {
       if (rd[i * 4 + 3] < 128) continue;
-      const r = rd[i * 4], g = rd[i * 4 + 1], b = rd[i * 4 + 2];
+      let r = rd[i * 4], g = rd[i * 4 + 1], b = rd[i * 4 + 2];
+      // Luminance adjustments
       const lum = 0.299 * r + 0.587 * g + 0.114 * b;
       const adjLum = applyGlobalAdjustments(lum, adj);
       if (lum < 1) {
-        const v = adjLum | 0;
-        rd[i * 4] = v; rd[i * 4 + 1] = v; rd[i * 4 + 2] = v;
+        r = g = b = adjLum | 0;
       } else {
         const scale = adjLum / lum;
-        rd[i * 4]     = Math.min(255, (r * scale + 0.5)) | 0;
-        rd[i * 4 + 1] = Math.min(255, (g * scale + 0.5)) | 0;
-        rd[i * 4 + 2] = Math.min(255, (b * scale + 0.5)) | 0;
+        r = Math.min(255, (r * scale + 0.5)) | 0;
+        g = Math.min(255, (g * scale + 0.5)) | 0;
+        b = Math.min(255, (b * scale + 0.5)) | 0;
       }
+      // Saturation: blend toward gray using perceived luminance
+      if (sat !== 0) {
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        r = Math.min(255, Math.max(0, (gray + satFactor * (r - gray) + 0.5))) | 0;
+        g = Math.min(255, Math.max(0, (gray + satFactor * (g - gray) + 0.5))) | 0;
+        b = Math.min(255, Math.max(0, (gray + satFactor * (b - gray) + 0.5))) | 0;
+      }
+      rd[i * 4] = r; rd[i * 4 + 1] = g; rd[i * 4 + 2] = b;
     }
     return result;
   }
@@ -573,6 +589,19 @@ export function CanvasView() {
     });
     ctx.putImageData(artData, 0, 0);
   }
+
+  // Auto-detect the DTG background color whenever the image changes while in DTG mode.
+  // Writes into bgSeedColors (left-panel bg controls). Fabric texture is NOT set here —
+  // it is only auto-selected when the user explicitly toggles Realistic View on.
+  useEffect(() => {
+    if (separationMode !== 'dtg' || !originalImage) return;
+    const [r, g, b] = detectDtgBgColor(originalImage);
+    const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    setBgSeedColors([hex]);
+    setBgRemovalEnabled(true);
+    setShowFabricBg(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originalImage, separationMode]);
 
   // Main processing effect.
   // Runs when settings change — zoom is a pure CSS transform and never triggers a reprocess.
@@ -1274,6 +1303,49 @@ export function CanvasView() {
           setProcessedLayers([]);
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
+        } else if (separationMode === 'dtg') {
+          // ── DTG/DTF: color-keyed bg knockout + AM halftone edge blend ─────────
+          // Detects artwork background color (auto or manual), knocks out matching
+          // pixels via color distance, and halftone-screens the transition zone so
+          // it blends naturally into the garment fabric.
+          const adjScaled = applyAdjToImage(artScaled, imageAdjustments);
+          const previewDpi = artPrevW / Math.max(0.001, documentWidthIn);
+
+          // Use the first bgSeedColor (auto-detected or eyedropper) as the knockout target.
+          // bgTolerance (1–100) maps to 0–200 color-distance range in the engine.
+          const dtgBgRgb: [number, number, number] | null =
+            bgSeedColors.length > 0 ? hexToRgb(bgSeedColors[0]) : null;
+
+          artComposite = applyDtgHalftone(
+            adjScaled,
+            {
+              method: dtgMethod,
+              frequency: dtgFrequency,
+              angle: dtgAngle,
+              edgesOnly: dtgEdgesOnly,
+              bgColor: dtgBgRgb,
+              bgTolerance: bgTolerance * 2,
+              despeckle: dtgDespeckle,
+              despeckleRadius: dtgDespeckleRadius,
+            },
+            // Whole-image mode uses the flood-fill bgMask for bg removal (left-panel controls).
+            // Edges-only mode builds its own color-keyed proximity map internally.
+            dtgEdgesOnly ? null : localBgMask,
+            previewDpi,
+          );
+          // Apply DTG paint mask (erase/restore brush strokes — DTG-specific, no other mode affected).
+          // val=2 (erase): force transparent. val=1 (restore): leave halftone alpha intact so
+          // background pixels stay transparent even when the restore brush passes over them.
+          if (dtgPaintMask && dtgPaintMaskDims &&
+              dtgPaintMaskDims.w === artPrevW && dtgPaintMaskDims.h === artPrevH) {
+            for (let i = 0; i < dtgPaintMask.length; i++) {
+              if (dtgPaintMask[i] === 2) artComposite.data[i * 4 + 3] = 0;
+            }
+          }
+          setDitherComposite({ data: artComposite, w: artPrevW, h: artPrevH });
+          setProcessedLayers([]);
+          setProcessedLayerDims({ w: artPrevW, h: artPrevH });
+
         } else {
           setDitherComposite(null);
           const resolved = resolvePatterns(layers, globalPattern);
@@ -1489,6 +1561,8 @@ export function CanvasView() {
     grainColorBlend, grainColorCount, grainBlur, grainOverlays, grainOverlayVersion,
     grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
     bgEdgeSoftness,
+    dtgMethod, dtgFrequency, dtgAngle, dtgEdgesOnly, dtgDespeckle, dtgDespeckleRadius,
+    dtgPaintMask, dtgPaintMaskDims,
     underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     proCmykSettings,
     fabricTexture, fabricBlendStrength, fabricTextureDepth, fabricVersion,
@@ -1666,7 +1740,8 @@ export function CanvasView() {
 
   // [ ] bracket keys to resize brush when any paint mode is active.
   useEffect(() => {
-    if (paintMode === 'off' && bgPaintMode === 'off') return;
+    const dtgActive = separationMode === 'dtg' && dtgPaintMode !== 'off';
+    if (paintMode === 'off' && bgPaintMode === 'off' && !dtgActive) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
       if (e.key === '[') setBrushSize(brushSizeRef.current - 5);
@@ -1674,7 +1749,7 @@ export function CanvasView() {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [paintMode, bgPaintMode, setBrushSize]);
+  }, [paintMode, bgPaintMode, dtgPaintMode, separationMode, setBrushSize]);
 
   // Spacebar: hold to temporarily pan instead of paint.
   useEffect(() => {
@@ -1903,6 +1978,49 @@ export function CanvasView() {
     bgPaintDraftRef.current = null;
   };
 
+  // ── DTG paint handlers ─────────────────────────────────────────────────────────
+  // Completely separate from bgPaint — only active in DTG mode, only touches dtgPaintMask.
+  const applyDtgPaintPoint = (e: React.PointerEvent) => {
+    const coords = getArtworkCoords(e);
+    if (!coords || !isDtgPaintingRef.current || !dtgPaintDraftRef.current) return;
+    const { cx, cy } = coords;
+    const { w, h } = dtgPaintDraftDimsRef.current;
+    const val: 1 | 2 = dtgPaintMode === 'restore' ? 1 : 2;
+    paintCircleOnMask(dtgPaintDraftRef.current, w, h, cx, cy, brushSize, val);
+    const octx = paintOverlayRef.current?.getContext('2d');
+    if (octx) {
+      octx.beginPath();
+      octx.arc(cx + (artworkBounds?.x ?? 0), cy + (artworkBounds?.y ?? 0), brushSize, 0, Math.PI * 2);
+      octx.fillStyle = dtgPaintMode === 'restore' ? 'rgba(40, 200, 120, 0.45)' : 'rgba(220, 60, 30, 0.45)';
+      octx.fill();
+    }
+  };
+
+  const handleDtgPaintMouseDown = (e: React.PointerEvent) => {
+    if (dtgPaintMode === 'off' || !artworkBounds) return;
+    e.stopPropagation();
+    pushHistory();
+    isDtgPaintingRef.current = true;
+    const dims = { w: artworkBounds.w, h: artworkBounds.h };
+    dtgPaintDraftDimsRef.current = dims;
+    const existingMask = (dtgPaintMask && dtgPaintMaskDims &&
+      dtgPaintMaskDims.w === dims.w && dtgPaintMaskDims.h === dims.h) ? dtgPaintMask : null;
+    dtgPaintDraftRef.current = existingMask ? new Uint8Array(existingMask) : new Uint8Array(dims.w * dims.h);
+    applyDtgPaintPoint(e);
+  };
+
+  const handleDtgPaintMouseMove = (e: React.PointerEvent) => {
+    if (!isDtgPaintingRef.current) return;
+    applyDtgPaintPoint(e);
+  };
+
+  const handleDtgPaintMouseUp = () => {
+    if (!isDtgPaintingRef.current || !dtgPaintDraftRef.current) return;
+    isDtgPaintingRef.current = false;
+    setDtgPaintMask(new Uint8Array(dtgPaintDraftRef.current), { ...dtgPaintDraftDimsRef.current });
+    dtgPaintDraftRef.current = null;
+  };
+
   // ── Derived values ─────────────────────────────────────────────────────────────
 
   const [cr, cg, cb] = hexToRgb(canvasColor);
@@ -2001,12 +2119,18 @@ export function CanvasView() {
             midX: (pts[0].x + pts[1].x) / 2 - rect.left,
             midY: (pts[0].y + pts[1].y) / 2 - rect.top,
           };
+          if (isDtgPaintingRef.current) handleDtgPaintMouseUp();
           if (isBgPaintingRef.current) handleBgPaintMouseUp();
           if (isPaintingRef.current) handlePaintMouseUp();
           setIsDragging(false);
           return;
         }
 
+        if (separationMode === 'dtg' && dtgPaintMode !== 'off' && !spaceHeldRef.current) {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          handleDtgPaintMouseDown(e);
+          return;
+        }
         if (bgPaintMode !== 'off' && !spaceHeldRef.current) {
           e.currentTarget.setPointerCapture(e.pointerId);
           handleBgPaintMouseDown(e);
@@ -2047,6 +2171,12 @@ export function CanvasView() {
           return;
         }
 
+        if (separationMode === 'dtg' && dtgPaintMode !== 'off' && !spaceHeldRef.current) {
+          handleDtgPaintMouseMove(e);
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (rect) setBrushPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+          return;
+        }
         if (bgPaintMode !== 'off' && !spaceHeldRef.current) {
           handleBgPaintMouseMove(e);
           const rect = containerRef.current?.getBoundingClientRect();
@@ -2066,6 +2196,7 @@ export function CanvasView() {
         activePointersRef.current.delete(e.pointerId);
         e.currentTarget.releasePointerCapture(e.pointerId);
         if (activePointersRef.current.size < 2) pinchRef.current = null;
+        if (isDtgPaintingRef.current) handleDtgPaintMouseUp();
         if (isBgPaintingRef.current) handleBgPaintMouseUp();
         if (isPaintingRef.current) handlePaintMouseUp();
         setIsDragging(false);
@@ -2074,19 +2205,20 @@ export function CanvasView() {
         activePointersRef.current.delete(e.pointerId);
         e.currentTarget.releasePointerCapture(e.pointerId);
         pinchRef.current = null;
+        if (isDtgPaintingRef.current) handleDtgPaintMouseUp();
         if (isBgPaintingRef.current) handleBgPaintMouseUp();
         if (isPaintingRef.current) handlePaintMouseUp();
         setBrushPos(null);
         setIsDragging(false);
       }}
       onPointerLeave={() => {
-        if (!isPaintingRef.current && !isBgPaintingRef.current) setBrushPos(null);
+        if (!isPaintingRef.current && !isBgPaintingRef.current && !isDtgPaintingRef.current) setBrushPos(null);
       }}
       onClick={bgEyedropperActive ? handleEyedropperClick : undefined}
       style={{
         cursor: bgEyedropperActive
           ? 'crosshair'
-          : (bgPaintMode !== 'off' || paintMode !== 'off') && !isSpacePanning
+          : (bgPaintMode !== 'off' || paintMode !== 'off' || (separationMode === 'dtg' && dtgPaintMode !== 'off')) && !isSpacePanning
           ? 'none'
           : isDragging ? 'grabbing'
           : (isSpacePanning || originalImage) ? 'grab'
@@ -2208,7 +2340,7 @@ export function CanvasView() {
           )}
 
           {/* Brush cursor — follows mouse, sized to match brush radius in display pixels */}
-          {(paintMode !== 'off' || bgPaintMode !== 'off') && brushPos && !isSpacePanning && (
+          {(paintMode !== 'off' || bgPaintMode !== 'off' || (separationMode === 'dtg' && dtgPaintMode !== 'off')) && brushPos && !isSpacePanning && (
             <svg style={{
               position: 'absolute',
               left: brushPos.x - brushSize * cssScale,
@@ -2224,11 +2356,15 @@ export function CanvasView() {
                 cy={brushSize * cssScale}
                 r={Math.max(1, brushSize * cssScale - 1)}
                 fill={
+                  separationMode === 'dtg' && dtgPaintMode === 'restore' ? 'rgba(40,200,120,0.08)' :
+                  separationMode === 'dtg' && dtgPaintMode === 'erase'   ? 'rgba(220,60,30,0.08)' :
                   bgPaintMode === 'restore' ? 'rgba(40,140,255,0.08)' :
                   bgPaintMode === 'remove'  ? 'rgba(255,120,0,0.08)' :
                   paintMode === 'paint' ? 'rgba(80,200,80,0.08)' : 'rgba(200,60,60,0.08)'
                 }
                 stroke={
+                  separationMode === 'dtg' && dtgPaintMode === 'restore' ? '#28c878' :
+                  separationMode === 'dtg' && dtgPaintMode === 'erase'   ? '#dc3c1e' :
                   bgPaintMode === 'restore' ? '#288cff' :
                   bgPaintMode === 'remove'  ? '#ff7800' :
                   paintMode === 'paint' ? '#50c878' : '#e05050'
@@ -2240,6 +2376,8 @@ export function CanvasView() {
                 x1={brushSize * cssScale} y1={brushSize * cssScale - 5}
                 x2={brushSize * cssScale} y2={brushSize * cssScale + 5}
                 stroke={
+                  separationMode === 'dtg' && dtgPaintMode === 'restore' ? '#28c878' :
+                  separationMode === 'dtg' && dtgPaintMode === 'erase'   ? '#dc3c1e' :
                   bgPaintMode === 'restore' ? '#288cff' :
                   bgPaintMode === 'remove'  ? '#ff7800' :
                   paintMode === 'paint' ? '#50c878' : '#e05050'
@@ -2250,6 +2388,8 @@ export function CanvasView() {
                 x1={brushSize * cssScale - 5} y1={brushSize * cssScale}
                 x2={brushSize * cssScale + 5} y2={brushSize * cssScale}
                 stroke={
+                  separationMode === 'dtg' && dtgPaintMode === 'restore' ? '#28c878' :
+                  separationMode === 'dtg' && dtgPaintMode === 'erase'   ? '#dc3c1e' :
                   bgPaintMode === 'restore' ? '#288cff' :
                   bgPaintMode === 'remove'  ? '#ff7800' :
                   paintMode === 'paint' ? '#50c878' : '#e05050'

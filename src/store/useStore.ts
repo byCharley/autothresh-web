@@ -75,7 +75,7 @@ export interface PresetData {
 }
 
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
-  exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0,
+  exposure: 0, contrast: 0, shadows: 0, highlights: 0, saturation: 0, blur: 0,
   adjMode: 'basic',
   levels: { inBlack: 0, inGamma: 1.00, inWhite: 255, outBlack: 0, outWhite: 255 },
   curves: [[0, 0], [255, 255]],
@@ -202,6 +202,8 @@ export interface HistorySnapshot {
   colorSepVisibility: Record<string, boolean>;
   colorSepNames: string[];
   proCmykSettings: ProCmykSettings;
+  dtgPaintMask: Uint8Array | null;
+  dtgPaintMaskDims: { w: number; h: number } | null;
 }
 
 export function captureSnapshot(s: AppState): HistorySnapshot {
@@ -251,6 +253,8 @@ export function captureSnapshot(s: AppState): HistorySnapshot {
     colorSepVisibility: { ...s.colorSepVisibility },
     colorSepNames: [...s.colorSepNames],
     proCmykSettings: { ...s.proCmykSettings },
+    dtgPaintMask: s.dtgPaintMask ? new Uint8Array(s.dtgPaintMask) : null,
+    dtgPaintMaskDims: s.dtgPaintMaskDims ? { ...s.dtgPaintMaskDims } : null,
   };
 }
 
@@ -283,6 +287,12 @@ interface AppState {
   bgPaintMask: Uint8Array | null;
   bgPaintMaskDims: { w: number; h: number } | null;
   bgPaintMode: 'off' | 'restore' | 'remove';
+
+  // DTG-only paint mask — completely separate from bgPaintMask, does not affect any other mode.
+  // Values: 0 = no override, 1 = force opaque (restored), 2 = force transparent (erased).
+  dtgPaintMask: Uint8Array | null;
+  dtgPaintMaskDims: { w: number; h: number } | null;
+  dtgPaintMode: 'off' | 'erase' | 'restore';
 
   showRegistrationMarks: boolean;
   regMarkPadding: number;  // inches from document corner to mark center
@@ -351,6 +361,14 @@ interface AppState {
   colorSepVisibility:    Record<string, boolean>;
   colorSepNames:         string[];
 
+  // DTG/DTF mode
+  dtgMethod:          'halftone' | 'none';
+  dtgFrequency:       number;
+  dtgAngle:           number;
+  dtgEdgesOnly:       boolean;
+  dtgDespeckle:       boolean;
+  dtgDespeckleRadius: number;
+
   // Grain mode
   grainColorBlend:    number;  // 0 = B/W, 100 = full color
   grainColorCount:    number;  // number of colors for k-means (2–64)
@@ -360,6 +378,7 @@ interface AppState {
   grainPatternDensity: number;
   grainPatternAngle:  number;
   grainOverlays:      GrainOverlay[];
+
 
   processedLayers: ProcessedLayer[];
   processedLayerDims: { w: number; h: number } | null;
@@ -398,6 +417,8 @@ interface AppState {
   setBgEyedropperActive: (v: boolean) => void;
   setBgPaintMask: (mask: Uint8Array | null, dims: { w: number; h: number } | null) => void;
   setBgPaintMode: (mode: 'off' | 'restore' | 'remove') => void;
+  setDtgPaintMask: (mask: Uint8Array | null, dims: { w: number; h: number } | null) => void;
+  setDtgPaintMode: (mode: 'off' | 'erase' | 'restore') => void;
   setShowRegistrationMarks: (v: boolean) => void;
   setRegMarkPadding: (v: number) => void;
   setDocumentBleed: (v: number) => void;
@@ -474,6 +495,13 @@ interface AppState {
   setColorSepVisibility:    (id: string, v: boolean) => void;
   setColorSepNames:         (v: string[]) => void;
 
+  setDtgMethod:          (v: 'halftone' | 'none') => void;
+  setDtgFrequency:       (v: number) => void;
+  setDtgAngle:           (v: number) => void;
+  setDtgEdgesOnly:       (v: boolean) => void;
+  setDtgDespeckle:       (v: boolean) => void;
+  setDtgDespeckleRadius: (v: number) => void;
+
   setGrainColorBlend:    (v: number) => void;
   setGrainColorCount:    (v: number) => void;
   setGrainBlur:          (v: number) => void;
@@ -482,6 +510,7 @@ interface AppState {
   setGrainPatternDensity:(v: number) => void;
   setGrainPatternAngle:  (v: number) => void;
   setGrainOverlays:      (v: GrainOverlay[]) => void;
+
 
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
   setProcessedLayerDims: (dims: { w: number; h: number } | null) => void;
@@ -523,6 +552,9 @@ export const useStore = create<AppState>((set, get) => ({
   bgPaintMask: null,
   bgPaintMaskDims: null,
   bgPaintMode: 'off' as const,
+  dtgPaintMask: null,
+  dtgPaintMaskDims: null,
+  dtgPaintMode: 'off' as const,
   showRegistrationMarks: false,
   regMarkPadding: 0.5,
   documentBleed: 0,
@@ -584,6 +616,13 @@ export const useStore = create<AppState>((set, get) => ({
   colorSepVisibility:    {},
   colorSepNames:         [],
 
+  dtgMethod:          'halftone' as const,
+  dtgFrequency:       35,
+  dtgAngle:           22.5,
+  dtgEdgesOnly:       true,
+  dtgDespeckle:       false,
+  dtgDespeckleRadius: 2,
+
   grainColorBlend:    50,
   grainColorCount:    8,
   grainBlur:          0,
@@ -592,6 +631,7 @@ export const useStore = create<AppState>((set, get) => ({
   grainPatternDensity: 75,
   grainPatternAngle:  45,
   grainOverlays:      [],
+
 
   processedLayers: [],
   processedLayerDims: null,
@@ -619,11 +659,11 @@ export const useStore = create<AppState>((set, get) => ({
 
   setTheme: (theme) => { localStorage.setItem('at-theme', theme); set({ theme }); },
   setOriginalImage: (originalImage, previewImage, imageFileName) =>
-    set({ originalImage, previewImage, imageFileName, bgMask: null, bgPaintMask: null, bgPaintMaskDims: null, palettePool: [], activePaletteIdx: 0 }),
+    set({ originalImage, previewImage, imageFileName, bgMask: null, bgPaintMask: null, bgPaintMaskDims: null, dtgPaintMask: null, dtgPaintMaskDims: null, palettePool: [], activePaletteIdx: 0 }),
   clearImage: () =>
     set((s) => ({
       originalImage: null, previewImage: null, processedLayers: [], imageFileName: '',
-      bgMask: null, bgPaintMask: null, bgPaintMaskDims: null, bgPaintMode: 'off', palettePool: [], activePaletteIdx: 0, paintMasks: {},
+      bgMask: null, bgPaintMask: null, bgPaintMaskDims: null, bgPaintMode: 'off', dtgPaintMask: null, dtgPaintMaskDims: null, dtgPaintMode: 'off', palettePool: [], activePaletteIdx: 0, paintMasks: {},
       paletteColors: [],
       paletteVisibility: {},
       paletteNames: [],
@@ -655,6 +695,8 @@ export const useStore = create<AppState>((set, get) => ({
   setBgEyedropperActive: (bgEyedropperActive) => set({ bgEyedropperActive }),
   setBgPaintMask: (bgPaintMask, bgPaintMaskDims) => set({ bgPaintMask, bgPaintMaskDims }),
   setBgPaintMode: (bgPaintMode) => set({ bgPaintMode }),
+  setDtgPaintMask: (dtgPaintMask, dtgPaintMaskDims) => set({ dtgPaintMask, dtgPaintMaskDims }),
+  setDtgPaintMode: (dtgPaintMode) => set({ dtgPaintMode }),
   setBgMask: (bgMask) => set({ bgMask }),
   setShowRegistrationMarks: (showRegistrationMarks) => set({ showRegistrationMarks }),
   setRegMarkPadding: (regMarkPadding) => set({ regMarkPadding: Math.max(0.1, Math.min(3, regMarkPadding)) }),
@@ -734,6 +776,9 @@ export const useStore = create<AppState>((set, get) => ({
     bgPaintMask: null,
     bgPaintMaskDims: null,
     bgPaintMode: 'off' as const,
+    dtgPaintMask: null,
+    dtgPaintMaskDims: null,
+    dtgPaintMode: 'off' as const,
   })),
   setPalettePool: (palettePool) => set({ palettePool }),
   applyPalette: (idx) => set((s) => {
@@ -875,6 +920,13 @@ export const useStore = create<AppState>((set, get) => ({
   setColorSepVisibility: (id, v) => set((s) => ({ colorSepVisibility: { ...s.colorSepVisibility, [id]: v } })),
   setColorSepNames: (colorSepNames) => set({ colorSepNames }),
 
+  setDtgMethod:          (dtgMethod)          => set({ dtgMethod }),
+  setDtgFrequency:       (dtgFrequency)       => set({ dtgFrequency: Math.max(1, Math.min(150, dtgFrequency)) }),
+  setDtgAngle:           (dtgAngle)           => set({ dtgAngle: Math.max(0, Math.min(180, dtgAngle)) }),
+  setDtgEdgesOnly:       (dtgEdgesOnly)       => set({ dtgEdgesOnly }),
+  setDtgDespeckle:       (dtgDespeckle)       => set({ dtgDespeckle }),
+  setDtgDespeckleRadius: (dtgDespeckleRadius) => set({ dtgDespeckleRadius: Math.max(1, Math.min(5, dtgDespeckleRadius)) }),
+
   setGrainColorBlend:    (grainColorBlend)    => set({ grainColorBlend }),
   setGrainColorCount:    (grainColorCount)    => set({ grainColorCount }),
   setGrainBlur:          (grainBlur)          => set({ grainBlur }),
@@ -883,6 +935,7 @@ export const useStore = create<AppState>((set, get) => ({
   setGrainPatternDensity:(grainPatternDensity)=> set({ grainPatternDensity }),
   setGrainPatternAngle:  (grainPatternAngle)  => set({ grainPatternAngle }),
   setGrainOverlays:      (grainOverlays)      => set({ grainOverlays }),
+
 
   setProcessedLayers: (processedLayers) => set({ processedLayers }),
   setProcessedLayerDims: (processedLayerDims) => set({ processedLayerDims }),

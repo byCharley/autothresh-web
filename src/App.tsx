@@ -36,6 +36,7 @@ import {
 import type { LayerConfig, PatternConfig, ProcessedLayer, PatternType } from './engine/imageProcessor';
 import { generateTextureMask } from './engine/textureGenerator';
 import { applyFabricBlend } from './engine/fabricBlend';
+import { applyDtgHalftone } from './engine/dtgEngine';
 import { buildImportanceMap } from './engine/analysisPass';
 import { encodeTiff, encodeEps } from './engine/exportFormats';
 import { isShadowColor, nearestPantone } from './engine/pantoneMatch';
@@ -167,6 +168,8 @@ function App() {
     underbaseIncludeShadows, underbaseEnabled, underbaseDensity, underbaseChoke: storeUnderbaseChoke,
     passthroughMode, bgSeedColors, bgPaintMask, bgPaintMaskDims,
     fabricTexture, fabricBlendStrength, fabricTextureDepth,
+    dtgMethod, dtgFrequency, dtgAngle, dtgEdgesOnly, dtgDespeckle, dtgDespeckleRadius,
+    dtgPaintMask, dtgPaintMaskDims,
   } = useStore();
 
   useEffect(() => {
@@ -231,7 +234,7 @@ function App() {
     return c;
   }
 
-  const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke }: ExportConfig) => {
+  const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke, cropToArtwork }: ExportConfig) => {
     if (!originalImage) return;
 
     const [
@@ -366,27 +369,35 @@ function App() {
     // Helper: apply image adjustments to a full-res ImageData (mirrors CanvasView's applyAdjToImage)
     function applyAdjToImageData(img: ImageData): ImageData {
       const adj = imageAdjustments;
+      const sat = adj.saturation ?? 0;
       const isNoop = adj.adjMode === 'basic' &&
         adj.exposure === 0 && adj.contrast === 0 &&
-        adj.shadows === 0 && adj.highlights === 0 && adj.blur === 0;
+        adj.shadows === 0 && adj.highlights === 0 && adj.blur === 0 && sat === 0;
       if (isNoop) return img;
       const result = new ImageData(new Uint8ClampedArray(img.data), img.width, img.height);
       const rd = result.data;
       const n = img.width * img.height;
+      const satFactor = 1 + sat / 100;
       for (let i = 0; i < n; i++) {
         if (rd[i * 4 + 3] < 128) continue;
-        const r = rd[i * 4], g = rd[i * 4 + 1], b = rd[i * 4 + 2];
+        let r = rd[i * 4], g = rd[i * 4 + 1], b = rd[i * 4 + 2];
         const lum = 0.299 * r + 0.587 * g + 0.114 * b;
         const adjLum = applyGlobalAdjustments(lum, adj);
         if (lum < 1) {
-          const v = adjLum | 0;
-          rd[i * 4] = v; rd[i * 4 + 1] = v; rd[i * 4 + 2] = v;
+          r = g = b = adjLum | 0;
         } else {
           const scale = adjLum / lum;
-          rd[i * 4]     = Math.min(255, (r * scale + 0.5)) | 0;
-          rd[i * 4 + 1] = Math.min(255, (g * scale + 0.5)) | 0;
-          rd[i * 4 + 2] = Math.min(255, (b * scale + 0.5)) | 0;
+          r = Math.min(255, (r * scale + 0.5)) | 0;
+          g = Math.min(255, (g * scale + 0.5)) | 0;
+          b = Math.min(255, (b * scale + 0.5)) | 0;
         }
+        if (sat !== 0) {
+          const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+          r = Math.min(255, Math.max(0, (gray + satFactor * (r - gray) + 0.5))) | 0;
+          g = Math.min(255, Math.max(0, (gray + satFactor * (g - gray) + 0.5))) | 0;
+          b = Math.min(255, Math.max(0, (gray + satFactor * (b - gray) + 0.5))) | 0;
+        }
+        rd[i * 4] = r; rd[i * 4 + 1] = g; rd[i * 4 + 2] = b;
       }
       return result;
     }
@@ -395,6 +406,9 @@ function App() {
     let csExportImageData: ImageData | null = null;
     let csExportColors: RGB[] = [];
     let csExportSettings: { numColors: number; colorPriority: number; pattern: PatternType; patternScale: number; patternDensity: number; patternAngle: number } | null = null;
+
+    // DTG composite — full-color RGBA with pattern-based alpha knockout
+    let dtgExportImageData: ImageData | null = null;
 
     let artLayers: ProcessedLayer[];
     if (separationMode === 'cmyk') {
@@ -450,6 +464,40 @@ function App() {
           }
         }
       }
+    } else if (separationMode === 'dtg') {
+      const dtgBgRgb: [number, number, number] | null =
+        bgSeedColors.length > 0 ? hexToRgb(bgSeedColors[0]) : null;
+      dtgExportImageData = applyDtgHalftone(
+        applyAdjToImageData(artImageData),
+        {
+          method: dtgMethod,
+          frequency: dtgFrequency,
+          angle: dtgAngle,
+          edgesOnly: dtgEdgesOnly,
+          bgColor: dtgBgRgb,
+          bgTolerance: bgTolerance * 2,
+          despeckle: dtgDespeckle,
+          despeckleRadius: dtgDespeckleRadius,
+        },
+        dtgEdgesOnly ? null : artBgMask,
+        documentDpi,
+      );
+      // Apply DTG paint mask (erase strokes only — restore lets halftone result stand)
+      if (dtgPaintMask && dtgPaintMaskDims) {
+        const { w: pmW, h: pmH } = dtgPaintMaskDims;
+        const scaleX = artScaleW / pmW;
+        const scaleY = artScaleH / pmH;
+        for (let y = 0; y < artScaleH; y++) {
+          for (let x = 0; x < artScaleW; x++) {
+            const sx = Math.min(pmW - 1, Math.floor(x / scaleX));
+            const sy = Math.min(pmH - 1, Math.floor(y / scaleY));
+            if (dtgPaintMask[sy * pmW + sx] === 2) {
+              dtgExportImageData.data[(y * artScaleW + x) * 4 + 3] = 0;
+            }
+          }
+        }
+      }
+      artLayers = [];
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
       artLayers = processImage(artImageData, resolved, false, artBgMask, imageAdjustments, exportScaleFactor, importanceMap);
@@ -580,6 +628,8 @@ function App() {
           paletteDensity, paletteAngle, paletteSoftness, importanceMap);
       } else if (separationMode === 'color-sep' && csExportImageData && csExportSettings) {
         artComposite = renderColorSepComposite(csExportImageData, csExportColors, colorSepVisibility, csExportSettings, artBgMask, importanceMap);
+      } else if (separationMode === 'dtg' && dtgExportImageData) {
+        artComposite = dtgExportImageData;
       } else {
         artComposite = renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
       }
@@ -708,9 +758,38 @@ function App() {
     // ── PNG ──────────────────────────────────────────────────────────────────
     const pngOf = (c: HTMLCanvasElement) => canvasToBlobWithDpi(c, documentDpi);
     if (format === 'png') {
-      if (mode === 'dtg' || separationMode === 'texture') {
+      if (mode === 'dtg' || separationMode === 'texture' || separationMode === 'dtg') {
         const suffix = separationMode === 'texture' ? 'texture' : 'dtg';
-        saveAs(await pngOf(buildCompositeCanvas(separationMode !== 'texture')), `${baseName}-${suffix}.png`);
+        if (separationMode === 'dtg' && cropToArtwork && dtgExportImageData) {
+          // Scan non-transparent pixels to find the tight bounding box
+          const d = dtgExportImageData.data;
+          const W = dtgExportImageData.width, H = dtgExportImageData.height;
+          let minX = W, maxX = 0, minY = H, maxY = 0;
+          for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+              if (d[(y * W + x) * 4 + 3] > 0) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+              }
+            }
+          }
+          const cropW = maxX - minX + 1;
+          const cropH = maxY - minY + 1;
+          const cropCanvas = document.createElement('canvas');
+          if (cropW > 0 && cropH > 0) {
+            cropCanvas.width = cropW; cropCanvas.height = cropH;
+            const cropCtx = cropCanvas.getContext('2d')!;
+            cropCtx.putImageData(dtgExportImageData, -minX, -minY);
+          } else {
+            cropCanvas.width = W; cropCanvas.height = H;
+            cropCanvas.getContext('2d')!.putImageData(dtgExportImageData, 0, 0);
+          }
+          saveAs(await pngOf(cropCanvas), `${baseName}-${suffix}.png`);
+        } else {
+          saveAs(await pngOf(buildCompositeCanvas(separationMode !== 'texture' && separationMode !== 'dtg')), `${baseName}-${suffix}.png`);
+        }
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         // Plates (grayscale positives) + proofs on white and on garment
         const zip    = new JSZip();

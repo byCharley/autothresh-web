@@ -1,6 +1,6 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SeparationMode = 'threshold' | 'cmyk' | 'cmyk-pro' | 'palette' | 'color-sep' | 'texture';
+export type SeparationMode = 'threshold' | 'cmyk' | 'cmyk-pro' | 'palette' | 'color-sep' | 'texture' | 'dtg';
 
 export type PatternType =
   | 'none'
@@ -69,6 +69,7 @@ export interface ImageAdjustments {
   contrast:   number;    // -100 to 100
   shadows:    number;    // -100 to 100
   highlights: number;    // -100 to 100
+  saturation: number;    // -100 to 100  (0 = no change, -100 = grayscale, 100 = double saturation)
   blur:       number;    // 0–15  pre-separation blur radius
   // Levels / Curves
   adjMode:    AdjMode;
@@ -502,7 +503,7 @@ export function autoImageAdjustments(
     count++;
   }
 
-  if (count < 100) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0, adjMode: 'basic', levels: DEFAULT_LEVELS, curves: DEFAULT_CURVES };
+  if (count < 100) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, saturation: 0, blur: 0, adjMode: 'basic', levels: DEFAULT_LEVELS, curves: DEFAULT_CURVES };
 
   const p2target  = count * 0.02;
   const p98target = count * 0.98;
@@ -514,7 +515,7 @@ export function autoImageAdjustments(
   }
 
   // Image already has good tonal range — no adjustment needed
-  if (p98 - p2 >= 220) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, blur: 0, adjMode: 'basic', levels: DEFAULT_LEVELS, curves: DEFAULT_CURVES };
+  if (p98 - p2 >= 220) return { exposure: 0, contrast: 0, shadows: 0, highlights: 0, saturation: 0, blur: 0, adjMode: 'basic', levels: DEFAULT_LEVELS, curves: DEFAULT_CURVES };
 
   const mid = (p2 + p98) / 2;
 
@@ -529,7 +530,7 @@ export function autoImageAdjustments(
   const S             = 255 / adjustedRange;
   const contrast      = Math.max(-50, Math.min(60, ((S - 1) / 1.5) * 100));
 
-  return { exposure, contrast, shadows: 0, highlights: 0, blur: 0, adjMode: 'basic', levels: DEFAULT_LEVELS, curves: DEFAULT_CURVES };
+  return { exposure, contrast, shadows: 0, highlights: 0, saturation: 0, blur: 0, adjMode: 'basic', levels: DEFAULT_LEVELS, curves: DEFAULT_CURVES };
 }
 
 export function buildPatternValues(w: number, h: number, layer: LayerConfig, idx: number): F32 | null {

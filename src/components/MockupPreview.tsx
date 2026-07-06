@@ -190,7 +190,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
     img.src = variant.file;
   };
 
-  const hasArt = (separationMode === 'palette' || separationMode === 'cmyk-pro')
+  const hasArt = (separationMode === 'palette' || separationMode === 'cmyk-pro' || separationMode === 'dtg')
     ? !!ditherComposite
     : processedLayers.length > 0 && !!processedLayerDims;
 

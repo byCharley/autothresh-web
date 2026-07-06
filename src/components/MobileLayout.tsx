@@ -158,6 +158,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
     { value: 'palette',   label: 'Dither' },
     { value: 'color-sep', label: 'Color Sep' },
     { value: 'cmyk-pro',  label: 'CMYK Pro' },
+    { value: 'dtg',       label: 'DTG / DTF' },
     { value: 'texture',   label: 'Texture' },
   ] as const;
 

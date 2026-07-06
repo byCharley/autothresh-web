@@ -258,7 +258,8 @@ function PatternControls({
 // ─── Global Pattern Section ───────────────────────────────────────────────────
 
 function GlobalPatternSection() {
-  const { globalPattern, updateGlobalPattern, previewImage, originalImage } = useStore();
+  const { globalPattern, updateGlobalPattern, previewImage, originalImage, separationMode } = useStore();
+  const isDtg = separationMode === 'dtg';
 
   const handleAutoDetect = () => {
     if (!previewImage) return;
@@ -266,12 +267,12 @@ function GlobalPatternSection() {
   };
 
   return (
-    <Section title="Global Pattern" defaultOpen={true}>
+    <Section title={isDtg ? 'Print Pattern' : 'Global Pattern'} defaultOpen={true}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>
-          Applies to all layers
+          {isDtg ? 'Screen applied over artwork' : 'Applies to all layers'}
         </span>
-        {previewImage && (
+        {!isDtg && previewImage && (
           <button
             className="btn btn-ghost"
             style={{ fontSize: 10, padding: '2px 8px', height: 22 }}
@@ -304,11 +305,13 @@ function GlobalPatternSection() {
 import { ImageAdjustPanel } from './ImageAdjustPanel';
 
 function ImageAdjustmentsSection() {
-  const { originalImage, imageAdjustments, setImageAdjustment, setAdjMode, setLevels, setCurves, resetImageAdjustments } = useStore();
-  if (!originalImage) return null;
+  const { originalImage, separationMode, imageAdjustments, setImageAdjustment, setAdjMode, setLevels, setCurves, resetImageAdjustments } = useStore();
+  const disabled = !originalImage;
+  const showSaturation = separationMode === 'dtg' || separationMode === 'texture';
 
   return (
     <Section title="Image Adjustments" defaultOpen={false}>
+      <div style={{ opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
       <ImageAdjustPanel
         adj={imageAdjustments}
         onAdjMode={setAdjMode}
@@ -316,7 +319,9 @@ function ImageAdjustmentsSection() {
         onCurves={setCurves}
         onReset={resetImageAdjustments}
         onBasic={(key, v) => setImageAdjustment(key as keyof typeof imageAdjustments, v)}
+        showSaturation={showSaturation}
       />
+      </div>
     </Section>
   );
 }
@@ -446,7 +451,7 @@ function RegistrationSection() {
     documentBleed, setDocumentBleed,
     separationMode,
   } = useStore();
-  if (separationMode === 'texture') return null;
+  if (separationMode === 'texture' || separationMode === 'dtg') return null;
   return (
     <Section title="Registration Marks" defaultOpen={false}>
       <SwitchRow
@@ -784,6 +789,99 @@ function ColorSepSection() {
         {colorSepPattern === 'none'
           ? 'None — solid separations with hard color edges.'
           : 'Pattern blends the edges between color zones. Lower density = wider, more organic transitions.'}
+      </div>
+    </Section>
+  );
+}
+
+// ─── DTG/DTF Screen Section ──────────────────────────────────────────────────
+
+function DtgSection() {
+  const {
+    originalImage,
+    dtgMethod, setDtgMethod,
+    dtgFrequency, setDtgFrequency,
+    dtgAngle, setDtgAngle,
+    dtgEdgesOnly, setDtgEdgesOnly,
+    dtgDespeckle, setDtgDespeckle,
+    dtgDespeckleRadius, setDtgDespeckleRadius,
+  } = useStore();
+  const isHalftone = dtgMethod === 'halftone';
+  const disabled = !originalImage;
+
+  const btnStyle = (active: boolean) => ({
+    flex: 1, height: 28, fontSize: 10, fontFamily: 'var(--font-mono)',
+    border: '1px solid var(--border-2)', borderRadius: 3, cursor: 'pointer',
+    background: active ? 'var(--accent)' : 'var(--bg-3)',
+    color: active ? '#000' : 'var(--text-dim)',
+    fontWeight: active ? 700 : 400,
+    letterSpacing: '0.04em', textTransform: 'uppercase' as const,
+    transition: 'background 0.15s, color 0.15s',
+  });
+
+  return (
+    <Section title="DTG Screen" defaultOpen={true}>
+      <div style={{ opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
+      {/* Screen type */}
+      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 5 }}>Screen</div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
+        <button style={btnStyle(!isHalftone)} onClick={() => setDtgMethod('none')}>No Pattern</button>
+        <button style={btnStyle(isHalftone)}  onClick={() => setDtgMethod('halftone')}>Halftone</button>
+      </div>
+
+      {/* Pattern scope */}
+      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 5 }}>Apply Pattern To</div>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+        <button style={btnStyle(!dtgEdgesOnly)} onClick={() => setDtgEdgesOnly(false)}>Whole Image</button>
+        <button style={btnStyle(dtgEdgesOnly)}  onClick={() => setDtgEdgesOnly(true)}>Edges Only</button>
+      </div>
+      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginBottom: 12 }}>
+        {dtgEdgesOnly
+          ? 'Pattern only fades the artwork-to-background transition zone.'
+          : 'Pattern screens the entire image based on color distance from bg.'}
+      </div>
+
+      {isHalftone && (
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+          <Slider
+            label="Frequency"
+            value={dtgFrequency}
+            min={10} max={85} step={1}
+            onChange={setDtgFrequency}
+            unit=" LPI"
+          />
+          <Slider
+            label="Angle"
+            value={dtgAngle}
+            min={0} max={180} step={0.5}
+            onChange={setDtgAngle}
+            unit="°"
+          />
+          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 6, marginBottom: 12 }}>
+            Photoshop default: 35 LPI · 22.5°. Lower = larger visible dots.
+          </div>
+        </div>
+      )}
+
+      {/* Despeckle */}
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: dtgDespeckle ? 8 : 0 }}>
+          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Despeckle</span>
+          <button
+            onClick={() => setDtgDespeckle(!dtgDespeckle)}
+            style={{ ...btnStyle(dtgDespeckle), flex: 'none', minWidth: 48 }}
+          >{dtgDespeckle ? 'On' : 'Off'}</button>
+        </div>
+        {dtgDespeckle && (
+          <Slider
+            label="Radius"
+            value={dtgDespeckleRadius}
+            min={1} max={5} step={1}
+            onChange={setDtgDespeckleRadius}
+            unit="px"
+          />
+        )}
+      </div>
       </div>
     </Section>
   );
@@ -1305,6 +1403,12 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         <div className="control-scroll">
           <DocumentSection />
           <RegistrationSection />
+          {separationMode === 'dtg' && (
+            <>
+              <DtgSection />
+              <ImageAdjustmentsSection />
+            </>
+          )}
         </div>
       </aside>
     );
@@ -1353,6 +1457,8 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
           <ColorSepSection />
         ) : separationMode === 'texture' ? (
           <GrainSection />
+        ) : separationMode === 'dtg' ? (
+          <DtgSection />
         ) : (
           <GlobalPatternSection />
         )}

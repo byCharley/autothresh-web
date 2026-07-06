@@ -11,6 +11,7 @@ export interface ExportConfig {
   usePantoneNames:  boolean;
   underbase:        boolean;
   underbaseChoke:   number;
+  cropToArtwork:    boolean;
 }
 
 interface Props {
@@ -89,14 +90,16 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
   const isDither  = !passthroughMode && separationMode === 'palette';
   const isCmykPro = separationMode === 'cmyk-pro';
   const isTexture = separationMode === 'texture';
+  const isDtg     = separationMode === 'dtg';
   const FORMATS  = passthroughMode ? FORMATS_PASSTHROUGH
     : isTexture  ? FORMATS_TEXTURE
     : isDither   ? FORMATS_DITHER
     : FORMATS_ALL;
 
-  const [mode,             setMode]             = useState<'screen' | 'dtg'>(isDither ? 'dtg' : 'screen');
+  const [mode,             setMode]             = useState<'screen' | 'dtg'>((isDither || isDtg) ? 'dtg' : 'screen');
   const [format,           setFormat]           = useState<ExportFormat>(passthroughMode ? 'png' : 'png');
   const [fileName,         setFileName]         = useState(defaultFileName);
+  const [cropToArtwork,    setCropToArtwork]    = useState(true);
   const { underbaseEnabled, underbaseChoke: storeChoke, setUnderbaseEnabled, setUnderbaseChoke } = useStore();
   const [exporting,        setExporting]        = useState(false);
   const [exportError,      setExportError]      = useState<string | null>(null);
@@ -112,7 +115,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
     setExportError(null);
     await new Promise(r => setTimeout(r, 60));
     try {
-      await onExport({ mode: (isDither || isTexture) ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo, usePantoneNames, underbase: includeUnderbase, underbaseChoke: undChoke });
+      await onExport({ mode: (isDither || isTexture || isDtg) ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo, usePantoneNames, underbase: includeUnderbase, underbaseChoke: undChoke, cropToArtwork });
       onClose();
     } catch (err) {
       console.error('Export failed:', err);
@@ -194,6 +197,75 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
                 }
               }}
             >
+              {exporting ? 'Exporting…' : 'Export PNG'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DTG modal: PNG only, crop toggle ─────────────────────────────────────
+  if (isDtg) {
+    const doExport = async () => {
+      setExporting(true);
+      setExportError(null);
+      await new Promise(r => setTimeout(r, 60));
+      try {
+        await onExport({ mode: 'dtg', format: 'png', fileName: fileName.trim() || defaultFileName, includeColorInfo: false, usePantoneNames: false, underbase: false, underbaseChoke: 0, cropToArtwork });
+        onClose();
+      } catch (err) {
+        setExportError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setExporting(false);
+      }
+    };
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', width: 380, maxWidth: '92vw', zIndex: 41 }} onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 44, borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)' }}>Export — DTG / DTF</span>
+            <button className="btn btn-ghost btn-icon" onClick={onClose}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          {/* Filename */}
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>File Name</div>
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+              <input
+                type="text"
+                value={fileName}
+                onChange={e => setFileName(e.target.value)}
+                placeholder="filename"
+                style={{ flex: 1, background: 'none', border: 'none', outline: 'none', padding: '7px 10px', fontSize: 12, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}
+              />
+              <span style={{ padding: '7px 10px', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', borderLeft: '1px solid var(--border)', flexShrink: 0 }}>.png</span>
+            </div>
+          </div>
+          {/* Crop toggle */}
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Crop to Image</div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>Export artwork bounds only, no canvas padding</div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0 }}>
+              <input
+                type="checkbox"
+                checked={cropToArtwork}
+                onChange={e => setCropToArtwork(e.target.checked)}
+                style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{cropToArtwork ? 'On' : 'Off'}</span>
+            </label>
+          </div>
+          {/* Export button */}
+          <div style={{ padding: '12px 16px' }}>
+            {exportError && <div style={{ fontSize: 10, color: '#e05050', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>{exportError}</div>}
+            <button className="btn btn-primary" style={{ width: '100%', height: 36, fontSize: 12, color: '#1a1a1a' }} disabled={exporting} onClick={doExport}>
               {exporting ? 'Exporting…' : 'Export PNG'}
             </button>
           </div>
