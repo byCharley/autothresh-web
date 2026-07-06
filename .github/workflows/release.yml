@@ -58,6 +58,7 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           brew install librsvg
+          brew install --cask font-jetbrains-mono
           rsvg-convert -w 640 -h 360 src-tauri/assets/dmg-background.svg \
             -o src-tauri/assets/dmg-background.png
 
