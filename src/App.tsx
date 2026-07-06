@@ -1,31 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from './auth/useAuth';
 import { initBetaFeatures } from './auth/betaFeatures';
 import { LoginPage } from './components/LoginPage';
 import { SubscribePage } from './components/SubscribePage';
 import { MobileLayout } from './components/MobileLayout';
-import JSZip from 'jszip';
-import { saveAs } from 'file-saver';
-import { writePsd } from 'ag-psd';
-import { PDFDocument } from 'pdf-lib';
 import { TopBar } from './components/TopBar';
 import { LayerPanel } from './components/LayerPanel';
 import { CanvasView } from './components/CanvasView';
 import { ControlPanel } from './components/ControlPanel';
-import { ExportModal } from './components/ExportModal';
 import type { ExportConfig } from './components/ExportModal';
-import { MockupPreview } from './components/MockupPreview';
-import { PresetsModal } from './components/PresetsModal';
-import { EulaModal } from './components/EulaModal';
-import { FaqModal } from './components/FaqModal';
 import { BetaNoticeModal, shouldShowBetaNotice } from './components/BetaNoticeModal';
 import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components/WhatsNewModal';
-import { ContactModal } from './components/ContactModal';
-import { TutorialsModal } from './components/TutorialsModal';
-import { TutorialOverlay } from './components/TutorialOverlay';
-import { ChatWidget } from './components/ChatWidget';
 import { LoginSplash } from './components/LoginSplash';
-import { AnalyticsDashboard } from './components/AnalyticsDashboard';
+
+const ExportModal     = lazy(() => import('./components/ExportModal').then(m => ({ default: m.ExportModal })));
+const MockupPreview   = lazy(() => import('./components/MockupPreview').then(m => ({ default: m.MockupPreview })));
+const PresetsModal    = lazy(() => import('./components/PresetsModal').then(m => ({ default: m.PresetsModal })));
+const EulaModal       = lazy(() => import('./components/EulaModal').then(m => ({ default: m.EulaModal })));
+const FaqModal        = lazy(() => import('./components/FaqModal').then(m => ({ default: m.FaqModal })));
+const ContactModal    = lazy(() => import('./components/ContactModal').then(m => ({ default: m.ContactModal })));
+const TutorialsModal  = lazy(() => import('./components/TutorialsModal').then(m => ({ default: m.TutorialsModal })));
+const TutorialOverlay = lazy(() => import('./components/TutorialOverlay').then(m => ({ default: m.TutorialOverlay })));
+const ChatWidget      = lazy(() => import('./components/ChatWidget').then(m => ({ default: m.ChatWidget })));
+const AnalyticsDashboard = lazy(() => import('./components/AnalyticsDashboard').then(m => ({ default: m.AnalyticsDashboard })));
 import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
@@ -236,6 +233,18 @@ function App() {
 
   const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke }: ExportConfig) => {
     if (!originalImage) return;
+
+    const [
+      { default: JSZip },
+      { saveAs },
+      { writePsd },
+      { PDFDocument },
+    ] = await Promise.all([
+      import('jszip'),
+      import('file-saver'),
+      import('ag-psd'),
+      import('pdf-lib'),
+    ]);
 
     const mode = _mode;
 
@@ -1078,6 +1087,7 @@ function App() {
 
   if (isMobile) {
     return (
+      <Suspense fallback={null}>
       <MobileLayout
         onExport={() => setShowExport(true)}
         onMockup={() => setMockupOpen(true)}
@@ -1097,10 +1107,12 @@ function App() {
         {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
         {session && <ChatWidget session={session} />}
       </MobileLayout>
+      </Suspense>
     );
   }
 
   return (
+    <Suspense fallback={null}>
     <div className="app">
       <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => setShowAnalytics(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} />
 
@@ -1256,6 +1268,7 @@ function App() {
       {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
       {session && <ChatWidget session={session} />}
     </div>
+    </Suspense>
   );
 }
 
