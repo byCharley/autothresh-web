@@ -495,7 +495,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
 
               {/* Mac */}
               <a
-                href="https://github.com/byCharley/autothresh-web/releases/latest"
+                href="https://github.com/byCharley/autothresh-web/releases/latest/download/AutoThresh_1.0.0_universal.dmg"
                 target="_blank" rel="noopener noreferrer"
                 style={{ textDecoration: 'none' }}
               >
@@ -528,7 +528,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
 
               {/* Windows */}
               <a
-                href="https://github.com/byCharley/autothresh-web/releases/latest"
+                href="https://github.com/byCharley/autothresh-web/releases/latest/download/AutoThresh_1.0.0_x64-setup.exe"
                 target="_blank" rel="noopener noreferrer"
                 style={{ textDecoration: 'none' }}
               >
