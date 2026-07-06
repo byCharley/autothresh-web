@@ -197,18 +197,24 @@ export function ChatWidget({ session }: { session: Session }) {
           <div style={{ padding: '16px 14px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div>
               <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Subject</div>
-              <input
-                type="text"
-                placeholder="What's your question about?"
+              <select
                 value={subject}
                 onChange={e => setSubject(e.target.value)}
-                style={{ width: '100%', height: 32, padding: '0 10px', fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)', boxSizing: 'border-box' }}
-              />
+                style={{ width: '100%', height: 32, padding: '0 10px', fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: '1px solid var(--border)', color: subject ? 'var(--text)' : 'var(--text-dim)', boxSizing: 'border-box', cursor: 'pointer' }}
+              >
+                <option value="" disabled>Select a category…</option>
+                <option value="Account">Account</option>
+                <option value="Billing">Billing</option>
+                <option value="Report a Bug">Report a Bug</option>
+                <option value="Questions">Questions</option>
+                <option value="Requests">Requests</option>
+                <option value="Other">Other</option>
+              </select>
             </div>
             <div>
               <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Message</div>
               <textarea
-                placeholder="Describe your issue..."
+                placeholder="Feel free to ask anything — we're happy to help!"
                 value={firstMsg}
                 onChange={e => setFirstMsg(e.target.value)}
                 rows={5}
