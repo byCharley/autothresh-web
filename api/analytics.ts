@@ -61,17 +61,16 @@ function extractSubs(raw: unknown): Array<Record<string, unknown>> {
 async function getSealSubscriptionCounts(): Promise<{ active: number; trial: number; paused: number; cancelled: number; total: number }> {
   const counts = { active: 0, trial: 0, paused: 0, cancelled: 0, total: 0 };
   try {
-    const PER_PAGE = 100;
     let page = 1;
     let fetched = 0;
 
-    // Paginate through all Seal subscriptions
+    // Paginate through all Seal subscriptions — break only on empty page
     while (true) {
-      const url = `${SEAL_API_URL}/subscriptions?page=${page}&per_page=${PER_PAGE}`;
+      const url = `${SEAL_API_URL}/subscriptions?page=${page}&per_page=50`;
       const r = await fetch(url, { headers: { 'X-Seal-Token': SEAL_TOKEN } });
       if (!r.ok) break;
       const subs = extractSubs(await r.json() as unknown);
-      if (subs.length === 0) break;
+      if (subs.length === 0) break; // no more results
 
       for (const s of subs) {
         const st = String(s.status ?? '').toUpperCase();
@@ -83,9 +82,8 @@ async function getSealSubscriptionCounts(): Promise<{ active: number; trial: num
       }
 
       fetched += subs.length;
-      if (subs.length < PER_PAGE) break; // last page
       page++;
-      if (page > 20) break; // safety cap at 2000 subs
+      if (page > 20) break; // safety cap at 1000 subs
     }
 
     console.log(`[analytics] Seal: fetched ${fetched} subs across ${page} page(s)`);
