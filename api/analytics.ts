@@ -45,34 +45,51 @@ async function verifyCreator(token: string): Promise<boolean> {
   } catch { return false; }
 }
 
+function extractSubs(raw: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(raw)) return raw as Array<Record<string, unknown>>;
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const payload = obj.payload as Record<string, unknown> | undefined;
+    if (payload && Array.isArray(payload.subscriptions)) return payload.subscriptions as Array<Record<string, unknown>>;
+    for (const key of ['subscriptions', 'data']) {
+      if (Array.isArray(obj[key])) return obj[key] as Array<Record<string, unknown>>;
+    }
+  }
+  return [];
+}
+
 async function getSealSubscriptionCounts(): Promise<{ active: number; trial: number; paused: number; cancelled: number; total: number }> {
   const counts = { active: 0, trial: 0, paused: 0, cancelled: 0, total: 0 };
   try {
-    const r = await fetch(`${SEAL_API_URL}/subscriptions`, { headers: { 'X-Seal-Token': SEAL_TOKEN } });
-    if (!r.ok) return counts;
-    const raw = await r.json() as unknown;
-    let subs: Array<Record<string, unknown>> = [];
-    if (Array.isArray(raw)) {
-      subs = raw;
-    } else if (raw && typeof raw === 'object') {
-      const obj = raw as Record<string, unknown>;
-      const payload = obj.payload as Record<string, unknown> | undefined;
-      if (payload && Array.isArray(payload.subscriptions)) subs = payload.subscriptions as Array<Record<string, unknown>>;
-      else for (const key of ['subscriptions', 'data']) { if (Array.isArray(obj[key])) { subs = obj[key] as Array<Record<string, unknown>>; break; } }
-    }
-    // Log first sub's structure so we can see what Seal actually returns
-    if (subs[0]) console.log('[analytics] Seal sub[0] sample:', JSON.stringify(subs[0]).slice(0, 600));
-    console.log('[analytics] Seal total subs returned:', subs.length);
+    const PER_PAGE = 100;
+    let page = 1;
+    let fetched = 0;
 
-    for (const s of subs) {
-      const st = String(s.status ?? '').toUpperCase();
-      counts.total++;
-      if (st === 'ACTIVE') counts.active++;
-      else if (st === 'TRIAL') counts.trial++;
-      else if (st === 'PAUSED') counts.paused++;
-      else if (st === 'CANCELLED' || st === 'CANCELED') counts.cancelled++;
+    // Paginate through all Seal subscriptions
+    while (true) {
+      const url = `${SEAL_API_URL}/subscriptions?page=${page}&per_page=${PER_PAGE}`;
+      const r = await fetch(url, { headers: { 'X-Seal-Token': SEAL_TOKEN } });
+      if (!r.ok) break;
+      const subs = extractSubs(await r.json() as unknown);
+      if (subs.length === 0) break;
+
+      for (const s of subs) {
+        const st = String(s.status ?? '').toUpperCase();
+        counts.total++;
+        if (st === 'ACTIVE') counts.active++;
+        else if (st === 'TRIAL') counts.trial++;
+        else if (st === 'PAUSED') counts.paused++;
+        else if (st === 'CANCELLED' || st === 'CANCELED') counts.cancelled++;
+      }
+
+      fetched += subs.length;
+      if (subs.length < PER_PAGE) break; // last page
+      page++;
+      if (page > 20) break; // safety cap at 2000 subs
     }
-  } catch { /* best effort */ }
+
+    console.log(`[analytics] Seal: fetched ${fetched} subs across ${page} page(s)`);
+  } catch (e) { console.error('[analytics] Seal fetch error:', e); }
   return counts;
 }
 
