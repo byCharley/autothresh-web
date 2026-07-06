@@ -1,6 +1,7 @@
 interface Props {
   onEula: () => void;
   onFaq?: () => void;
+  onDesktopApp?: () => void;
 }
 
 const linkStyle: React.CSSProperties = {
@@ -9,7 +10,7 @@ const linkStyle: React.CSSProperties = {
   transition: 'opacity 0.15s',
 };
 
-export function PageFooter({ onEula, onFaq }: Props) {
+export function PageFooter({ onEula, onFaq, onDesktopApp }: Props) {
   return (
     <div style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -47,6 +48,20 @@ export function PageFooter({ onEula, onFaq }: Props) {
       >
         EULA
       </button>
+
+      {onDesktopApp && (
+        <>
+          <span style={{ width: 1, height: 10, background: 'var(--border)', opacity: 0.5 }} />
+          <button
+            onClick={onDesktopApp}
+            style={{ ...linkStyle, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}
+            onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.6')}
+          >
+            Desktop App
+          </button>
+        </>
+      )}
     </div>
   );
 }

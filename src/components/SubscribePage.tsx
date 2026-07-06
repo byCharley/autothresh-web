@@ -4,8 +4,9 @@ import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 
-const PRODUCT_URL = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefined
+const PRODUCT_URL  = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefined
   ?? 'https://charleypangus.com/products/autothresh-web';
+const LIFETIME_URL = 'https://charleypangus.com/checkout/autothresh-web/lifetime';
 
 interface Props {
   firstName?: string;
@@ -71,10 +72,32 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
           target="_blank"
           rel="noopener noreferrer"
           className="btn btn-primary"
-          style={{ display: 'inline-flex', justifyContent: 'center', textDecoration: 'none', marginBottom: 12, minWidth: 200, color: '#000' }}
+          style={{ display: 'inline-flex', justifyContent: 'center', textDecoration: 'none', marginBottom: 8, minWidth: 200, color: '#000' }}
         >
           Subscribe Now
         </a>
+
+        <a
+          href={LIFETIME_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: 'inline-flex', justifyContent: 'center', textDecoration: 'none',
+            marginBottom: 6, minWidth: 200,
+            border: '1px solid #fbbf24', color: '#fbbf24',
+            fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
+            letterSpacing: '0.06em', padding: '10px 20px',
+            transition: 'background 0.15s, color 0.15s',
+          }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#fbbf24'; (e.currentTarget as HTMLElement).style.color = '#000'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = '#fbbf24'; }}
+        >
+          Buy Lifetime Access — $249.99
+        </a>
+
+        <p style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: '0 0 16px' }}>
+          One-time purchase · Never pay again
+        </p>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           {onSwitchAccount && (

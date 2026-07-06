@@ -94,6 +94,23 @@ const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-
 const SEAL_TOKEN   = process.env.SEAL_API_TOKEN!;
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
 
+async function checkLifetimeOrder(token: string): Promise<boolean> {
+  try {
+    const r = await fetch(CUST_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': token },
+      body: JSON.stringify({
+        query: `query { customer { orders(first: 100) { nodes { lineItems(first: 10) { nodes { title } } } } } }`,
+      }),
+    });
+    if (!r.ok) return false;
+    type OData = { data?: { customer?: { orders?: { nodes: Array<{ lineItems: { nodes: Array<{ title: string }> } }> } } } };
+    const data = await r.json() as OData;
+    const orders = data.data?.customer?.orders?.nodes ?? [];
+    return orders.some(o => o.lineItems.nodes.some(item => item.title.toLowerCase().includes('lifetime')));
+  } catch { return false; }
+}
+
 async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; subscriptionStatus?: string; nextBillingDate?: string; planTitle?: string }> {
   try {
     const url = `${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`;
@@ -210,13 +227,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = CREATOR_EMAILS.has(emailLower);
   const isTester  = !isCreator && TESTER_EMAILS.has(emailLower);
 
+  // ── Check for lifetime one-time purchase ──────────────────────────────────
+  const hasLifetime = !isCreator && !isTester && await checkLifetimeOrder(token);
+
   // ── Check subscription via Seal ───────────────────────────────────────────
   const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = await sealCheckSubscription(email);
-  const finalHasSub = hasSub || isCreator || isTester;
+  const finalHasSub = hasSub || isCreator || isTester || hasLifetime;
 
-  const finalStatus   = isCreator ? 'creator' : isTester ? 'tester' : subscriptionStatus;
-  const finalPlan     = isCreator ? 'Creator' : isTester ? 'Tester Access' : planTitle;
-  const finalExpiry   = (isCreator || isTester) ? undefined : nextBillingDate;
+  const finalStatus   = isCreator ? 'creator' : isTester ? 'tester' : hasLifetime ? 'lifetime' : subscriptionStatus;
+  const finalPlan     = isCreator ? 'Creator' : isTester ? 'Tester Access' : hasLifetime ? 'Lifetime' : planTitle;
+  const finalExpiry   = (isCreator || isTester || hasLifetime) ? undefined : nextBillingDate;
 
   console.log('Verify result:', { email, hasSub, isCreator, isTester, finalHasSub, finalStatus, nextBillingDate, planTitle });
 

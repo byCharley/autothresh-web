@@ -263,11 +263,13 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
             const subColor = subscriptionStatus === 'creator'  ? 'var(--accent)'
               : subscriptionStatus === 'tester'                ? '#38bdf8'
               : subscriptionStatus === 'trial'                 ? '#a78bfa'
+              : subscriptionStatus === 'lifetime'              ? '#fbbf24'
               : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
               : '#3ecf4f';
             const subLabel = subscriptionStatus === 'creator' ? 'Creator'
               : subscriptionStatus === 'tester' ? 'Tester'
               : subscriptionStatus === 'trial' ? 'Free Trial'
+              : subscriptionStatus === 'lifetime' ? 'Lifetime'
               : subscriptionStatus === 'paused' ? 'Paused'
               : subscriptionStatus === 'cancelled' ? 'Cancelled'
               : 'Active';
@@ -319,7 +321,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                   </div>
                   {(nextBillingFormatted || (daysRemaining !== null && daysRemaining > 0)) && (
                     <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {subscriptionStatus === 'trial' ? 'Trial ends' : 'Renews'}{nextBillingFormatted ? ` ${nextBillingFormatted}` : ''}
+                      {subscriptionStatus === 'trial' ? 'Trial ends' : subscriptionStatus === 'lifetime' ? 'Never expires' : 'Renews'}{subscriptionStatus !== 'lifetime' && nextBillingFormatted ? ` ${nextBillingFormatted}` : ''}
                       {daysRemaining !== null && daysRemaining > 0 && (
                         <span style={{ color: 'var(--text-muted)', marginLeft: 5 }}>· {daysRemaining}d left</span>
                       )}

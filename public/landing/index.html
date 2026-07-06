@@ -288,7 +288,7 @@
     .export-name { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.06em; }
     .export-desc { font-size: 11px; color: var(--dim); line-height: 1.6; }
 
-    .pricing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 600px; margin: 0 auto; }
+    .pricing-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; max-width: 900px; margin: 0 auto; }
     .price-card { background: var(--surface); border: 1px solid var(--border); padding: 36px 32px; position: relative; transition: border-color 0.2s; }
     .price-card:hover { border-color: var(--border-2); }
     .price-card.featured { border-color: var(--accent); }
@@ -338,7 +338,7 @@
       .modes-grid { grid-template-columns: 1fr 1fr; }
       .features-grid { grid-template-columns: 1fr 1fr; }
       .exports-grid { grid-template-columns: repeat(3, 1fr); }
-      .pricing-grid { grid-template-columns: 1fr; max-width: 400px; }
+      .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
       .browser-wrap { width: 92vw; }
       .laptop-section { height: 220vh; }
     }
@@ -626,7 +626,7 @@
     <div class="section-header fade-in">
       <div class="section-label">Pricing</div>
       <h2 class="section-title">Simple pricing.<br />Unlimited separations.</h2>
-      <p class="section-sub" style="margin:0 auto">Start with a 3-day free trial on either plan. A credit card is required — you won't be charged until your trial ends.</p>
+      <p class="section-sub" style="margin:0 auto">Start with a 3-day free trial on any plan. Or own it forever with one payment. A credit card is required for trial — you won't be charged until it ends.</p>
     </div>
     <div class="pricing-grid fade-in">
       <div class="price-card">
@@ -665,6 +665,27 @@
           <button class="price-cta featured-btn">Start 3-Day Free Trial</button>
         </a>
         <p class="price-fine">$90.95 billed after trial · Cancel anytime</p>
+      </div>
+
+      <!-- Lifetime -->
+      <div class="price-card" style="border-color:#fbbf24">
+        <div class="price-badge" style="background:#fbbf24;color:#000">ONE-TIME</div>
+        <div class="price-plan">Lifetime</div>
+        <div class="price-amount">$249.99</div>
+        <div class="price-period">once</div>
+        <div class="price-equiv">Never pay again</div>
+        <hr class="price-divider"/>
+        <ul class="price-features">
+          <li>Everything in Annual</li>
+          <li>Pay once, own forever</li>
+          <li>All future updates included</li>
+          <li>Highest priority support</li>
+          <li>Lock in today's price</li>
+        </ul>
+        <a href="https://charleypangus.com/checkout/autothresh-web/lifetime" target="_blank" rel="noopener">
+          <button class="price-cta" style="border-color:#fbbf24;color:#fbbf24" onmouseover="this.style.background='#fbbf24';this.style.color='#000'" onmouseout="this.style.background='none';this.style.color='#fbbf24'">Buy Lifetime Access</button>
+        </a>
+        <p class="price-fine">One-time purchase · No subscription needed</p>
       </div>
     </div>
   </div>
