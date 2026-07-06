@@ -12,6 +12,7 @@ export interface ExportConfig {
   underbase:        boolean;
   underbaseChoke:   number;
   cropToArtwork:    boolean;
+  withFabricView:   boolean;
 }
 
 interface Props {
@@ -100,6 +101,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
   const [format,           setFormat]           = useState<ExportFormat>(passthroughMode ? 'png' : 'png');
   const [fileName,         setFileName]         = useState(defaultFileName);
   const [cropToArtwork,    setCropToArtwork]    = useState(true);
+  const [withFabricView,   setWithFabricView]   = useState(false);
   const { underbaseEnabled, underbaseChoke: storeChoke, setUnderbaseEnabled, setUnderbaseChoke } = useStore();
   const [exporting,        setExporting]        = useState(false);
   const [exportError,      setExportError]      = useState<string | null>(null);
@@ -115,7 +117,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
     setExportError(null);
     await new Promise(r => setTimeout(r, 60));
     try {
-      await onExport({ mode: (isDither || isTexture || isDtg) ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo, usePantoneNames, underbase: includeUnderbase, underbaseChoke: undChoke, cropToArtwork });
+      await onExport({ mode: (isDither || isTexture || isDtg) ? 'dtg' : mode, format, fileName: fileName.trim() || defaultFileName, includeColorInfo, usePantoneNames, underbase: includeUnderbase, underbaseChoke: undChoke, cropToArtwork, withFabricView: false });
       onClose();
     } catch (err) {
       console.error('Export failed:', err);
@@ -188,7 +190,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
                 setExportError(null);
                 await new Promise(r => setTimeout(r, 60));
                 try {
-                  await onExport({ mode: 'dtg', format: 'png', fileName: fileName.trim() || defaultFileName, includeColorInfo: false, usePantoneNames: false, underbase: false, underbaseChoke: 0, cropToArtwork: false });
+                  await onExport({ mode: 'dtg', format: 'png', fileName: fileName.trim() || defaultFileName, includeColorInfo: false, usePantoneNames: false, underbase: false, underbaseChoke: 0, cropToArtwork: false, withFabricView: false });
                   onClose();
                 } catch (err) {
                   setExportError(err instanceof Error ? err.message : String(err));
@@ -212,7 +214,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
       setExportError(null);
       await new Promise(r => setTimeout(r, 60));
       try {
-        await onExport({ mode: 'dtg', format: 'png', fileName: fileName.trim() || defaultFileName, includeColorInfo: false, usePantoneNames: false, underbase: false, underbaseChoke: 0, cropToArtwork });
+        await onExport({ mode: 'dtg', format: 'png', fileName: fileName.trim() || defaultFileName, includeColorInfo: false, usePantoneNames: false, underbase: false, underbaseChoke: 0, cropToArtwork, withFabricView });
         onClose();
       } catch (err) {
         setExportError(err instanceof Error ? err.message : String(err));
@@ -253,13 +255,19 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
               <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>Export artwork bounds only, no canvas padding</div>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0 }}>
-              <input
-                type="checkbox"
-                checked={cropToArtwork}
-                onChange={e => setCropToArtwork(e.target.checked)}
-                style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }}
-              />
+              <input type="checkbox" checked={cropToArtwork} onChange={e => setCropToArtwork(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }} />
               <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{cropToArtwork ? 'On' : 'Off'}</span>
+            </label>
+          </div>
+          {/* Realistic fabric view toggle */}
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Realistic Fabric View</div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>Composite artwork over garment color with fabric texture</div>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0 }}>
+              <input type="checkbox" checked={withFabricView} onChange={e => setWithFabricView(e.target.checked)} style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }} />
+              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{withFabricView ? 'On' : 'Off'}</span>
             </label>
           </div>
           {/* Export button */}

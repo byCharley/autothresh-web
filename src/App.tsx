@@ -234,7 +234,7 @@ function App() {
     return c;
   }
 
-  const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke, cropToArtwork }: ExportConfig) => {
+  const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke, cropToArtwork, withFabricView }: ExportConfig) => {
     if (!originalImage) return;
 
     const [
@@ -760,33 +760,74 @@ function App() {
     if (format === 'png') {
       if (mode === 'dtg' || separationMode === 'texture' || separationMode === 'dtg') {
         const suffix = separationMode === 'texture' ? 'texture' : 'dtg';
-        if (separationMode === 'dtg' && cropToArtwork && dtgExportImageData) {
-          // Scan non-transparent pixels to find the tight bounding box
-          const d = dtgExportImageData.data;
-          const W = dtgExportImageData.width, H = dtgExportImageData.height;
-          let minX = W, maxX = 0, minY = H, maxY = 0;
-          for (let y = 0; y < H; y++) {
-            for (let x = 0; x < W; x++) {
-              if (d[(y * W + x) * 4 + 3] > 0) {
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
+        if (separationMode === 'dtg' && dtgExportImageData) {
+          // Build an artwork-sized canvas, optionally composited over the garment background
+          const artCanvas = document.createElement('canvas');
+          artCanvas.width = artScaleW; artCanvas.height = artScaleH;
+          const artCtx = artCanvas.getContext('2d')!;
+          if (withFabricView) {
+            artCtx.fillStyle = canvasColor;
+            artCtx.fillRect(0, 0, artScaleW, artScaleH);
+            if (fabricTexture !== 'none') {
+              const fabricPath = fabricTexture === 'light'
+                ? '/textures/White_Fabric_ATW.png'
+                : '/textures/Black_Fabric_ATW.png';
+              const fabData = await new Promise<ImageData | null>((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                  const c = document.createElement('canvas');
+                  c.width = img.naturalWidth; c.height = img.naturalHeight;
+                  c.getContext('2d')!.drawImage(img, 0, 0);
+                  resolve(c.getContext('2d')!.getImageData(0, 0, c.width, c.height));
+                };
+                img.onerror = () => resolve(null);
+                img.src = fabricPath;
+              });
+              if (fabData) {
+                const combined = artCtx.getImageData(0, 0, artScaleW, artScaleH);
+                applyFabricBlend(combined, fabData, { garmentType: fabricTexture, blendStrength: fabricBlendStrength, textureDepth: fabricTextureDepth, canvasRgb: hexToRgb(canvasColor) });
+                artCtx.putImageData(combined, 0, 0);
               }
             }
           }
-          const cropW = maxX - minX + 1;
-          const cropH = maxY - minY + 1;
-          const cropCanvas = document.createElement('canvas');
-          if (cropW > 0 && cropH > 0) {
-            cropCanvas.width = cropW; cropCanvas.height = cropH;
-            const cropCtx = cropCanvas.getContext('2d')!;
-            cropCtx.putImageData(dtgExportImageData, -minX, -minY);
+          // Draw artwork on top (transparent areas let garment show through)
+          const tmpCanvas = document.createElement('canvas');
+          tmpCanvas.width = artScaleW; tmpCanvas.height = artScaleH;
+          tmpCanvas.getContext('2d')!.putImageData(dtgExportImageData, 0, 0);
+          artCtx.drawImage(tmpCanvas, 0, 0);
+
+          if (cropToArtwork) {
+            // Scan non-transparent pixels in the artwork for tight bounding box
+            const d = dtgExportImageData.data;
+            const W = artScaleW, H = artScaleH;
+            let minX = W, maxX = 0, minY = H, maxY = 0;
+            for (let y = 0; y < H; y++) {
+              for (let x = 0; x < W; x++) {
+                if (d[(y * W + x) * 4 + 3] > 0) {
+                  if (x < minX) minX = x; if (x > maxX) maxX = x;
+                  if (y < minY) minY = y; if (y > maxY) maxY = y;
+                }
+              }
+            }
+            const cropW = maxX - minX + 1, cropH = maxY - minY + 1;
+            const cropCanvas = document.createElement('canvas');
+            if (cropW > 0 && cropH > 0) {
+              cropCanvas.width = cropW; cropCanvas.height = cropH;
+              cropCanvas.getContext('2d')!.drawImage(artCanvas, -minX, -minY);
+            } else {
+              cropCanvas.width = W; cropCanvas.height = H;
+              cropCanvas.getContext('2d')!.drawImage(artCanvas, 0, 0);
+            }
+            saveAs(await pngOf(cropCanvas), `${baseName}-${suffix}.png`);
           } else {
-            cropCanvas.width = W; cropCanvas.height = H;
-            cropCanvas.getContext('2d')!.putImageData(dtgExportImageData, 0, 0);
+            // Full doc canvas — place artwork at its document position
+            const docCanvas = document.createElement('canvas');
+            docCanvas.width = docPxW; docCanvas.height = docPxH;
+            const dCtx = docCanvas.getContext('2d')!;
+            if (withFabricView) { dCtx.fillStyle = canvasColor; dCtx.fillRect(0, 0, docPxW, docPxH); }
+            dCtx.drawImage(artCanvas, artOffX, artOffY);
+            saveAs(await pngOf(docCanvas), `${baseName}-${suffix}.png`);
           }
-          saveAs(await pngOf(cropCanvas), `${baseName}-${suffix}.png`);
         } else {
           saveAs(await pngOf(buildCompositeCanvas(separationMode !== 'texture' && separationMode !== 'dtg')), `${baseName}-${suffix}.png`);
         }
