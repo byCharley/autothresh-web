@@ -58,7 +58,7 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           brew install librsvg
-          rsvg-convert -w 1320 -h 760 src-tauri/assets/dmg-background.svg \
+          rsvg-convert -w 640 -h 360 src-tauri/assets/dmg-background.svg \
             -o src-tauri/assets/dmg-background.png
 
       - name: Generate icons (Windows)
