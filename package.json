@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "tauri": "tauri",
     "desktop:dev": "tauri dev",
     "desktop:build": "npm run build && tauri build",
     "desktop:icons": "tauri icon public/AutoThresh_Web_Icon.svg"
