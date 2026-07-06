@@ -57,19 +57,9 @@ jobs:
       - name: Convert DMG background SVG → PNG (macOS)
         if: matrix.platform == 'macos-latest'
         run: |
-          # Use qlmanage (built into macOS) to rasterize the SVG
+          brew install librsvg
           rsvg-convert -w 1320 -h 760 src-tauri/assets/dmg-background.svg \
-            -o src-tauri/assets/dmg-background.png 2>/dev/null || \
-          python3 -c "
-          import subprocess, sys
-          # Fallback: create a solid dark background PNG via sips/ImageMagick
-          try:
-              subprocess.run(['convert', '-size', '1320x760', 'xc:#0f0f0f',
-                              'src-tauri/assets/dmg-background.png'], check=True)
-          except Exception:
-              # Last resort: copy a placeholder (Tauri will use default if missing)
-              pass
-          "
+            -o src-tauri/assets/dmg-background.png
 
       - name: Generate icons (Windows)
         if: matrix.platform == 'windows-latest'
