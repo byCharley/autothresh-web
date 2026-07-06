@@ -60,23 +60,21 @@ async function getSealSubscriptionCounts(): Promise<{ active: number; trial: num
       if (payload && Array.isArray(payload.subscriptions)) subs = payload.subscriptions as Array<Record<string, unknown>>;
       else for (const key of ['subscriptions', 'data']) { if (Array.isArray(obj[key])) { subs = obj[key] as Array<Record<string, unknown>>; break; } }
     }
-    const TRIAL_DAYS = parseInt(process.env.SEAL_TRIAL_DAYS ?? '3');
     for (const s of subs) {
       const st = String(s.status ?? '').toUpperCase();
+
+      // Only count subscriptions for AutoThresh Web — filter by item title/product handle
+      const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
+      const isAutothresh = items.length === 0 || items.some(item => {
+        const title = String(item.title ?? item.product_title ?? item.selling_plan_name ?? '').toLowerCase();
+        const handle = String(item.product_handle ?? item.handle ?? '').toLowerCase();
+        return title.includes('autothresh') || handle.includes('autothresh');
+      });
+      if (!isAutothresh) continue;
+
       counts.total++;
-
-      // Mirror verify.ts: Seal marks trials as ACTIVE with subscription_type=2
-      const isTrialType = Number(s.subscription_type) === 2;
-      const orderPlaced = s.order_placed as string | undefined;
-      const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.trial_ends_at) as string | undefined;
-      const trialEndInferred = isTrialType && orderPlaced
-        ? new Date(new Date(orderPlaced).getTime() + TRIAL_DAYS * 86_400_000).toISOString()
-        : undefined;
-      const trialEndRaw = trialEndExplicit ?? trialEndInferred;
-      const isInTrial = st === 'TRIAL' || (!!trialEndRaw && new Date(trialEndRaw) > new Date());
-
-      if (isInTrial && (st === 'ACTIVE' || st === 'TRIAL')) counts.trial++;
-      else if (st === 'ACTIVE') counts.active++;
+      if (st === 'ACTIVE') counts.active++;
+      else if (st === 'TRIAL') counts.trial++;
       else if (st === 'PAUSED') counts.paused++;
       else if (st === 'CANCELLED' || st === 'CANCELED') counts.cancelled++;
     }
