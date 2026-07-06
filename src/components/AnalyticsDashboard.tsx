@@ -1286,17 +1286,32 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
       .catch(() => {});
   }, [session.token]);
 
+  const prevChatUnread = useRef(0);
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
   useEffect(() => {
     const load = () => {
       fetch('/api/chat?resource=tickets', { headers: { Authorization: `Bearer ${session.token}` } })
         .then(r => r.ok ? r.json() : null)
         .then((ts: Array<{ unread_by_creator?: number }> | null) => {
-          if (ts) setChatUnread(ts.reduce((s, t) => s + (t.unread_by_creator || 0), 0));
+          if (!ts) return;
+          const count = ts.reduce((s, t) => s + (t.unread_by_creator || 0), 0);
+          setChatUnread(count);
+          if (count > prevChatUnread.current && prevChatUnread.current >= 0 && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification('New support message', {
+              body: count === 1 ? 'You have 1 unread message' : `You have ${count} unread messages`,
+              icon: '/favicon.ico',
+            });
+          }
+          prevChatUnread.current = count;
         })
         .catch(() => {});
     };
     load();
-    const id = setInterval(load, 30_000);
+    const id = setInterval(load, 15_000);
     return () => clearInterval(id);
   }, [session.token]);
 
