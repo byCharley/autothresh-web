@@ -13,7 +13,7 @@ pub fn run() {
             .title("AutoThresh")
             .inner_size(1280.0, 820.0)
             .min_inner_size(1000.0, 680.0)
-            .center(true)
+            .center()
             .resizable(true)
             .build()?;
             Ok(())
