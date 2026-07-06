@@ -46,10 +46,22 @@ export function EulaModal({ onClose }: Props) {
             no refund. There is no appeal process for account-sharing violations.
           </Section>
 
+          <Section title="One-Time Lifetime Purchase">
+            AutoThresh Web offers a one-time lifetime purchase option that grants access
+            to the application for as long as the service remains operational. "Lifetime"
+            refers to the lifetime of the AutoThresh Web application itself — not any
+            guaranteed minimum period. We make no commitment to keep the service running
+            indefinitely, and access may be discontinued if the application is sunset,
+            retired, or otherwise terminated. In such an event, no refund or compensation
+            will be issued. By purchasing lifetime access, you acknowledge and accept
+            these terms. Lifetime access is non-transferable and licensed to a single
+            user only, subject to the same account-sharing restrictions as all other plans.
+          </Section>
+
           <Section title="Refund Policy">
-            All subscription purchases are final. We do not issue refunds under any
-            circumstances. Please review your subscription plan carefully before
-            completing your purchase.
+            All purchases — including subscriptions and one-time lifetime purchases — are
+            final. We do not issue refunds under any circumstances. Please review your
+            selected plan carefully before completing your purchase.
           </Section>
 
           <Section title="Cancellation">
