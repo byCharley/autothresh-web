@@ -83,6 +83,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = await verifyCreator(token);
   if (!isCreator) return res.status(403).json({ error: 'Forbidden' });
 
+  // ── Snapshot action (merged from api/snapshot.ts) ─────────────────────────
+  if (req.query.action === 'snapshot') {
+    const counts = await getSealSubscriptionCounts();
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/subscription_snapshots`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_KEY}`, 'apikey': SERVICE_KEY, 'Prefer': 'return=minimal' },
+      body: JSON.stringify(counts),
+    });
+    if (!r.ok) {
+      const body = await r.text();
+      console.error('Supabase snapshot write failed:', r.status, body);
+      return res.status(500).json({ error: `Supabase ${r.status}` });
+    }
+    return res.status(200).json({ ok: true, snapshot: counts });
+  }
+
   const fromParam = req.query.from ? String(req.query.from) : null;
   const toParam   = req.query.to   ? String(req.query.to)   : null;
 
