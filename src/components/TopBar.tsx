@@ -488,7 +488,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
           <circle cx="12" cy="12" r="10"/>
           <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
         </svg>
-        Watch Tutorials
+        Tutorials
       </button>
       <button
         className="btn btn-ghost"
