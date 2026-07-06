@@ -229,7 +229,7 @@ export function CanvasView() {
     bgPaintMask, bgPaintMaskDims, bgPaintMode, setBgPaintMask,
     showRegistrationMarks, regMarkPadding, documentBleed,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
-    canvasColor, showFabricBg, setShowFabricBg, fabricTexture, setFabricTexture, fabricBlendStrength, fabricTextureDepth,
+    canvasColor, showFabricBg, setShowFabricBg, fabricTexture, fabricBlendStrength, fabricTextureDepth,
     imageAdjustments,
     documentDpi, documentWidthIn, documentHeightIn,
     separationMode, cmykLpi, cmykVisibility, cmykAngles, cmykParams, cmykViewMode,

@@ -188,7 +188,7 @@ export function ExportModal({ onClose, onExport, defaultFileName, separationMode
                 setExportError(null);
                 await new Promise(r => setTimeout(r, 60));
                 try {
-                  await onExport({ mode: 'dtg', format: 'png', fileName: fileName.trim() || defaultFileName, includeColorInfo: false, usePantoneNames: false, underbase: false, underbaseChoke: 0 });
+                  await onExport({ mode: 'dtg', format: 'png', fileName: fileName.trim() || defaultFileName, includeColorInfo: false, usePantoneNames: false, underbase: false, underbaseChoke: 0, cropToArtwork: false });
                   onClose();
                 } catch (err) {
                   setExportError(err instanceof Error ? err.message : String(err));
