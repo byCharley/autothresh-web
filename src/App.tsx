@@ -23,6 +23,7 @@ import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components
 import { ContactModal } from './components/ContactModal';
 import { TutorialsModal } from './components/TutorialsModal';
 import { TutorialOverlay } from './components/TutorialOverlay';
+import { ChatWidget } from './components/ChatWidget';
 import { LoginSplash } from './components/LoginSplash';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { useStore } from './store/useStore';
@@ -1094,6 +1095,7 @@ function App() {
         {showVideo    && <TutorialsModal  onClose={() => setShowVideo(false)} />}
         {showSplash   && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
         {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
+        {session && <ChatWidget session={session} />}
       </MobileLayout>
     );
   }
@@ -1252,6 +1254,7 @@ function App() {
       {showVideo    && <TutorialsModal  onClose={() => setShowVideo(false)} />}
       {showSplash && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
       {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
+      {session && <ChatWidget session={session} />}
     </div>
   );
 }

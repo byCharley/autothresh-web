@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useLayoutEffect } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 
 function useMobile(bp = 640) {
   const [m, setM] = useState(false);
@@ -294,6 +294,288 @@ function Panel({ title, children, style }: { title: string; children: React.Reac
         {title}
       </div>
       {children}
+    </div>
+  );
+}
+
+// ── Chat panel ──────────────────────────────────────────────────────────────
+
+interface SupportTicket {
+  id: string;
+  subject: string;
+  status: 'open' | 'pending' | 'solved';
+  user_email: string;
+  user_name: string;
+  created_at: string;
+  last_message_at: string;
+  unread_by_creator: number;
+  unread_by_user: number;
+}
+
+interface SupportMessage {
+  id: number;
+  created_at: string;
+  sender: 'user' | 'creator';
+  message: string;
+  read_at: string | null;
+}
+
+const TICKET_STATUS_COLOR = { open: '#4ade80', pending: '#faad14', solved: '#6b7280' } as const;
+const TICKET_STATUS_LABEL = { open: 'Open', pending: 'Pending', solved: 'Solved' } as const;
+
+function fmtMsgTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+function fmtMsgDate(iso: string) {
+  const d = new Date(iso); const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'Today';
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function ChatPanel({ session }: { session: Session }) {
+  const [tickets, setTickets]         = useState<SupportTicket[]>([]);
+  const [active, setActive]           = useState<SupportTicket | null>(null);
+  const [messages, setMessages]       = useState<SupportMessage[]>([]);
+  const [reply, setReply]             = useState('');
+  const [sending, setSending]         = useState(false);
+  const [loading, setLoading]         = useState(true);
+  const [isOnline, setIsOnline]       = useState(false);
+  const [toggling, setToggling]       = useState(false);
+  const [showAll, setShowAll]         = useState(false);
+  const bottomRef                     = useRef<HTMLDivElement>(null);
+
+  const H = useCallback(() => ({ Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json' }), [session.token]);
+
+  const loadPresence = useCallback(() => {
+    fetch('/api/chat?resource=status')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { is_online?: boolean } | null) => setIsOnline(!!d?.is_online))
+      .catch(() => {});
+  }, []);
+
+  const loadTickets = useCallback(() => {
+    const q = showAll ? '/api/chat?resource=tickets&all=1' : '/api/chat?resource=tickets';
+    fetch(q, { headers: H() })
+      .then(r => r.ok ? r.json() as Promise<SupportTicket[]> : Promise.resolve([] as SupportTicket[]))
+      .then(ts => { setTickets(ts); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [session.token, showAll]);
+
+  const loadMessages = useCallback((ticketId: string) => {
+    fetch(`/api/chat?resource=messages&ticket=${ticketId}`, { headers: H() })
+      .then(r => r.ok ? r.json() as Promise<SupportMessage[]> : Promise.resolve([] as SupportMessage[]))
+      .then(msgs => {
+        setMessages(msgs);
+        setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, unread_by_creator: 0 } : t));
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
+      })
+      .catch(() => {});
+  }, [session.token]);
+
+  useEffect(() => { loadPresence(); loadTickets(); }, [loadPresence, loadTickets]);
+  useEffect(() => { const id = setInterval(loadTickets, 8_000); return () => clearInterval(id); }, [loadTickets]);
+  useEffect(() => {
+    if (!active) return;
+    loadMessages(active.id);
+    const id = setInterval(() => loadMessages(active.id), 5_000);
+    return () => clearInterval(id);
+  }, [active?.id, loadMessages]);
+
+  async function toggleOnline() {
+    setToggling(true);
+    const next = !isOnline;
+    setIsOnline(next);
+    await fetch('/api/chat', { method: 'PATCH', headers: H(), body: JSON.stringify({ resource: 'presence', is_online: next }) });
+    setToggling(false);
+  }
+
+  async function sendReply() {
+    if (!reply.trim() || !active || sending) return;
+    const text = reply.trim();
+    setSending(true); setReply('');
+    await fetch('/api/chat', { method: 'POST', headers: H(), body: JSON.stringify({ resource: 'message', ticket_id: active.id, message: text }) });
+    loadMessages(active.id);
+    setSending(false);
+  }
+
+  async function setStatus(id: string, status: 'open' | 'pending' | 'solved') {
+    await fetch('/api/chat', { method: 'PATCH', headers: H(), body: JSON.stringify({ resource: 'ticket', id, status }) });
+    setTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t));
+    if (active?.id === id) setActive(prev => prev ? { ...prev, status } : prev);
+  }
+
+  const totalUnread = tickets.reduce((s, t) => s + (t.unread_by_creator || 0), 0);
+
+  return (
+    <div style={{ display: 'flex', gap: 0, height: 560, border: '1px solid var(--border)', overflow: 'hidden' }}>
+
+      {/* Ticket list */}
+      <div style={{ width: 240, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+        {/* List header */}
+        <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Tickets</span>
+            {totalUnread > 0 && <span style={{ minWidth: 16, height: 16, padding: '0 4px', background: '#f87171', color: '#000', fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{totalUnread}</span>}
+          </div>
+          <button onClick={() => setShowAll(v => !v)} style={{ fontSize: 8, fontFamily: 'var(--font-mono)', background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', textDecoration: 'underline' }}>
+            {showAll ? 'Active only' : 'Show all'}
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {loading && <div style={{ padding: '20px 12px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Loading…</div>}
+          {!loading && tickets.length === 0 && <div style={{ padding: '20px 12px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>No tickets</div>}
+          {tickets.map(t => (
+            <button
+              key={t.id}
+              onClick={() => { setActive(t); setMessages([]); }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '10px 12px',
+                background: active?.id === t.id ? 'var(--surface)' : 'transparent',
+                borderLeft: active?.id === t.id ? '2px solid var(--accent)' : '2px solid transparent',
+                borderRight: 'none', borderTop: 'none', borderBottom: '1px solid var(--border)',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', color: t.unread_by_creator > 0 ? 'var(--text)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{t.subject}</span>
+                {t.unread_by_creator > 0 && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f87171', flexShrink: 0 }} />}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>{t.user_name || t.user_email}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: TICKET_STATUS_COLOR[t.status] }} />
+                  <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{TICKET_STATUS_LABEL[t.status]}</span>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Online toggle */}
+        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: isOnline ? '#4ade80' : '#6b7280' }} />
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{isOnline ? 'Online' : 'Offline'}</span>
+          </div>
+          <button
+            onClick={toggleOnline}
+            disabled={toggling}
+            style={{
+              height: 20, padding: '0 8px', fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.05em',
+              background: isOnline ? 'rgba(248,113,113,0.15)' : 'rgba(74,222,128,0.15)',
+              border: `1px solid ${isOnline ? 'rgba(248,113,113,0.3)' : 'rgba(74,222,128,0.3)'}`,
+              color: isOnline ? '#f87171' : '#4ade80', cursor: 'pointer',
+            }}
+          >
+            {isOnline ? 'Go Offline' : 'Go Online'}
+          </button>
+        </div>
+      </div>
+
+      {/* Conversation */}
+      {active ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          {/* Convo header */}
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{active.subject}</div>
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 2 }}>
+                {active.user_name ? `${active.user_name} · ` : ''}{active.user_email}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {active.status !== 'solved' && (
+                <button onClick={() => setStatus(active.id, 'solved')} style={{ height: 26, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: '#4ade8022', border: '1px solid #4ade8044', color: '#4ade80', cursor: 'pointer' }}>
+                  ✓ Solve
+                </button>
+              )}
+              {active.status === 'solved' && (
+                <button onClick={() => setStatus(active.id, 'open')} style={{ height: 26, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  Reopen
+                </button>
+              )}
+              {active.status === 'open' && (
+                <button onClick={() => setStatus(active.id, 'pending')} style={{ height: 26, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer' }}>
+                  Pending
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {messages.map((msg, idx) => {
+              const isCreator = msg.sender === 'creator';
+              const showDate = idx === 0 || fmtMsgDate(messages[idx - 1].created_at) !== fmtMsgDate(msg.created_at);
+              const isLast = idx === messages.length - 1;
+              const isRead = isCreator && isLast && active.unread_by_user === 0;
+              return (
+                <div key={msg.id}>
+                  {showDate && <div style={{ textAlign: 'center', fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', margin: '4px 0 8px' }}>{fmtMsgDate(msg.created_at)}</div>}
+                  <div style={{ display: 'flex', justifyContent: isCreator ? 'flex-end' : 'flex-start' }}>
+                    <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', gap: 2, alignItems: isCreator ? 'flex-end' : 'flex-start' }}>
+                      {!isCreator && <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginLeft: 2 }}>{active.user_name || active.user_email}</span>}
+                      <div style={{
+                        padding: '8px 11px', fontSize: 12, lineHeight: 1.55, fontFamily: 'var(--font-sans)',
+                        background: isCreator ? 'var(--accent)' : 'var(--surface)',
+                        color: isCreator ? '#111' : 'var(--text)',
+                        border: isCreator ? 'none' : '1px solid var(--border)',
+                        wordBreak: 'break-word',
+                      }}>
+                        {msg.message}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{fmtMsgTime(msg.created_at)}</span>
+                        {isCreator && isLast && (
+                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: isRead ? 'var(--accent)' : 'var(--text-dim)' }}>
+                            {isRead ? '✓✓ Read' : '✓ Sent'}
+                          </span>
+                        )}
+                        {!isCreator && msg.read_at && isLast && (
+                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>✓✓ Read</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Reply box */}
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+            {active.status === 'solved' ? (
+              <div style={{ textAlign: 'center', fontSize: 10, fontFamily: 'var(--font-mono)', color: '#4ade80', padding: '4px 0' }}>✓ Ticket resolved — click Reopen to continue</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <textarea
+                  placeholder="Reply to customer…"
+                  value={reply}
+                  onChange={e => setReply(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendReply(); } }}
+                  rows={2}
+                  style={{ flex: 1, padding: '7px 10px', fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)', resize: 'none', lineHeight: 1.5 }}
+                />
+                <button
+                  onClick={sendReply}
+                  disabled={sending || !reply.trim()}
+                  style={{ width: 40, background: 'var(--accent)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (!reply.trim() || sending) ? 0.4 : 1 }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10 }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="1.5" opacity="0.4"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Select a ticket</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1004,14 +1286,29 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
       .catch(() => {});
   }, [session.token]);
 
+  useEffect(() => {
+    const load = () => {
+      fetch('/api/chat?resource=tickets', { headers: { Authorization: `Bearer ${session.token}` } })
+        .then(r => r.ok ? r.json() : null)
+        .then((ts: Array<{ unread_by_creator?: number }> | null) => {
+          if (ts) setChatUnread(ts.reduce((s, t) => s + (t.unread_by_creator || 0), 0));
+        })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 30_000);
+    return () => clearInterval(id);
+  }, [session.token]);
+
   function applyCustom() {
     setCustomFrom(pendingFrom);
     setCustomTo(pendingTo);
     setPreset('custom');
   }
 
-  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'videos'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'videos' | 'chat'>('stats');
   const [securityUnreviewed, setSecurityUnreviewed] = useState(0);
+  const [chatUnread, setChatUnread] = useState(0);
 
   const [snapping, setSnapping] = useState(false);
   const [snapMsg, setSnapMsg]   = useState<string | null>(null);
@@ -1175,7 +1472,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
         {/* Tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px' }}>
-          {(['stats', 'security', 'videos'] as const).map(tab => (
+          {(['stats', 'security', 'videos', 'chat'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1191,15 +1488,15 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                 cursor: 'pointer', marginBottom: -1,
               }}
             >
-              {tab === 'stats' ? 'Stats' : tab === 'security' ? 'Security' : 'Videos'}
+              {tab === 'stats' ? 'Stats' : tab === 'security' ? 'Security' : tab === 'videos' ? 'Videos' : 'Chat'}
               {tab === 'security' && securityUnreviewed > 0 && (
-                <span style={{
-                  marginLeft: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  minWidth: 16, height: 16, padding: '0 4px',
-                  background: '#f87171', color: '#000',
-                  fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)',
-                }}>
+                <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 16, height: 16, padding: '0 4px', background: '#f87171', color: '#000', fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
                   {securityUnreviewed > 99 ? '99+' : securityUnreviewed}
+                </span>
+              )}
+              {tab === 'chat' && chatUnread > 0 && (
+                <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 16, height: 16, padding: '0 4px', background: '#f87171', color: '#000', fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
+                  {chatUnread > 99 ? '99+' : chatUnread}
                 </span>
               )}
             </button>
@@ -1214,6 +1511,10 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
           {activeTab === 'videos' && (
             <VideosPanel session={session} />
+          )}
+
+          {activeTab === 'chat' && (
+            <ChatPanel session={session} />
           )}
 
           {activeTab === 'stats' && loading && (
