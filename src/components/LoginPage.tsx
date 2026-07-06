@@ -389,6 +389,56 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
               <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', lineHeight: 1.5, opacity: 0.7 }}>
                 No charge until your trial ends. Cancel anytime.
               </div>
+
+              {/* Lifetime divider */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0 16px' }}>
+                <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.6 }}>or own it forever</span>
+                <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+
+              {/* Lifetime card */}
+              <div style={{
+                padding: '18px 20px',
+                border: '1px solid #fbbf24',
+                background: 'rgba(251,191,36,0.04)',
+                position: 'relative', overflow: 'hidden',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+              }}>
+                <div style={{ position: 'absolute', top: 0, right: 0, background: '#fbbf24', color: '#000', fontSize: 8, fontWeight: 700, fontFamily: 'var(--font-mono)', padding: '3px 9px', letterSpacing: '0.08em' }}>
+                  ONE-TIME
+                </div>
+                <div>
+                  <div style={{ fontSize: 9, color: '#fbbf24', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Lifetime</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'baseline', gap: 3, marginBottom: 8 }}>
+                    <span style={{ fontSize: 26, fontWeight: 700, color: 'var(--text)' }}>$249.99</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>once</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7 }}>
+                    Pay once · Own forever<br/>All future updates included
+                  </div>
+                </div>
+                <a
+                  href="https://charleypangus.com/checkout/autothresh-web/lifetime"
+                  target="_blank" rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    flexShrink: 0, textDecoration: 'none',
+                    padding: '11px 18px',
+                    border: '1px solid #fbbf24', color: '#fbbf24',
+                    background: 'none',
+                    fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)',
+                    letterSpacing: '0.05em', whiteSpace: 'nowrap',
+                    display: 'inline-block', boxSizing: 'border-box',
+                    transition: 'background 0.15s, color 0.15s',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#fbbf24'; (e.currentTarget as HTMLElement).style.color = '#000'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = '#fbbf24'; }}
+                >
+                  Buy Lifetime
+                </a>
+              </div>
+
             </div>
           </div>
         )}
