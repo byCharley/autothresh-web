@@ -60,18 +60,12 @@ async function getSealSubscriptionCounts(): Promise<{ active: number; trial: num
       if (payload && Array.isArray(payload.subscriptions)) subs = payload.subscriptions as Array<Record<string, unknown>>;
       else for (const key of ['subscriptions', 'data']) { if (Array.isArray(obj[key])) { subs = obj[key] as Array<Record<string, unknown>>; break; } }
     }
+    // Log first sub's structure so we can see what Seal actually returns
+    if (subs[0]) console.log('[analytics] Seal sub[0] sample:', JSON.stringify(subs[0]).slice(0, 600));
+    console.log('[analytics] Seal total subs returned:', subs.length);
+
     for (const s of subs) {
       const st = String(s.status ?? '').toUpperCase();
-
-      // Only count subscriptions for AutoThresh Web — filter by item title/product handle
-      const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
-      const isAutothresh = items.length === 0 || items.some(item => {
-        const title = String(item.title ?? item.product_title ?? item.selling_plan_name ?? '').toLowerCase();
-        const handle = String(item.product_handle ?? item.handle ?? '').toLowerCase();
-        return title.includes('autothresh') || handle.includes('autothresh');
-      });
-      if (!isAutothresh) continue;
-
       counts.total++;
       if (st === 'ACTIVE') counts.active++;
       else if (st === 'TRIAL') counts.trial++;
