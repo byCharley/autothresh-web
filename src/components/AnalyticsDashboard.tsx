@@ -1503,17 +1503,10 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                 cursor: 'pointer', marginBottom: -1,
               }}
             >
-              {tab === 'stats' ? 'Stats' : tab === 'security' ? 'Security' : tab === 'videos' ? 'Videos' : 'Chat'}
-              {tab === 'security' && securityUnreviewed > 0 && (
-                <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 16, height: 16, padding: '0 4px', background: '#f87171', color: '#000', fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
-                  {securityUnreviewed > 99 ? '99+' : securityUnreviewed}
-                </span>
-              )}
-              {tab === 'chat' && chatUnread > 0 && (
-                <span style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 16, height: 16, padding: '0 4px', background: '#f87171', color: '#000', fontSize: 9, fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
-                  {chatUnread > 99 ? '99+' : chatUnread}
-                </span>
-              )}
+              {tab === 'stats' ? 'Stats'
+                : tab === 'security' ? (securityUnreviewed > 0 ? `Security (${securityUnreviewed > 99 ? '99+' : securityUnreviewed})` : 'Security')
+                : tab === 'videos' ? 'Videos'
+                : chatUnread > 0 ? `Chat (${chatUnread > 99 ? '99+' : chatUnread})` : 'Chat'}
             </button>
           ))}
         </div>
