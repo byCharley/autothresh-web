@@ -1,0 +1,105 @@
+name: Release Desktop App
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+            name: macOS
+          - platform: windows-latest
+            args: ''
+            name: Windows
+
+    runs-on: ${{ matrix.platform }}
+    name: Build ${{ matrix.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Generate icons (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          npm exec tauri icon public/AutoThresh_Web_Icon.svg
+
+      - name: Convert DMG background SVG → PNG (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          # Use qlmanage (built into macOS) to rasterize the SVG
+          rsvg-convert -w 1320 -h 760 src-tauri/assets/dmg-background.svg \
+            -o src-tauri/assets/dmg-background.png 2>/dev/null || \
+          python3 -c "
+          import subprocess, sys
+          # Fallback: create a solid dark background PNG via sips/ImageMagick
+          try:
+              subprocess.run(['convert', '-size', '1320x760', 'xc:#0f0f0f',
+                              'src-tauri/assets/dmg-background.png'], check=True)
+          except Exception:
+              # Last resort: copy a placeholder (Tauri will use default if missing)
+              pass
+          "
+
+      - name: Generate icons (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: npm exec tauri icon public/AutoThresh_Web_Icon.svg
+
+      - name: Build and release Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Mac code signing (optional — add to GitHub Secrets to sign the app)
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'AutoThresh ${{ github.ref_name }}'
+          releaseBody: |
+            ## AutoThresh Desktop ${{ github.ref_name }}
+
+            Download the installer for your platform below.
+
+            - **Mac**: AutoThresh_x.x.x_universal.dmg (works on Intel + Apple Silicon)
+            - **Windows**: AutoThresh_x.x.x_x64-setup.exe
+
+            ### Install
+            **Mac**: Open the DMG and drag AutoThresh to your Applications folder.
+            **Windows**: Run the installer and follow the prompts.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

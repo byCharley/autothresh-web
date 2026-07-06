@@ -25,3 +25,8 @@ dist-ssr
 .vercel
 .env*
 public/overlays/
+
+# Tauri / Rust
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/gen/

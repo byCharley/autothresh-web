@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="380" viewBox="0 0 660 380">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#1a1a1a"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </radialGradient>
+    <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="0.8" fill="#ffffff" opacity="0.04"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="660" height="380" fill="url(#bg)"/>
+  <rect width="660" height="380" fill="url(#dots)"/>
+
+  <!-- Subtle top accent line -->
+  <rect x="0" y="0" width="660" height="2" fill="#c0873a" opacity="0.6"/>
+
+  <!-- AUTOTHRESH wordmark -->
+  <text
+    x="330" y="52"
+    font-family="'Courier New', Courier, monospace"
+    font-size="13"
+    font-weight="700"
+    letter-spacing="8"
+    text-anchor="middle"
+    fill="#c0873a"
+    opacity="0.9"
+  >AUTOTHRESH</text>
+
+  <!-- Tagline -->
+  <text
+    x="330" y="70"
+    font-family="'Courier New', Courier, monospace"
+    font-size="9"
+    letter-spacing="3"
+    text-anchor="middle"
+    fill="#666666"
+  >SCREEN PRINT SEPARATION TOOL</text>
+
+  <!-- Drag arrow — center between app icon (195) and Applications (465) -->
+  <g transform="translate(330,165)">
+    <!-- Arrow shaft -->
+    <rect x="-36" y="-3" width="72" height="6" rx="3" fill="#c0873a" opacity="0.8"/>
+    <!-- Arrowhead -->
+    <polygon points="36,-10 56,0 36,10" fill="#c0873a" opacity="0.8"/>
+    <!-- Tail notch -->
+    <polygon points="-36,-10 -56,0 -36,10" fill="#333333"/>
+  </g>
+
+  <!-- "Drag to install" label -->
+  <text
+    x="330" y="205"
+    font-family="'Courier New', Courier, monospace"
+    font-size="10"
+    letter-spacing="1"
+    text-anchor="middle"
+    fill="#555555"
+  >Drag AutoThresh to Applications to install</text>
+
+  <!-- Bottom version hint -->
+  <text
+    x="330" y="365"
+    font-family="'Courier New', Courier, monospace"
+    font-size="8"
+    letter-spacing="2"
+    text-anchor="middle"
+    fill="#333333"
+  >autothresh.com</text>
+</svg>
