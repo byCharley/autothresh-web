@@ -868,8 +868,14 @@ interface SecurityFlag {
   notes: string | null;
 }
 
+interface SharedIpEntry {
+  ip: string;
+  emails: string[];
+}
+
 interface SecurityData {
   flags: SecurityFlag[];
+  sharedIps: SharedIpEntry[];
   summary: {
     total: number;
     unreviewed: number;
@@ -1048,8 +1054,73 @@ function SecurityPanel({ session }: { session: Session }) {
             <StatCard label="Needs Review" value={data.summary.unreviewed} sub="Not yet actioned" accent={data.summary.unreviewed > 0} />
             <StatCard label="High Confidence" value={data.summary.highConfidence} sub="IP + name match" />
             <StatCard label="Expired" value={data.summary.expired} sub="Access blocked" />
-            <StatCard label="Shared IPs (7d)" value={data.summary.sharedIpsLast7d} sub="IPs with 2+ accounts" />
+            <StatCard label="Shared IPs (7d)" value={data.summary.sharedIpsLast7d} sub="IPs with 2+ accounts" accent={data.summary.sharedIpsLast7d > 0} />
           </div>
+
+          {/* Shared IPs breakdown */}
+          {data.sharedIps.length > 0 && (
+            <div style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
+              <div style={{
+                padding: '8px 14px', borderBottom: '1px solid var(--border)',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#faad14' }}>
+                  ⚠ Shared IPs — Last 7 Days
+                </span>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  Multiple accounts logging in from the same IP
+                </span>
+              </div>
+              {data.sharedIps.map(({ ip, emails }) => (
+                <div key={ip} style={{
+                  padding: '10px 14px', borderBottom: '1px solid var(--border)',
+                  display: 'flex', flexDirection: 'column', gap: 6,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                      color: 'var(--text)', background: 'var(--surface-2)',
+                      border: '1px solid var(--border)', padding: '2px 8px',
+                    }}>{ip}</span>
+                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      {emails.length} accounts
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8 }}>
+                    {emails.map(email => (
+                      <div key={email} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-muted)', flex: '1 1 200px' }}>
+                          {email}
+                        </span>
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <button
+                            onClick={() => act('flag', email)}
+                            disabled={acting === email + 'flag'}
+                            style={{
+                              height: 22, padding: '0 10px', fontSize: 9,
+                              fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                              background: 'transparent', border: '1px solid var(--border)',
+                              color: 'var(--text-muted)', cursor: 'pointer',
+                            }}
+                          >Flag</button>
+                          <button
+                            onClick={() => act('expire', email)}
+                            disabled={acting === email + 'expire'}
+                            style={{
+                              height: 22, padding: '0 10px', fontSize: 9,
+                              fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                              background: '#f8717122', border: '1px solid #f8717166',
+                              color: '#f87171', cursor: 'pointer',
+                            }}
+                          >Block</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Filter tabs */}
           <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)' }}>

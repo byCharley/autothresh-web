@@ -65,7 +65,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!ipEmails.has(ip)) ipEmails.set(ip, new Set());
         ipEmails.get(ip)!.add(email);
       }
-      const sharedIpCount = [...ipEmails.values()].filter(s => s.size > 1).length;
+      const sharedIps = [...ipEmails.entries()]
+        .filter(([, emails]) => emails.size > 1)
+        .map(([ip, emails]) => ({ ip, emails: [...emails].sort() }))
+        .sort((a, b) => b.emails.length - a.emails.length);
 
       const unreviewed = flags.filter(f => !f.reviewed && !f.expired).length;
       const expired    = flags.filter(f => f.expired).length;
@@ -73,12 +76,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json({
         flags,
+        sharedIps,
         summary: {
           total: flags.length,
           unreviewed,
           expired,
           highConfidence: highConf,
-          sharedIpsLast7d: sharedIpCount,
+          sharedIpsLast7d: sharedIps.length,
         },
       });
     } catch (e) {
