@@ -920,7 +920,7 @@ function TestersPanel({ session }: { session: Session }) {
 
   const load = useCallback(() => {
     setLoading(true); setError(null);
-    fetch('/api/testers', { headers: { Authorization: `Bearer ${session.token}` } })
+    fetch('/api/security?resource=testers', { headers: { Authorization: `Bearer ${session.token}` } })
       .then(r => r.json() as Promise<{ testers?: Tester[]; error?: string }>)
       .then(d => {
         if (d.error) { setError(d.error); return; }
@@ -935,7 +935,7 @@ function TestersPanel({ session }: { session: Session }) {
   async function act(action: string, email: string) {
     setBusy(email + action);
     try {
-      const r = await fetch('/api/testers', {
+      const r = await fetch('/api/security?resource=testers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
         body: JSON.stringify({ action, email }),
@@ -955,7 +955,7 @@ function TestersPanel({ session }: { session: Session }) {
     if (!email || !email.includes('@')) { setAddErr('Enter a valid email'); return; }
     setAdding(true); setAddErr(null);
     try {
-      const r = await fetch('/api/testers', {
+      const r = await fetch('/api/security?resource=testers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
         body: JSON.stringify({ action: 'add', email, notes: addNotes.trim() || null }),

@@ -45,6 +45,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = await verifyCreator(token);
   if (!isCreator) return res.status(403).json({ error: 'Forbidden' });
 
+  const resource = String(req.query.resource ?? '');
+
+  // ── Testers resource ──────────────────────────────────────────────────────
+  if (resource === 'testers') {
+    if (req.method === 'GET') {
+      try {
+        const r = await sb('testers?order=created_at.desc&select=email,status,notes,created_at');
+        if (!r.ok) {
+          const text = await r.text();
+          if (r.status === 404 || text.includes('does not exist')) return res.status(200).json({ testers: [] });
+          return res.status(500).json({ error: 'Failed to load testers' });
+        }
+        return res.status(200).json({ testers: await r.json() });
+      } catch (e) { console.error('Testers GET error:', e); return res.status(500).json({ error: 'Failed to load testers' }); }
+    }
+    if (req.method === 'POST') {
+      const { action, email, notes } = req.body as { action?: string; email?: string; notes?: string };
+      if (!action || !email) return res.status(400).json({ error: 'action and email required' });
+      const em = email.toLowerCase().trim();
+      try {
+        if (action === 'add') {
+          await sb('testers', 'POST', { email: em, status: 'active', notes: notes ?? null });
+          return res.status(200).json({ ok: true });
+        }
+        if (action === 'pause')  { await sb(`testers?email=eq.${encodeURIComponent(em)}`, 'PATCH', { status: 'paused' }); return res.status(200).json({ ok: true }); }
+        if (action === 'resume') { await sb(`testers?email=eq.${encodeURIComponent(em)}`, 'PATCH', { status: 'active' }); return res.status(200).json({ ok: true }); }
+        if (action === 'remove') { await sb(`testers?email=eq.${encodeURIComponent(em)}`, 'DELETE'); return res.status(200).json({ ok: true }); }
+        return res.status(400).json({ error: 'Unknown action' });
+      } catch (e) { console.error('Testers POST error:', e); return res.status(500).json({ error: 'Action failed' }); }
+    }
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   // ── GET: return flags + summary stats ────────────────────────────────────
   if (req.method === 'GET') {
     try {
