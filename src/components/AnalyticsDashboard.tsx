@@ -921,9 +921,10 @@ function TestersPanel({ session }: { session: Session }) {
   const load = useCallback(() => {
     setLoading(true); setError(null);
     fetch('/api/security?resource=testers', { headers: { Authorization: `Bearer ${session.token}` } })
-      .then(r => r.json() as Promise<{ testers?: Tester[]; error?: string }>)
+      .then(r => r.json() as Promise<{ testers?: Tester[]; error?: string; setupRequired?: boolean }>)
       .then(d => {
         if (d.error) { setError(d.error); return; }
+        if (d.setupRequired) { setError('⚠ Supabase testers table not found. Run this SQL in your Supabase SQL editor:\n\nCREATE TABLE testers (\n  email text PRIMARY KEY,\n  status text NOT NULL DEFAULT \'active\',\n  notes text,\n  created_at timestamptz NOT NULL DEFAULT now()\n);'); return; }
         setTesters(d.testers ?? []);
       })
       .catch(() => setError('Failed to load testers'))
@@ -1035,7 +1036,7 @@ function TestersPanel({ session }: { session: Session }) {
         </div>
       )}
       {error && (
-        <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: '#f87171' }}>
+        <div style={{ padding: '20px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)', fontSize: 11, fontFamily: 'var(--font-mono)', color: '#f87171', whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
           {error}
         </div>
       )}

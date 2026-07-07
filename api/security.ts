@@ -49,28 +49,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── Testers resource ──────────────────────────────────────────────────────
   if (resource === 'testers') {
+    const TABLE_MISSING = 'testers table not found — run: create table testers (email text primary key, status text not null default \'active\', notes text, created_at timestamptz not null default now());';
+
     if (req.method === 'GET') {
       try {
         const r = await sb('testers?order=created_at.desc&select=email,status,notes,created_at');
         if (!r.ok) {
           const text = await r.text();
-          if (r.status === 404 || text.includes('does not exist')) return res.status(200).json({ testers: [] });
+          if (r.status === 404 || text.includes('does not exist') || text.includes('relation')) {
+            return res.status(200).json({ testers: [], setupRequired: true });
+          }
+          console.error('Testers GET error:', r.status, text);
           return res.status(500).json({ error: 'Failed to load testers' });
         }
         return res.status(200).json({ testers: await r.json() });
       } catch (e) { console.error('Testers GET error:', e); return res.status(500).json({ error: 'Failed to load testers' }); }
     }
+
     if (req.method === 'POST') {
       const { action, email, notes } = req.body as { action?: string; email?: string; notes?: string };
       if (!action || !email) return res.status(400).json({ error: 'action and email required' });
       const em = email.toLowerCase().trim();
       try {
         if (action === 'add') {
-          await sb('testers', 'POST', { email: em, status: 'active', notes: notes ?? null });
+          const r = await sb('testers', 'POST', { email: em, status: 'active', notes: notes ?? null });
+          if (!r.ok) {
+            const text = await r.text();
+            if (text.includes('does not exist') || text.includes('relation')) {
+              return res.status(500).json({ error: TABLE_MISSING });
+            }
+            console.error('Testers add error:', r.status, text);
+            return res.status(500).json({ error: `Failed to add tester: ${r.status}` });
+          }
           return res.status(200).json({ ok: true });
         }
-        if (action === 'pause')  { await sb(`testers?email=eq.${encodeURIComponent(em)}`, 'PATCH', { status: 'paused' }); return res.status(200).json({ ok: true }); }
-        if (action === 'resume') { await sb(`testers?email=eq.${encodeURIComponent(em)}`, 'PATCH', { status: 'active' }); return res.status(200).json({ ok: true }); }
+        if (action === 'pause')  { const r = await sb(`testers?email=eq.${encodeURIComponent(em)}`, 'PATCH', { status: 'paused' }); if (!r.ok) return res.status(500).json({ error: 'Failed' }); return res.status(200).json({ ok: true }); }
+        if (action === 'resume') { const r = await sb(`testers?email=eq.${encodeURIComponent(em)}`, 'PATCH', { status: 'active' }); if (!r.ok) return res.status(500).json({ error: 'Failed' }); return res.status(200).json({ ok: true }); }
         if (action === 'remove') { await sb(`testers?email=eq.${encodeURIComponent(em)}`, 'DELETE'); return res.status(200).json({ ok: true }); }
         return res.status(400).json({ error: 'Unknown action' });
       } catch (e) { console.error('Testers POST error:', e); return res.status(500).json({ error: 'Action failed' }); }
