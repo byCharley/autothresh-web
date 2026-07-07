@@ -601,6 +601,293 @@
   </div>
 </section>
 
+<!-- ─── DTG / DTF SHOWCASE ─── -->
+<style>
+  .dtg-section { background: var(--bg2); border-top: 1px solid var(--border); }
+  .dtg-display {
+    position: relative; width: 100%; max-width: 540px;
+    margin: 0 auto 28px; aspect-ratio: 5/6;
+    background: #000; border: 1px solid var(--border); overflow: hidden;
+  }
+  .dtg-sw {
+    position: absolute; inset: 0; transition: opacity 0.7s ease;
+  }
+  .dtg-sw img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .dtg-sw.no-img img { display: none; }
+  /* Checkered transparency background for the BG-removed stage */
+  #dtgW1 {
+    background-image:
+      linear-gradient(45deg, #222 25%, transparent 25%),
+      linear-gradient(-45deg, #222 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #222 75%),
+      linear-gradient(-45deg, transparent 75%, #222 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    background-color: #111;
+  }
+  .dtg-placeholder {
+    position: absolute; inset: 0;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 20px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.07em;
+    color: var(--muted); text-align: center; line-height: 1.6;
+  }
+  .dtg-sw.no-img .dtg-placeholder { display: flex; }
+  .dtg-placeholder.chk {
+    background-image:
+      linear-gradient(45deg, #191919 25%, transparent 25%),
+      linear-gradient(-45deg, #191919 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #191919 75%),
+      linear-gradient(-45deg, transparent 75%, #191919 75%);
+    background-size: 18px 18px;
+    background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+    background-color: #111;
+  }
+  .dtg-placeholder.fab {
+    background: url('/textures/Black_Fabric_ATW.png') center/cover;
+  }
+  .dtg-badge {
+    position: absolute; top: 12px; left: 12px; z-index: 5;
+    font-family: var(--mono); font-size: 9px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 4px 10px; background: rgba(0,0,0,0.78);
+    border: 1px solid var(--accent); color: var(--accent);
+    pointer-events: none; transition: opacity 0.3s;
+  }
+  .dtg-ctrl { display: flex; flex-direction: column; align-items: center; gap: 14px; max-width: 540px; margin: 0 auto; }
+  .dtg-track-wrap { position: relative; width: 100%; height: 20px; display: flex; align-items: center; cursor: pointer; }
+  .dtg-track { width: 100%; height: 2px; background: var(--border); position: relative; }
+  .dtg-fill { position: absolute; top: 0; left: 0; height: 100%; background: var(--accent); width: 0%; }
+  .dtg-thumb {
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); border: 2px solid #000;
+    box-shadow: 0 0 0 2px var(--accent); pointer-events: none; left: 0%;
+  }
+  input.dtg-range {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer; margin: 0; -webkit-appearance: none; z-index: 2;
+  }
+  .dtg-labels { display: flex; width: 100%; }
+  .dtg-lbl {
+    flex: 1; font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--dim); cursor: pointer;
+    transition: color 0.25s; text-align: center;
+    border: 1px solid transparent; padding: 7px 4px;
+  }
+  .dtg-lbl:first-child { text-align: left; }
+  .dtg-lbl:last-child { text-align: right; }
+  .dtg-lbl.active { color: var(--accent); border-color: var(--accent-dim); background: var(--accent-dim); }
+  .dtg-hint {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em;
+    color: var(--dim); text-align: center; margin-top: 4px;
+    display: flex; align-items: center; gap: 6px; justify-content: center;
+  }
+  .dtg-bullets {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1px; background: var(--border); border: 1px solid var(--border);
+    margin-top: 64px;
+  }
+  .dtg-bullet { background: var(--surface); padding: 28px 24px; transition: background 0.15s; }
+  .dtg-bullet:hover { background: var(--surface-2); }
+  .dtg-bullet-icon { color: var(--accent); margin-bottom: 14px; }
+  .dtg-bullet-title { font-family: var(--mono); font-size: 12px; font-weight: 700; margin-bottom: 8px; letter-spacing: 0.03em; }
+  .dtg-bullet-desc { font-size: 12px; color: var(--muted); line-height: 1.65; }
+  @media (max-width: 700px) {
+    .dtg-display { max-width: 100%; }
+    .dtg-ctrl { max-width: 100%; }
+    .dtg-bullets { grid-template-columns: 1fr; }
+    .dtg-lbl { font-size: 8px; padding: 6px 2px; }
+  }
+</style>
+
+<section class="dtg-section">
+  <div class="container">
+    <div class="section-header fade-in" style="text-align:center">
+      <div class="section-label" style="display:inline-flex;align-items:center;gap:8px">
+        DTG / DTF Mode
+        <span style="background:var(--accent);color:#000;font-size:8px;padding:2px 7px;letter-spacing:0.08em;font-weight:700;vertical-align:middle">NEW</span>
+      </div>
+      <h2 class="section-title">From artwork to<br /><span style="color:var(--accent)">DTG-ready in seconds.</span></h2>
+      <p class="section-sub" style="margin:0 auto">Drag the slider to watch AutoThresh strip the background, dither the artwork for fabric, and composite it on a realistic garment preview — all inside your browser.</p>
+    </div>
+
+    <div class="fade-in" style="max-width:540px;margin:0 auto">
+      <!-- Stage display -->
+      <div class="dtg-display">
+        <!-- Stage 1: artwork on black bg -->
+        <div class="dtg-sw" id="dtgW0" style="z-index:3">
+          <img src="/dtg-demo/stage1.png" alt="Original artwork on black background" />
+          <div class="dtg-placeholder">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#2a2a2a" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+            Add your artwork image<br/>to /dtg-demo/stage1.png
+          </div>
+        </div>
+        <!-- Stage 2: bg removed (transparent) -->
+        <div class="dtg-sw" id="dtgW1" style="z-index:2;opacity:0">
+          <img src="/dtg-demo/stage2.png" alt="Background removed — transparent artwork" />
+          <div class="dtg-placeholder chk">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="1.5"><polygon points="12 2 2 7 12 12 22 7"/><polyline points="2 17 12 22 22 17"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+            Add your BG-removed artwork<br/>to /dtg-demo/stage2.png
+          </div>
+        </div>
+        <!-- Stage 3: on fabric -->
+        <div class="dtg-sw" id="dtgW2" style="z-index:1;opacity:0">
+          <img src="/dtg-demo/stage3.png" alt="Artwork composited on realistic fabric" />
+          <div class="dtg-placeholder fab">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="1.5"><path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.86H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.86l.58-3.57a2 2 0 0 0-1.34-2.23z"/></svg>
+            <span style="text-shadow:0 1px 4px #000">Add your fabric preview<br/>to /dtg-demo/stage3.png</span>
+          </div>
+        </div>
+        <div class="dtg-badge" id="dtgBadge">01 — Original Artwork</div>
+      </div>
+
+      <!-- Slider control -->
+      <div class="dtg-ctrl">
+        <div class="dtg-track-wrap">
+          <div class="dtg-track">
+            <div class="dtg-fill" id="dtgFill"></div>
+          </div>
+          <div class="dtg-thumb" id="dtgThumb"></div>
+          <input type="range" class="dtg-range" id="dtgRange" min="0" max="100" value="0" />
+        </div>
+        <div class="dtg-labels">
+          <span class="dtg-lbl active" id="dtgL0">01 · Black BG</span>
+          <span class="dtg-lbl" id="dtgL1">02 · BG Removed</span>
+          <span class="dtg-lbl" id="dtgL2">03 · On Fabric</span>
+        </div>
+        <div class="dtg-hint">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Drag to explore stages
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feature bullets -->
+    <div class="dtg-bullets fade-in">
+      <div class="dtg-bullet">
+        <div class="dtg-bullet-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+        </div>
+        <div class="dtg-bullet-title">Intelligent BG Removal</div>
+        <p class="dtg-bullet-desc">Auto-strip black or white backgrounds from DTG artwork. Refine any edge with a brush or eyedropper — pixel-perfect results without Photoshop.</p>
+      </div>
+      <div class="dtg-bullet">
+        <div class="dtg-bullet-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="4" cy="4" r="2.2"/><circle cx="12" cy="4" r="2.8"/><circle cx="20" cy="4" r="1.6"/><circle cx="4" cy="12" r="2.8"/><circle cx="12" cy="12" r="3.2"/><circle cx="20" cy="12" r="2.4"/><circle cx="4" cy="20" r="1.6"/><circle cx="12" cy="20" r="2.4"/><circle cx="20" cy="20" r="2"/></svg>
+        </div>
+        <div class="dtg-bullet-title">DTG Halftone Engine</div>
+        <p class="dtg-bullet-desc">A purpose-built DTG halftone processor maps ink density to garment, with despeckle and tone mapping so your dots look right on fabric before you print.</p>
+      </div>
+      <div class="dtg-bullet">
+        <div class="dtg-bullet-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.86H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.86l.58-3.57a2 2 0 0 0-1.34-2.23z"/></svg>
+        </div>
+        <div class="dtg-bullet-title">Realistic Fabric Preview</div>
+        <p class="dtg-bullet-desc">Composite your DTG art over actual fabric texture and any garment color. Export the blended PNG as a mockup or as your final print-ready file.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var range  = document.getElementById('dtgRange');
+  var fill   = document.getElementById('dtgFill');
+  var thumb  = document.getElementById('dtgThumb');
+  var badge  = document.getElementById('dtgBadge');
+  var wraps  = [document.getElementById('dtgW0'), document.getElementById('dtgW1'), document.getElementById('dtgW2')];
+  var lbls   = [document.getElementById('dtgL0'),  document.getElementById('dtgL1'),  document.getElementById('dtgL2')];
+  var badges = ['01 — Original Artwork', '02 — BG Removed', '03 — On Fabric'];
+
+  // Mark stages whose image failed so fallback shows
+  wraps.forEach(function (w) {
+    var img = w.querySelector('img');
+    if (img) img.addEventListener('error', function () { w.classList.add('no-img'); });
+  });
+
+  function setStageOpacities(v) {
+    var o0, o1, o2;
+    if (v <= 33.3) {
+      var t = v / 33.3;
+      o0 = 1 - t * 0; o1 = 0; o2 = 0; // stage 1 fully visible until 33
+      o0 = 1; // just keep 1 until 33
+      // Actually start fading at exactly 33.3
+      o0 = 1; o1 = 0; o2 = 0;
+    } else if (v <= 66.7) {
+      var t = (v - 33.3) / 33.4;
+      o0 = 1 - t; o1 = t; o2 = 0;
+    } else {
+      var t = (v - 66.7) / 33.3;
+      o0 = 0; o1 = 1 - t; o2 = Math.min(1, t);
+    }
+    wraps[0].style.opacity = o0;
+    wraps[1].style.opacity = o1;
+    wraps[2].style.opacity = o2;
+
+    var dom = o0 >= o1 && o0 >= o2 ? 0 : o1 >= o2 ? 1 : 2;
+    badge.textContent = badges[dom];
+    lbls.forEach(function (l, i) { l.classList.toggle('active', i === dom); });
+  }
+
+  function update(v) {
+    fill.style.width  = v + '%';
+    thumb.style.left  = v + '%';
+    setStageOpacities(v);
+  }
+
+  range.addEventListener('input', function () { update(+this.value); });
+
+  lbls.forEach(function (l, i) {
+    l.addEventListener('click', function () {
+      var targets = [0, 50, 100];
+      animateTo(+range.value, targets[i], 600);
+    });
+  });
+
+  function animateTo(from, to, ms) {
+    var start = performance.now();
+    function step(now) {
+      var p = Math.min(1, (now - start) / ms);
+      var e = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
+      var v = from + (to - from) * e;
+      range.value = v;
+      update(v);
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Stepped auto-play: hold 1.8s at each stage, transition 1s between stages
+  function autoPlay() {
+    // Stage 1 → Stage 2: start after 1.8s hold
+    setTimeout(function () {
+      animateTo(0, 50, 1000);
+      // Stage 2 → Stage 3: wait for transition (1s) + hold (2s)
+      setTimeout(function () {
+        animateTo(50, 100, 1000);
+      }, 3000);
+    }, 1800);
+  }
+
+  update(0);
+
+  // Trigger once when section enters viewport
+  var played = false;
+  var section = document.querySelector('.dtg-section');
+  if (section && 'IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries, obs) {
+      if (entries[0].isIntersecting && !played) {
+        played = true;
+        obs.disconnect();
+        setTimeout(autoPlay, 400);
+      }
+    }, { threshold: 0.35 }).observe(section);
+  }
+})();
+</script>
+
 <!-- ─── EXPORTS ─── -->
 <section class="export-section">
   <div class="container">

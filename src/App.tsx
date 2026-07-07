@@ -761,40 +761,47 @@ function App() {
       if (mode === 'dtg' || separationMode === 'texture' || separationMode === 'dtg') {
         const suffix = separationMode === 'texture' ? 'texture' : 'dtg';
         if (separationMode === 'dtg' && dtgExportImageData) {
-          // Build an artwork-sized canvas, optionally composited over the garment background
+          // Build an artwork-sized canvas, optionally composited over the garment background.
+          // Order must match the preview: fill bg → draw artwork → apply fabric blend.
+          // Applying fabric blend before the artwork (old order) made artwork sit flat on top.
           const artCanvas = document.createElement('canvas');
           artCanvas.width = artScaleW; artCanvas.height = artScaleH;
           const artCtx = artCanvas.getContext('2d')!;
+
+          // Step 1: fill garment color
           if (withFabricView) {
             artCtx.fillStyle = canvasColor;
             artCtx.fillRect(0, 0, artScaleW, artScaleH);
-            if (fabricTexture !== 'none') {
-              const fabricPath = fabricTexture === 'light'
-                ? '/textures/White_Fabric_ATW.png'
-                : '/textures/Black_Fabric_ATW.png';
-              const fabData = await new Promise<ImageData | null>((resolve) => {
-                const img = new Image();
-                img.onload = () => {
-                  const c = document.createElement('canvas');
-                  c.width = img.naturalWidth; c.height = img.naturalHeight;
-                  c.getContext('2d')!.drawImage(img, 0, 0);
-                  resolve(c.getContext('2d')!.getImageData(0, 0, c.width, c.height));
-                };
-                img.onerror = () => resolve(null);
-                img.src = fabricPath;
-              });
-              if (fabData) {
-                const combined = artCtx.getImageData(0, 0, artScaleW, artScaleH);
-                applyFabricBlend(combined, fabData, { garmentType: fabricTexture, blendStrength: fabricBlendStrength, textureDepth: fabricTextureDepth, canvasRgb: hexToRgb(canvasColor) });
-                artCtx.putImageData(combined, 0, 0);
-              }
-            }
           }
-          // Draw artwork on top (transparent areas let garment show through)
+
+          // Step 2: draw artwork (transparent areas reveal garment)
           const tmpCanvas = document.createElement('canvas');
           tmpCanvas.width = artScaleW; tmpCanvas.height = artScaleH;
           tmpCanvas.getContext('2d')!.putImageData(dtgExportImageData, 0, 0);
           artCtx.drawImage(tmpCanvas, 0, 0);
+
+          // Step 3: fabric blend over the composited result — same as applyFabricBlendToCanvas in preview
+          if (withFabricView && fabricTexture !== 'none') {
+            const fabricPath = fabricTexture === 'light'
+              ? '/textures/White_Fabric_ATW.png'
+              : '/textures/Black_Fabric_ATW.png';
+            const fabData = await new Promise<ImageData | null>((resolve) => {
+              const img = new Image();
+              img.onload = () => {
+                const c = document.createElement('canvas');
+                c.width = img.naturalWidth; c.height = img.naturalHeight;
+                c.getContext('2d')!.drawImage(img, 0, 0);
+                resolve(c.getContext('2d')!.getImageData(0, 0, c.width, c.height));
+              };
+              img.onerror = () => resolve(null);
+              img.src = fabricPath;
+            });
+            if (fabData) {
+              const combined = artCtx.getImageData(0, 0, artScaleW, artScaleH);
+              applyFabricBlend(combined, fabData, { garmentType: fabricTexture, blendStrength: fabricBlendStrength, textureDepth: fabricTextureDepth, canvasRgb: hexToRgb(canvasColor) });
+              artCtx.putImageData(combined, 0, 0);
+            }
+          }
 
           if (cropToArtwork) {
             // Scan non-transparent pixels in the artwork for tight bounding box
@@ -1203,7 +1210,6 @@ function App() {
   };
 
   const subStatus = session?.subscriptionStatus;
-  const isPaused = subStatus === 'paused' || subStatus === 'cancelled' || subStatus === 'canceled';
 
   if (isMobile) {
     return (
@@ -1236,26 +1242,6 @@ function App() {
     <div className="app">
       <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => setShowAnalytics(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} />
 
-      {isPaused && (
-        <div style={{
-          background: '#7c5a00', borderBottom: '1px solid #a87a00',
-          padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          fontSize: 12, fontFamily: 'var(--font-mono)', color: '#ffd966',
-          flexShrink: 0,
-        }}>
-          <span>
-            <span style={{ marginRight: 8 }}>⚠</span>
-            Your subscription is <strong>{subStatus}</strong>. You have 30 minutes of access remaining.{' '}
-            <a
-              href="https://www.charleypangus.com/collections/webapps"
-              target="_blank" rel="noopener noreferrer"
-              style={{ color: '#ffd966', textDecoration: 'underline' }}
-            >
-              Resubscribe to continue
-            </a>
-          </span>
-        </div>
-      )}
 
       <div className="workspace">
         <div className={`panel-wrap panel-wrap--left${leftOpen ? '' : ' panel-wrap--closed'}`}>

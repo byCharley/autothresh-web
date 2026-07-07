@@ -20,18 +20,8 @@ const SHOPIFY_STORE_ID     = '52142571674';
 const VERIFIER_KEY     = 'at_pkce_verifier';
 const STATE_KEY        = 'at_pkce_state';
 const NONCE_KEY        = 'at_pkce_nonce';
-const PAUSED_AT_KEY    = 'at_paused_at';
-const GRACE_MS         = 30 * 60 * 1000;
-
-function recordPausedAt() {
-  if (!localStorage.getItem(PAUSED_AT_KEY)) {
-    localStorage.setItem(PAUSED_AT_KEY, String(Date.now()));
-  }
-}
-function clearPausedAt() { localStorage.removeItem(PAUSED_AT_KEY); }
-function withinGracePeriod(): boolean {
-  const ts = localStorage.getItem(PAUSED_AT_KEY);
-  return !!ts && Date.now() - parseInt(ts) < GRACE_MS;
+function isInactiveStatus(status?: string): boolean {
+  return status === 'paused' || status === 'cancelled' || status === 'canceled';
 }
 
 function loadSession(): Session | null {
@@ -131,8 +121,12 @@ export function useAuth() {
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
           if (data.idToken) saveIdToken(data.idToken);
           if (data.refreshToken) saveRefreshToken(data.refreshToken);
-          const isPaused = data.subscriptionStatus === 'paused' || data.subscriptionStatus === 'cancelled' || data.subscriptionStatus === 'canceled';
-          if (isPaused) recordPausedAt(); else clearPausedAt();
+          // Paused or cancelled → log out immediately, don't show SubscribePage
+          if (isInactiveStatus(data.subscriptionStatus)) {
+            window.history.replaceState({}, '', '/');
+            setStatus('unauthenticated');
+            return;
+          }
           const s: Session = {
             token:                  data.token!,
             idToken:                data.idToken,
@@ -146,8 +140,8 @@ export function useAuth() {
           };
           saveSession(s);
           setSession(s);
+          // No subscription at all (never subscribed) → show subscribe page
           if (!s.hasSubscription) { setStatus('no-subscription'); return; }
-          if (isPaused && !withinGracePeriod()) { setStatus('no-subscription'); return; }
           setStatus('authenticated');
         })
         .catch(() => { window.history.replaceState({}, '', '/'); setStatus('unauthenticated'); });
@@ -169,16 +163,20 @@ export function useAuth() {
         if (!data.valid) { clearSession(); setStatus('unauthenticated'); return; }
         // Guard: if logout() ran while verify was in-flight, don't restore.
         if (!loadSession()) return;
-        const isPaused = data.subscriptionStatus === 'paused' || data.subscriptionStatus === 'cancelled' || data.subscriptionStatus === 'canceled';
-        if (isPaused) recordPausedAt(); else clearPausedAt();
+        // Paused or cancelled → log out immediately
+        if (isInactiveStatus(data.subscriptionStatus)) {
+          clearSession();
+          setStatus('unauthenticated');
+          return;
+        }
         const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle };
         saveSession(updated);
         setSession(updated);
         if (!data.hasSubscription) { setStatus('no-subscription'); return; }
-        if (isPaused && !withinGracePeriod()) { setStatus('no-subscription'); return; }
         setStatus('authenticated');
       })
       .catch(() => {
+        // Network error during verify — keep the stored session as-is
         setSession(stored);
         setStatus(stored.hasSubscription ? 'authenticated' : 'no-subscription');
       });
@@ -204,7 +202,6 @@ export function useAuth() {
 
     // Clear the app session now (keep Shopify tokens for the logout hint).
     clearSession();
-    clearPausedAt();
 
     let idToken = storedIdToken;
 
@@ -236,9 +233,8 @@ export function useAuth() {
   // logout: local-only sign-out. Keeps shopify_id_token + shopify_refresh_token
   // so that switchAccount still works after the user signs out.
   const logout = useCallback(() => {
-    clearSession(); // only removes SESSION_KEY
-    clearPausedAt();
-    localStorage.removeItem('at-mode'); // reset so next login starts in Thresh mode
+    clearSession();
+    localStorage.removeItem('at-mode');
     setSession(null);
     setStatus('unauthenticated');
   }, []);
