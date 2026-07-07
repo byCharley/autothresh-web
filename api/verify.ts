@@ -30,6 +30,20 @@ function logEvent(data: Record<string, unknown>) {
   sbPost('analytics_events', data);
 }
 
+async function checkTesterStatus(email: string): Promise<'active' | 'paused' | null> {
+  if (!SUPABASE_URL || !SERVICE_KEY) return null;
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/testers?email=eq.${encodeURIComponent(email)}&select=status&limit=1`,
+      { headers: { 'Authorization': `Bearer ${SERVICE_KEY}`, 'apikey': SERVICE_KEY } }
+    );
+    if (!r.ok) return null;
+    const rows = await r.json() as Array<{ status: string }>;
+    if (!rows.length) return null;
+    return rows[0].status === 'paused' ? 'paused' : 'active';
+  } catch { return null; }
+}
+
 async function checkSecurityFlag(email: string): Promise<boolean> {
   if (!SUPABASE_URL || !SERVICE_KEY) return false;
   try {
@@ -225,23 +239,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const email = cust.emailAddress?.emailAddress ?? '';
   const emailLower = email.toLowerCase();
   const isCreator = CREATOR_EMAILS.has(emailLower);
-  const isTester  = !isCreator && TESTER_EMAILS.has(emailLower);
 
-  // ── Check for lifetime one-time purchase ──────────────────────────────────
-  const hasLifetime = !isCreator && !isTester && await checkLifetimeOrder(token);
+  // ── Run all async checks in parallel ─────────────────────────────────────
+  const [sealResult, lifetimeResult, testerStatus, securityResult] = await Promise.all([
+    sealCheckSubscription(email),
+    (!isCreator) ? checkLifetimeOrder(token) : Promise.resolve(false),
+    (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve<'active' | 'paused' | null>(null),
+    (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
+  ]);
 
-  // ── Check subscription via Seal ───────────────────────────────────────────
-  const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = await sealCheckSubscription(email);
+  const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
+  const hasLifetime = lifetimeResult;
+  const isSecurityExpired = securityResult;
+
+  // Testers: env var OR active DB record. Paused DB record → no access.
+  const envTester = !isCreator && TESTER_EMAILS.has(emailLower);
+  const isTester  = envTester || (!isCreator && testerStatus === 'active');
+
   const finalHasSub = hasSub || isCreator || isTester || hasLifetime;
 
   const finalStatus   = isCreator ? 'creator' : isTester ? 'tester' : hasLifetime ? 'lifetime' : subscriptionStatus;
   const finalPlan     = isCreator ? 'Creator' : isTester ? 'Tester Access' : hasLifetime ? 'Lifetime' : planTitle;
   const finalExpiry   = (isCreator || isTester || hasLifetime) ? undefined : nextBillingDate;
 
-  console.log('Verify result:', { email, hasSub, isCreator, isTester, finalHasSub, finalStatus, nextBillingDate, planTitle });
-
-  // ── Check if account has been security-expired ────────────────────────────
-  const isSecurityExpired = (!isCreator && !isTester) ? await checkSecurityFlag(emailLower) : false;
+  console.log('Verify result:', { email, hasSub, isCreator, isTester, testerStatus, finalHasSub, finalStatus, nextBillingDate, planTitle });
 
   // ── Log analytics + security events (fire-and-forget) ────────────────────
   const ua = String(req.headers['user-agent'] ?? '');

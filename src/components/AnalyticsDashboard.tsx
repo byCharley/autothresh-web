@@ -898,6 +898,228 @@ function ConfidenceBadge({ level }: { level: string }) {
   );
 }
 
+// ── Testers Panel ────────────────────────────────────────────────────────────
+
+interface Tester {
+  email: string;
+  status: 'active' | 'paused';
+  notes: string | null;
+  created_at: string;
+}
+
+function TestersPanel({ session }: { session: Session }) {
+  const [testers, setTesters]   = useState<Tester[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const [addEmail, setAddEmail] = useState('');
+  const [addNotes, setAddNotes] = useState('');
+  const [adding, setAdding]     = useState(false);
+  const [addErr, setAddErr]     = useState<string | null>(null);
+  const [showAdd, setShowAdd]   = useState(false);
+  const [busy, setBusy]         = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
+    fetch('/api/testers', { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(r => r.json() as Promise<{ testers?: Tester[]; error?: string }>)
+      .then(d => {
+        if (d.error) { setError(d.error); return; }
+        setTesters(d.testers ?? []);
+      })
+      .catch(() => setError('Failed to load testers'))
+      .finally(() => setLoading(false));
+  }, [session.token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function act(action: string, email: string) {
+    setBusy(email + action);
+    try {
+      const r = await fetch('/api/testers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ action, email }),
+      });
+      const d = await r.json() as { ok?: boolean; error?: string };
+      if (!d.ok) throw new Error(d.error ?? 'Failed');
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Action failed');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleAdd() {
+    const email = addEmail.trim().toLowerCase();
+    if (!email || !email.includes('@')) { setAddErr('Enter a valid email'); return; }
+    setAdding(true); setAddErr(null);
+    try {
+      const r = await fetch('/api/testers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ action: 'add', email, notes: addNotes.trim() || null }),
+      });
+      const d = await r.json() as { ok?: boolean; error?: string };
+      if (!d.ok) throw new Error(d.error ?? 'Failed to add tester');
+      setAddEmail(''); setAddNotes(''); setShowAdd(false);
+      load();
+    } catch (e) {
+      setAddErr(e instanceof Error ? e.message : 'Failed to add tester');
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  const activeCount = testers.filter(t => t.status === 'active').length;
+  const pausedCount = testers.filter(t => t.status === 'paused').length;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'rgba(82,196,26,0.12)', color: '#52c41a', border: '1px solid rgba(82,196,26,0.3)', padding: '3px 10px' }}>
+            {activeCount} active
+          </span>
+          {pausedCount > 0 && (
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'rgba(250,173,20,0.12)', color: '#faad14', border: '1px solid rgba(250,173,20,0.3)', padding: '3px 10px' }}>
+              {pausedCount} paused
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => { setShowAdd(v => !v); setAddErr(null); }}
+          style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', padding: '6px 14px', background: showAdd ? 'var(--surface-2)' : 'var(--accent)', color: showAdd ? 'var(--text-dim)' : '#000', border: '1px solid var(--accent)', cursor: 'pointer' }}
+        >
+          {showAdd ? 'Cancel' : '+ Add Tester'}
+        </button>
+      </div>
+
+      {/* Add form */}
+      {showAdd && (
+        <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 2 }}>New Tester</div>
+          <input
+            type="email"
+            placeholder="tester@email.com"
+            value={addEmail}
+            onChange={e => { setAddEmail(e.target.value); setAddErr(null); }}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 12, padding: '8px 10px', background: 'var(--bg)', border: `1px solid ${addErr ? '#f87171' : 'var(--border)'}`, color: 'var(--text)', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+          />
+          <input
+            type="text"
+            placeholder="Notes (optional)"
+            value={addNotes}
+            onChange={e => setAddNotes(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 12, padding: '8px 10px', background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', outline: 'none', width: '100%', boxSizing: 'border-box' }}
+          />
+          {addErr && <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#f87171' }}>{addErr}</div>}
+          <button
+            onClick={handleAdd}
+            disabled={adding}
+            style={{ alignSelf: 'flex-end', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', padding: '7px 18px', background: adding ? 'var(--surface-3)' : 'var(--accent)', color: '#000', border: 'none', cursor: adding ? 'default' : 'pointer' }}
+          >
+            {adding ? 'Adding...' : 'Add Tester →'}
+          </button>
+        </div>
+      )}
+
+      {/* States */}
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+          Loading testers...
+        </div>
+      )}
+      {error && (
+        <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: '#f87171' }}>
+          {error}
+        </div>
+      )}
+
+      {/* Tester list */}
+      {!loading && !error && testers.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+          No testers yet — add one above.
+        </div>
+      )}
+
+      {!loading && testers.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--border)' }}>
+          {/* Column headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, background: 'var(--surface-2)', padding: '8px 14px', alignItems: 'center' }}>
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Email</span>
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Status</span>
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Actions</span>
+          </div>
+
+          {testers.map(t => (
+            <div
+              key={t.email}
+              style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, background: 'var(--surface)', padding: '12px 14px', alignItems: 'center' }}
+            >
+              {/* Email + notes + date */}
+              <div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text)', letterSpacing: '0.01em' }}>{t.email}</div>
+                {t.notes && (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>{t.notes}</div>
+                )}
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-dim)', marginTop: 3 }}>
+                  Added {new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </div>
+              </div>
+
+              {/* Status badge */}
+              <div>
+                {t.status === 'active' ? (
+                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 8px', background: 'rgba(82,196,26,0.12)', color: '#52c41a', border: '1px solid rgba(82,196,26,0.3)' }}>Active</span>
+                ) : (
+                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 8px', background: 'rgba(250,173,20,0.12)', color: '#faad14', border: '1px solid rgba(250,173,20,0.3)' }}>Paused</span>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                {t.status === 'active' ? (
+                  <button
+                    onClick={() => act('pause', t.email)}
+                    disabled={busy === t.email + 'pause'}
+                    style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, padding: '4px 10px', background: 'none', border: '1px solid #faad14', color: '#faad14', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}
+                  >
+                    Pause
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => act('resume', t.email)}
+                    disabled={busy === t.email + 'resume'}
+                    style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, padding: '4px 10px', background: 'none', border: '1px solid #52c41a', color: '#52c41a', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}
+                  >
+                    Resume
+                  </button>
+                )}
+                <button
+                  onClick={() => { if (confirm(`Remove ${t.email} from testers?`)) act('remove', t.email); }}
+                  disabled={!!busy}
+                  style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, padding: '4px 10px', background: 'none', border: '1px solid #f87171', color: '#f87171', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.7, marginTop: 4 }}>
+        Active testers get full app access without a subscription. Pausing revokes access immediately — they'll see the subscribe screen on next login.
+      </div>
+    </div>
+  );
+}
+
 function SecurityPanel({ session }: { session: Session }) {
   const [data, setData]         = useState<SecurityData | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -1392,7 +1614,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     setPreset('custom');
   }
 
-  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'videos' | 'chat'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'testers' | 'videos' | 'chat'>('stats');
   const [securityUnreviewed, setSecurityUnreviewed] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
 
@@ -1558,7 +1780,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
         {/* Tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px' }}>
-          {(['stats', 'security', 'videos', 'chat'] as const).map(tab => (
+          {(['stats', 'security', 'testers', 'videos', 'chat'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1576,6 +1798,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
             >
               {tab === 'stats' ? 'Stats'
                 : tab === 'security' ? (securityUnreviewed > 0 ? `Security (${securityUnreviewed > 99 ? '99+' : securityUnreviewed})` : 'Security')
+                : tab === 'testers' ? 'Testers'
                 : tab === 'videos' ? 'Videos'
                 : chatUnread > 0 ? `Chat (${chatUnread > 99 ? '99+' : chatUnread})` : 'Chat'}
             </button>
@@ -1586,6 +1809,10 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
         <div style={{ padding: mobile ? '12px' : '20px' }}>
           {activeTab === 'security' && (
             <SecurityPanel session={session} />
+          )}
+
+          {activeTab === 'testers' && (
+            <TestersPanel session={session} />
           )}
 
           {activeTab === 'videos' && (
