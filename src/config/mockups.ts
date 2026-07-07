@@ -12,6 +12,7 @@ export interface MockupDef {
   category: string;
   view: string;
   variants: ColorVariant[];
+  credit?: { handle: string; url: string };
 }
 
 export const MOCKUPS: MockupDef[] = [
@@ -67,6 +68,36 @@ export const MOCKUPS: MockupDef[] = [
       { name: 'Dusty White', hex: '#E8E2D8', file: '/mockups/Elwood_DustyWhite_Back.png' },
       { name: 'Faded Brown', hex: '#8A6B50', file: '/mockups/Elwood_FadedBrown_Back.png' },
       { name: 'Red',         hex: '#C0392B', file: '/mockups/Elwood_Red_Back.png' },
+    ],
+  },
+  {
+    id: 'premium-hoodie-front',
+    brand: 'Premium',
+    model: 'Hoodie',
+    name: 'Premium Hoodie',
+    category: 'Hoodie',
+    view: 'Front',
+    credit: { handle: '@chazmadethat', url: 'https://www.instagram.com/chazmadethat' },
+    variants: [
+      { name: 'White',      hex: '#F0EDE8', file: '/mockups/PremiumHoodie__White_Front_byChazemadethat.png' },
+      { name: 'Black',      hex: '#1A1A1A', file: '/mockups/PremiumHoodie__Black_Front_byChazemadethat.png' },
+      { name: 'Dark Grey',  hex: '#3D3D3D', file: '/mockups/PremiumHoodie__DarkGrey_Front_byChazemadethat.png' },
+      { name: 'Brown',      hex: '#7A5C45', file: '/mockups/PremiumHoodie__Brown_Front_byChazemadethat.png' },
+    ],
+  },
+  {
+    id: 'premium-hoodie-back',
+    brand: 'Premium',
+    model: 'Hoodie',
+    name: 'Premium Hoodie',
+    category: 'Hoodie',
+    view: 'Back',
+    credit: { handle: '@chazmadethat', url: 'https://www.instagram.com/chazmadethat' },
+    variants: [
+      { name: 'White',      hex: '#F0EDE8', file: '/mockups/PremiumHoodie__White_Back_byChazemadethat.png' },
+      { name: 'Black',      hex: '#1A1A1A', file: '/mockups/PremiumHoodie__Black_Back_byChazemadethat.png' },
+      { name: 'Dark Grey',  hex: '#3D3D3D', file: '/mockups/PremiumHoodie__DarkGrey_Back_byChazemadethat.png' },
+      { name: 'Brown',      hex: '#7A5C45', file: '/mockups/PremiumHoodie__Brown_Back_byChazemadethat.png' },
     ],
   },
 ];

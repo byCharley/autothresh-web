@@ -223,6 +223,19 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                 {mockup.brand} {mockup.model} · {mockup.view} · {variant.name}
               </span>
             )}
+            {mockup?.credit && (
+              <a
+                href={mockup.credit.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+              >
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+                {mockup.credit.handle}
+              </a>
+            )}
           </div>
           <button className="btn btn-ghost btn-icon" onClick={onClose} style={{ flexShrink: 0 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
