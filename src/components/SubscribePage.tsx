@@ -4,8 +4,8 @@ import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 
-const PRODUCT_URL  = import.meta.env.VITE_SHOPIFY_PRODUCT_URL as string | undefined
-  ?? 'https://charleypangus.com/products/autothresh-web';
+const MONTHLY_URL  = 'https://charleypangus.com/checkout/autothresh-web/monthly';
+const ANNUAL_URL   = 'https://charleypangus.com/checkout/autothresh-web/yearly';
 const LIFETIME_URL = 'https://charleypangus.com/checkout/autothresh-web/lifetime';
 
 interface Props {
@@ -15,9 +15,161 @@ interface Props {
   onSwitchAccount?: () => void;
 }
 
+function PricingModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        width: '100%', maxWidth: 760, padding: '28px 24px',
+        position: 'relative',
+      }}>
+        {/* Header */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute', top: 12, right: 12,
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-dim)', fontSize: 18, lineHeight: 1, padding: 4,
+          }}
+        >✕</button>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={{
+            fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            letterSpacing: '0.14em', textTransform: 'uppercase',
+            color: 'var(--accent)', marginBottom: 8,
+          }}>
+            Choose a Plan
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>
+            Start your 3-day free trial
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-mono)' }}>
+            Cancel anytime · No charge until trial ends
+          </div>
+        </div>
+
+        {/* Plans */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+
+          {/* Monthly */}
+          <a
+            href={MONTHLY_URL} target="_blank" rel="noopener noreferrer"
+            style={{ textDecoration: 'none' }}
+          >
+            <div style={{
+              border: '1px solid var(--border)', padding: '20px 18px',
+              height: '100%', cursor: 'pointer', transition: 'border-color 0.15s',
+              display: 'flex', flexDirection: 'column',
+            }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+            >
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Monthly</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$8.99</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 4, marginBottom: 16 }}>/month</div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {['All separation modes', 'All export formats', 'Unlimited projects', 'Presets & cloud sync'].map(f => (
+                  <li key={f} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />{f}
+                  </li>
+                ))}
+              </ul>
+              <div style={{ marginTop: 'auto', textAlign: 'center', padding: '9px 0', border: '1px solid var(--accent)', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
+                Start Free Trial →
+              </div>
+            </div>
+          </a>
+
+          {/* Annual — featured */}
+          <a
+            href={ANNUAL_URL} target="_blank" rel="noopener noreferrer"
+            style={{ textDecoration: 'none' }}
+          >
+            <div style={{
+              border: '1px solid var(--accent)', padding: '20px 18px',
+              height: '100%', cursor: 'pointer', transition: 'border-color 0.15s',
+              display: 'flex', flexDirection: 'column', position: 'relative',
+            }}>
+              <div style={{
+                position: 'absolute', top: 0, right: 0,
+                background: 'var(--accent)', color: '#000',
+                fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
+                letterSpacing: '0.1em', padding: '3px 8px',
+              }}>SAVE 15%</div>
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Annual</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$90.95</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 4, marginBottom: 2 }}>/year</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)', marginBottom: 16 }}>$7.58/month</div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {['Everything in Monthly', 'Best value per separation', 'Priority feature requests', 'Early access to new modes'].map(f => (
+                  <li key={f} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />{f}
+                  </li>
+                ))}
+              </ul>
+              <div style={{ marginTop: 'auto', textAlign: 'center', padding: '9px 0', background: 'var(--accent)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
+                Start Free Trial →
+              </div>
+            </div>
+          </a>
+
+          {/* Lifetime */}
+          <a
+            href={LIFETIME_URL} target="_blank" rel="noopener noreferrer"
+            style={{ textDecoration: 'none' }}
+          >
+            <div style={{
+              border: '1px solid #fbbf24', padding: '20px 18px',
+              height: '100%', cursor: 'pointer', transition: 'border-color 0.15s',
+              display: 'flex', flexDirection: 'column', position: 'relative',
+            }}>
+              <div style={{
+                position: 'absolute', top: 0, right: 0,
+                background: '#fbbf24', color: '#000',
+                fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
+                letterSpacing: '0.1em', padding: '3px 8px',
+              }}>ONE-TIME</div>
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Lifetime</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$249.99</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 4, marginBottom: 16 }}>once · never pay again</div>
+              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {['Everything in Annual', 'Pay once, own forever', 'All future updates', 'Highest priority support'].map(f => (
+                  <li key={f} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#fbbf24', flexShrink: 0 }} />{f}
+                  </li>
+                ))}
+              </ul>
+              <div style={{
+                marginTop: 'auto', textAlign: 'center', padding: '9px 0',
+                border: '1px solid #fbbf24', color: '#fbbf24',
+                fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
+              }}>
+                Buy Lifetime Access →
+              </div>
+            </div>
+          </a>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+          Credit card required for trial · You won't be charged until it ends
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: Props) {
-  const [showEula, setShowEula] = useState(false);
-  const [showFaq, setShowFaq]   = useState(false);
+  const [showEula,    setShowEula]    = useState(false);
+  const [showFaq,     setShowFaq]     = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
 
   return (
     <div style={{
@@ -42,11 +194,21 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
       {/* Card */}
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
-        width: 420, maxWidth: '90vw', padding: '28px 24px', textAlign: 'center',
+        width: 380, maxWidth: '90vw', padding: '32px 28px', textAlign: 'center',
       }}>
-        <div style={{ fontSize: 24, marginBottom: 12 }}>🔒</div>
+        <div style={{
+          width: 40, height: 40, borderRadius: '50%',
+          background: 'rgba(255,107,26,0.12)', border: '1px solid rgba(255,107,26,0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 20px',
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+            <rect x="3" y="11" width="18" height="11" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        </div>
 
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.01em' }}>
           {firstName ? `Hi ${firstName} —` : ''} Subscription Required
         </div>
 
@@ -63,41 +225,16 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
         )}
 
         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
-          AutoThresh Web requires an active subscription.
-          Subscribe to get full access to the tonal separation tool.
+          Your subscription is no longer active. Pick a plan to get back in — monthly, annual, or lifetime.
         </div>
 
-        <a
-          href={PRODUCT_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          onClick={() => setShowPricing(true)}
           className="btn btn-primary"
-          style={{ display: 'inline-flex', justifyContent: 'center', textDecoration: 'none', marginBottom: 8, minWidth: 200, color: '#000' }}
+          style={{ width: '100%', justifyContent: 'center', marginBottom: 20, color: '#000', fontSize: 13 }}
         >
-          Subscribe Now
-        </a>
-
-        <a
-          href={LIFETIME_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'inline-flex', justifyContent: 'center', textDecoration: 'none',
-            marginBottom: 6, minWidth: 200,
-            border: '1px solid #fbbf24', color: '#fbbf24',
-            fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
-            letterSpacing: '0.06em', padding: '10px 20px',
-            transition: 'background 0.15s, color 0.15s',
-          }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#fbbf24'; (e.currentTarget as HTMLElement).style.color = '#000'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = '#fbbf24'; }}
-        >
-          Buy Lifetime Access — $249.99
-        </a>
-
-        <p style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: '0 0 16px' }}>
-          One-time purchase · Never pay again
-        </p>
+          View Plans & Subscribe
+        </button>
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           {onSwitchAccount && (
@@ -106,7 +243,7 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
               onClick={onSwitchAccount}
               style={{ fontSize: 11, color: 'var(--text-muted)' }}
             >
-              Sign in with a different account
+              Different account
             </button>
           )}
           <button
@@ -120,8 +257,9 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
       </div>
 
       <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} />
-      {showEula && <EulaModal onClose={() => setShowEula(false)} />}
-      {showFaq && <FaqModal onClose={() => setShowFaq(false)} />}
+      {showEula    && <EulaModal onClose={() => setShowEula(false)} />}
+      {showFaq     && <FaqModal  onClose={() => setShowFaq(false)} />}
+      {showPricing && <PricingModal onClose={() => setShowPricing(false)} />}
     </div>
   );
 }
