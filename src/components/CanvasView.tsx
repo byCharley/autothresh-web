@@ -1342,6 +1342,12 @@ export function CanvasView() {
               if (dtgPaintMask[i] === 2) artComposite.data[i * 4 + 3] = 0;
             }
           }
+          if (textureEnabled) {
+            const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
+            for (let i = 0; i < texMask.length; i++) {
+              if (texMask[i] === 0) artComposite.data[i * 4 + 3] = 0;
+            }
+          }
           setDitherComposite({ data: artComposite, w: artPrevW, h: artPrevH });
           setProcessedLayers([]);
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });

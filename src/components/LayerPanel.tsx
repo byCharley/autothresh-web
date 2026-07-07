@@ -1343,7 +1343,7 @@ function DtgPaintSection() {
 // ─── Texture Section ──────────────────────────────────────────────────────────
 
 function TextureSection() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const {
     textureEnabled, textureIntensity, textureScale, textureSeed,
     setTextureEnabled, setTextureIntensity, setTextureScale, setTextureSeed,
@@ -2522,6 +2522,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
           <>
             <BackgroundSection defaultOpen={true} />
             <DtgPaintSection />
+            <TextureSection />
           </>
         ) : separationMode === 'cmyk' ? (
           <>

@@ -498,6 +498,12 @@ function App() {
           }
         }
       }
+      if (textureEnabled) {
+        const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
+        for (let i = 0; i < texMask.length; i++) {
+          if (texMask[i] === 0) dtgExportImageData.data[i * 4 + 3] = 0;
+        }
+      }
       artLayers = [];
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
