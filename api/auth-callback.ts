@@ -324,7 +324,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       email:             custEmail,
       firstName,
       hasSubscription:   false,
-      subscriptionStatus: 'expired',
+      subscriptionStatus: 'blocked',
       planTitle:         undefined,
     });
   }

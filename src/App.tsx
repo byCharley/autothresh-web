@@ -198,7 +198,7 @@ function App() {
   }
 
   if (status === 'no-subscription') {
-    return <SubscribePage firstName={session?.firstName} email={session?.email} onLogout={logout} onSwitchAccount={switchAccount} onRecheck={recheck} />;
+    return <SubscribePage firstName={session?.firstName} email={session?.email} subscriptionStatus={session?.subscriptionStatus} onLogout={logout} onSwitchAccount={switchAccount} onRecheck={recheck} />;
   }
 
   function buildColorRefCanvas(refColors: RGB[], dpi = 72): HTMLCanvasElement {

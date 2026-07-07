@@ -11,6 +11,7 @@ const LIFETIME_URL = 'https://charleypangus.com/checkout/autothresh-web/lifetime
 interface Props {
   firstName?: string;
   email?: string;
+  subscriptionStatus?: string;
   onLogout: () => void;
   onSwitchAccount?: () => void;
   onRecheck?: () => Promise<boolean>;
@@ -159,7 +160,7 @@ function PricingModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SubscribePage({ firstName, email, onLogout, onSwitchAccount, onRecheck }: Props) {
+export function SubscribePage({ firstName, email, subscriptionStatus, onLogout, onSwitchAccount, onRecheck }: Props) {
   const [showEula,      setShowEula]      = useState(false);
   const [showFaq,       setShowFaq]       = useState(false);
   const [showPricing,   setShowPricing]   = useState(false);
@@ -194,87 +195,145 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount, onR
 
       {/* Card */}
       <div style={{
-        background: 'var(--surface)', border: '1px solid var(--border)',
+        background: 'var(--surface)', border: `1px solid ${subscriptionStatus === 'blocked' ? 'rgba(248,113,113,0.35)' : 'var(--border)'}`,
         width: 380, maxWidth: '90vw', padding: '32px 28px', textAlign: 'center',
       }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: '50%',
-          background: 'rgba(255,107,26,0.12)', border: '1px solid rgba(255,107,26,0.3)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 20px',
-        }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
-            <rect x="3" y="11" width="18" height="11" rx="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-        </div>
+        {subscriptionStatus === 'blocked' ? (
+          /* ── Blocked state ── */
+          <>
+            <div style={{
+              width: 40, height: 40, borderRadius: '50%',
+              background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px',
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+              </svg>
+            </div>
 
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.01em' }}>
-          {firstName ? `Hi ${firstName} —` : ''} Subscription Required
-        </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#f87171', marginBottom: 6, letterSpacing: '-0.01em' }}>
+              Account Restricted
+            </div>
 
-        {email && (
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
-            background: 'var(--surface-2)', border: '1px solid var(--border)',
-            padding: '4px 10px', marginBottom: 16,
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />
-            {email}
-          </div>
-        )}
+            {email && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                padding: '4px 10px', marginBottom: 16,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f87171', flexShrink: 0 }} />
+                {email}
+              </div>
+            )}
 
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
-          Your subscription is no longer active. Pick a plan to get back in — monthly, annual, or lifetime.
-        </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
+              This account has been flagged and access has been revoked. If you believe this is a mistake, or you have a separate account, try signing in with a different email.
+            </div>
 
-        <button
-          onClick={() => setShowPricing(true)}
-          className="btn btn-primary"
-          style={{ width: '100%', justifyContent: 'center', marginBottom: 20, color: '#000', fontSize: 13 }}
-        >
-          View Plans & Subscribe
-        </button>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {onSwitchAccount && (
+                <button
+                  className="btn btn-primary"
+                  onClick={onSwitchAccount}
+                  style={{ fontSize: 12, color: '#000' }}
+                >
+                  Sign in with different account
+                </button>
+              )}
+              <button
+                className="btn btn-ghost"
+                onClick={onLogout}
+                style={{ fontSize: 11, color: 'var(--text-dim)' }}
+              >
+                Sign out
+              </button>
+            </div>
+          </>
+        ) : (
+          /* ── No subscription state ── */
+          <>
+            <div style={{
+              width: 40, height: 40, borderRadius: '50%',
+              background: 'rgba(255,107,26,0.12)', border: '1px solid rgba(255,107,26,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px',
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+                <rect x="3" y="11" width="18" height="11" rx="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </div>
 
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          {onSwitchAccount && (
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.01em' }}>
+              {firstName ? `Hi ${firstName} —` : ''} Subscription Required
+            </div>
+
+            {email && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                padding: '4px 10px', marginBottom: 16,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />
+                {email}
+              </div>
+            )}
+
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
+              Your subscription is no longer active. Pick a plan to get back in — monthly, annual, or lifetime.
+            </div>
+
             <button
-              className="btn btn-ghost"
-              onClick={onSwitchAccount}
-              style={{ fontSize: 11, color: 'var(--text-muted)' }}
+              onClick={() => setShowPricing(true)}
+              className="btn btn-primary"
+              style={{ width: '100%', justifyContent: 'center', marginBottom: 20, color: '#000', fontSize: 13 }}
             >
-              Different account
+              View Plans & Subscribe
             </button>
-          )}
-          <button
-            className="btn btn-ghost"
-            onClick={onLogout}
-            style={{ fontSize: 11, color: 'var(--text-dim)' }}
-          >
-            Sign out
-          </button>
-        </div>
 
-        {onRecheck && (
-          <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
-            <button
-              onClick={handleRecheck}
-              disabled={recheckState === 'checking'}
-              style={{
-                background: 'none', border: 'none', cursor: recheckState === 'checking' ? 'default' : 'pointer',
-                fontSize: 11, fontFamily: 'var(--font-mono)', color: recheckState === 'denied' ? '#ef4444' : 'var(--text-dim)',
-                opacity: recheckState === 'checking' ? 0.5 : 1, padding: 0,
-                transition: 'color 0.15s',
-              }}
-              onMouseEnter={(e) => { if (recheckState === 'idle') (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)'; }}
-              onMouseLeave={(e) => { if (recheckState === 'idle') (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; }}
-            >
-              {recheckState === 'checking' && '↻ Checking…'}
-              {recheckState === 'denied'   && 'No access found — contact support if this is an error'}
-              {recheckState === 'idle'     && 'Already have access? Check again →'}
-            </button>
-          </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {onSwitchAccount && (
+                <button
+                  className="btn btn-ghost"
+                  onClick={onSwitchAccount}
+                  style={{ fontSize: 11, color: 'var(--text-muted)' }}
+                >
+                  Different account
+                </button>
+              )}
+              <button
+                className="btn btn-ghost"
+                onClick={onLogout}
+                style={{ fontSize: 11, color: 'var(--text-dim)' }}
+              >
+                Sign out
+              </button>
+            </div>
+
+            {onRecheck && (
+              <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={handleRecheck}
+                  disabled={recheckState === 'checking'}
+                  style={{
+                    background: 'none', border: 'none', cursor: recheckState === 'checking' ? 'default' : 'pointer',
+                    fontSize: 11, fontFamily: 'var(--font-mono)', color: recheckState === 'denied' ? '#ef4444' : 'var(--text-dim)',
+                    opacity: recheckState === 'checking' ? 0.5 : 1, padding: 0,
+                    transition: 'color 0.15s',
+                  }}
+                  onMouseEnter={(e) => { if (recheckState === 'idle') (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)'; }}
+                  onMouseLeave={(e) => { if (recheckState === 'idle') (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; }}
+                >
+                  {recheckState === 'checking' && '↻ Checking…'}
+                  {recheckState === 'denied'   && 'No access found — contact support if this is an error'}
+                  {recheckState === 'idle'     && 'Already have access? Check again →'}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

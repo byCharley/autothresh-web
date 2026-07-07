@@ -1132,6 +1132,7 @@ function SecurityPanel({ session }: { session: Session }) {
   const [manualNote, setManualNote]   = useState('');
   const [manualActing, setManualActing] = useState(false);
   const [manualError, setManualError]   = useState<string | null>(null);
+  const [manualBlocked, setManualBlocked] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1170,6 +1171,10 @@ function SecurityPanel({ session }: { session: Session }) {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setManualEmail('');
       setManualNote('');
+      if (action === 'expire') {
+        setManualBlocked(true);
+        setTimeout(() => setManualBlocked(false), 3000);
+      }
       load();
     } catch (e) {
       setManualError(e instanceof Error ? e.message : 'Failed');
@@ -1238,17 +1243,19 @@ function SecurityPanel({ session }: { session: Session }) {
               <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                 <button
                   onClick={() => manualBlock('expire')}
-                  disabled={manualActing || !manualEmail.trim()}
+                  disabled={manualActing || manualBlocked || !manualEmail.trim()}
                   title="Block immediately — flags and expires access"
                   style={{
                     height: 28, padding: '0 14px', fontSize: 10,
                     fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                    background: '#f87171', border: 'none', color: '#000',
-                    cursor: manualActing || !manualEmail.trim() ? 'not-allowed' : 'pointer',
-                    opacity: manualActing || !manualEmail.trim() ? 0.5 : 1,
+                    background: manualBlocked ? '#4ade80' : '#f87171',
+                    border: 'none', color: '#000',
+                    cursor: manualActing || manualBlocked || !manualEmail.trim() ? 'not-allowed' : 'pointer',
+                    opacity: manualActing || (!manualBlocked && !manualEmail.trim()) ? 0.5 : 1,
+                    transition: 'background 0.2s',
                   }}
                 >
-                  Block
+                  {manualBlocked ? '✓ Blocked' : manualActing ? 'Blocking…' : 'Block'}
                 </button>
                 <button
                   onClick={() => manualBlock('flag')}

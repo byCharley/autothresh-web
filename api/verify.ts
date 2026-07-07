@@ -308,7 +308,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       valid:              true,
       hasSubscription:    false,
-      subscriptionStatus: 'expired',
+      subscriptionStatus: 'blocked',
       email,
       firstName:          cust.firstName ?? '',
       accentColor:        userPrefs.accentColor,
