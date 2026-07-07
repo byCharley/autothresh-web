@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore';
 import { AppIcon } from './AppIcon';
 
 // Bell uses the same CHANGELOG as WhatsNewModal — one source, always in sync.
-import { CHANGELOG, CHANGELOG_LATEST_DATE, hasUnseenUpdates, markChangelogSeen } from './WhatsNewModal';
+import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewModal';
 
 function bellDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
