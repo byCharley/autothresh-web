@@ -112,7 +112,7 @@ const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-
 const SEAL_TOKEN   = process.env.SEAL_API_TOKEN!;
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
 
-async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; subscriptionStatus?: string; nextBillingDate?: string; planTitle?: string }> {
+async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; activeSubs: number; subscriptionStatus?: string; nextBillingDate?: string; planTitle?: string }> {
   try {
     const url = `${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`;
     console.log('Seal request:', url, 'token present:', !!SEAL_TOKEN);
@@ -122,7 +122,7 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
     console.log('Seal HTTP status:', r.status);
     console.log('Seal raw response:', rawText.slice(0, 800));
 
-    if (!r.ok) return { hasSub: false };
+    if (!r.ok) return { hasSub: false, activeSubs: 0 };
 
     const raw = JSON.parse(rawText) as unknown;
 
@@ -148,9 +148,11 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
     let nextBillingDate: string | undefined;
     let planTitle: string | undefined;
     let subscriptionStatus: string | undefined;
+    let hasSub = false;
+    let activeSubs = 0;
     const TRIAL_DAYS = parseInt(process.env.SEAL_TRIAL_DAYS ?? '3');
 
-    const hasSub = subs.some(s => {
+    for (const s of subs) {
       const st = String(s.status ?? '').toUpperCase();
       const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'CANCELLED' || st === 'CANCELED' || st === 'TRIAL';
 
@@ -169,19 +171,44 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
       const itemPlanName = items[0]?.selling_plan_name ?? items[0]?.title;
 
       if (valid) {
-        subscriptionStatus = (isInTrial && (st === 'ACTIVE' || st === 'TRIAL')) ? 'trial' : st.toLowerCase();
-        nextBillingDate = isInTrial
-          ? trialEndRaw
-          : (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
-        planTitle = (s.plan_title ?? s.product_title ?? s.plan_name ?? itemPlanName) as string | undefined;
+        activeSubs++;
+        hasSub = true;
+        if (!subscriptionStatus) {
+          subscriptionStatus = (isInTrial && (st === 'ACTIVE' || st === 'TRIAL')) ? 'trial' : st.toLowerCase();
+          nextBillingDate = isInTrial
+            ? trialEndRaw
+            : (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
+          planTitle = (s.plan_title ?? s.product_title ?? s.plan_name ?? itemPlanName) as string | undefined;
+        }
       }
-      return valid;
-    });
-    return { hasSub, subscriptionStatus, nextBillingDate, planTitle };
+    }
+    return { hasSub, activeSubs, subscriptionStatus, nextBillingDate, planTitle };
   } catch (e) {
     console.error('Seal check error:', e);
-    return { hasSub: false };
+    return { hasSub: false, activeSubs: 0 };
   }
+}
+
+function flagDuplicateSubs(email: string, ip: string, count: number) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  fetch(`${SUPABASE_URL}/rest/v1/security_flags`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'apikey': SUPABASE_KEY,
+      'Prefer': 'resolution=ignore-duplicates',
+    },
+    body: JSON.stringify({
+      email,
+      ip: ip || null,
+      reason: `Duplicate subscriptions detected: ${count} active Seal subscriptions on same account`,
+      confidence: 'high',
+      auto_flagged: true,
+      reviewed: false,
+      expired: true,
+    }),
+  }).catch(() => {});
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -278,7 +305,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
   ]);
 
-  const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
+  const { hasSub, activeSubs, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
   const envTester  = !isCreator && TESTER_EMAILS.has(emailLower);
   const isTester   = envTester || (!isCreator && testerStatus === 'active');
   const finalHasSub = hasSub || isCreator || isTester;
@@ -313,6 +340,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!isCreator && !isTester) {
     runFraudCheck(emailLower, clientIp, firstName, finalStatus ?? '');
+    if (activeSubs > 1) {
+      flagDuplicateSubs(emailLower, clientIp, activeSubs);
+    }
   }
 
   if (isSecurityExpired) {
