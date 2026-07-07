@@ -73,7 +73,7 @@ const DEV_SESSION: Session = {
 
 export function useAuth() {
   const [status,  setStatus]  = useState<AuthStatus>(DEV_BYPASS ? 'authenticated' : 'loading');
-  const [session, setSession] = useState<Session | null>(DEV_BYPASS ? DEV_SESSION : null);
+  const [session, setSession] = useState<Session | null>(DEV_BYPASS ? DEV_SESSION : loadSession());
 
   useEffect(() => {
     if (DEV_BYPASS) return;

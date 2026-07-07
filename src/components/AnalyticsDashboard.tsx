@@ -1121,7 +1121,7 @@ function TestersPanel({ session }: { session: Session }) {
   );
 }
 
-function SecurityPanel({ session }: { session: Session }) {
+function SecurityPanel({ session, onDataLoad }: { session: Session; onDataLoad?: (unreviewed: number) => void }) {
   const [data, setData]         = useState<SecurityData | null>(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
@@ -1134,15 +1134,19 @@ function SecurityPanel({ session }: { session: Session }) {
   const [manualError, setManualError]   = useState<string | null>(null);
   const [manualBlocked, setManualBlocked] = useState(false);
 
-  const load = useCallback(() => {
+  const load = useCallback((isFirst = false) => {
     setLoading(true);
     fetch('/api/security', { headers: { Authorization: `Bearer ${session.token}` } })
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<SecurityData>; })
-      .then(d => { setData(d); setLoading(false); })
+      .then(d => {
+        setData(d);
+        setLoading(false);
+        if (isFirst) onDataLoad?.(d.summary?.unreviewed ?? 0);
+      })
       .catch(e => { setError(String(e.message)); setLoading(false); });
-  }, [session.token]);
+  }, [session.token, onDataLoad]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(true); }, [load]);
 
   async function act(action: string, email: string) {
     setActing(email + action);
@@ -1557,16 +1561,34 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
   const [customTo,   setCustomTo]   = useState(todayStr);
   const [pendingFrom, setPendingFrom] = useState(daysAgoStr(30));
   const [pendingTo,   setPendingTo]   = useState(todayStr);
-  const [data, setData]     = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState<string | null>(null);
+  const [data, setData]         = useState<AnalyticsData | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError]       = useState<string | null>(null);
 
   const load = useCallback((params: { days: number } | { from: string; to: string }) => {
-    setLoading(true);
     setError(null);
     const qs = 'days' in params
       ? `days=${params.days}`
       : `from=${params.from}&to=${params.to}`;
+
+    // Show cached data immediately if < 1 hour old
+    const cacheKey = `at_analytics_${qs}`;
+    let hasCache = false;
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (raw) {
+        const { d: cached, ts } = JSON.parse(raw) as { d: AnalyticsData; ts: number };
+        if (cached && Date.now() - ts < 3_600_000) {
+          setData(cached);
+          setLoading(false);
+          setRefreshing(true);
+          hasCache = true;
+        }
+      }
+    } catch {}
+    if (!hasCache) setLoading(true);
+
     fetch(`/api/analytics?${qs}`, {
       headers: { Authorization: `Bearer ${session.token}` },
     })
@@ -1574,8 +1596,13 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json() as Promise<AnalyticsData>;
       })
-      .then(d => { setData(d); setLoading(false); })
-      .catch(e => { setError(String(e.message)); setLoading(false); });
+      .then(d => {
+        setData(d);
+        setLoading(false);
+        setRefreshing(false);
+        try { sessionStorage.setItem(cacheKey, JSON.stringify({ d, ts: Date.now() })); } catch {}
+      })
+      .catch(e => { setError(String(e.message)); setLoading(false); setRefreshing(false); });
   }, [session.token]);
 
   useEffect(() => {
@@ -1583,14 +1610,6 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     else load({ days: preset });
   }, [preset, customFrom, customTo, load]);
 
-  useEffect(() => {
-    fetch('/api/security', { headers: { Authorization: `Bearer ${session.token}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then((d: { summary?: { unreviewed?: number } } | null) => {
-        if (d?.summary?.unreviewed) setSecurityUnreviewed(d.summary.unreviewed);
-      })
-      .catch(() => {});
-  }, [session.token]);
 
   const prevChatUnread = useRef(0);
   useEffect(() => {
@@ -1821,7 +1840,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
         {/* Body */}
         <div style={{ padding: mobile ? '12px' : '20px' }}>
           {activeTab === 'security' && (
-            <SecurityPanel session={session} />
+            <SecurityPanel session={session} onDataLoad={setSecurityUnreviewed} />
           )}
 
           {activeTab === 'testers' && (
@@ -1850,6 +1869,11 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
           {activeTab === 'stats' && data && !loading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {refreshing && (
+                <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.06em', textAlign: 'right' }}>
+                  Refreshing…
+                </div>
+              )}
               {/* Summary cards */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <StatCard label="Unique Users" value={data.summary.uniqueUsers} sub={preset === 'custom' ? `${customFrom} → ${customTo}` : `Last ${preset} days`} accent />
