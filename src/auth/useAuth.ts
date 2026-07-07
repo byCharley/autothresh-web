@@ -121,12 +121,6 @@ export function useAuth() {
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
           if (data.idToken) saveIdToken(data.idToken);
           if (data.refreshToken) saveRefreshToken(data.refreshToken);
-          // Paused or cancelled → log out immediately, don't show SubscribePage
-          if (isInactiveStatus(data.subscriptionStatus)) {
-            window.history.replaceState({}, '', '/');
-            setStatus('unauthenticated');
-            return;
-          }
           const s: Session = {
             token:                  data.token!,
             idToken:                data.idToken,
@@ -140,8 +134,12 @@ export function useAuth() {
           };
           saveSession(s);
           setSession(s);
-          // No subscription at all (never subscribed) → show subscribe page
-          if (!s.hasSubscription) { setStatus('no-subscription'); return; }
+          // No active subscription (never subscribed, paused, or cancelled) →
+          // show SubscribePage so they can sign up / resubscribe
+          if (!s.hasSubscription || isInactiveStatus(s.subscriptionStatus)) {
+            setStatus('no-subscription');
+            return;
+          }
           setStatus('authenticated');
         })
         .catch(() => { window.history.replaceState({}, '', '/'); setStatus('unauthenticated'); });
