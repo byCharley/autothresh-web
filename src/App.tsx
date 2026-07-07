@@ -25,6 +25,7 @@ const ChatWidget      = lazy(() => import('./components/ChatWidget').then(m => (
 const AnalyticsDashboard = lazy(() => import('./components/AnalyticsDashboard').then(m => ({ default: m.AnalyticsDashboard })));
 import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
+import { useVersionCheck } from './hooks/useVersionCheck';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
 import { colorSeparate, renderColorSepComposite } from './engine/colorSeparator';
 import type { RGB } from './engine/colorSeparation';
@@ -116,6 +117,7 @@ function isMobileDevice(): boolean {
 
 function App() {
   useHistorySync();
+  const updateAvailable = useVersionCheck();
   const { status, session, initiateLogin, switchAccount, logout, recheck } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [showEula, setShowEula]         = useState(false);
@@ -1389,6 +1391,33 @@ function App() {
       {showSplash && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
       {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
       {session && <ChatWidget session={session} />}
+
+      {updateAvailable && (
+        <div style={{
+          position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9990, display: 'flex', alignItems: 'center', gap: 12,
+          background: 'var(--surface)', border: '1px solid var(--accent)',
+          padding: '10px 16px', boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+          fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap',
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5">
+            <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/>
+          </svg>
+          <span style={{ fontSize: 11, color: 'var(--text)', letterSpacing: '0.04em' }}>
+            Update available
+          </span>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              height: 24, padding: '0 12px', fontSize: 10, fontWeight: 700,
+              letterSpacing: '0.06em', background: 'var(--accent)', border: 'none',
+              color: '#111', cursor: 'pointer', fontFamily: 'var(--font-mono)',
+            }}
+          >
+            RELOAD
+          </button>
+        </div>
+      )}
 
       {showDesktopApp && (
         <div
