@@ -15,6 +15,43 @@ interface Props {
   onSwitchAccount?: () => void;
 }
 
+const PLAN_FEATURES = {
+  monthly: [
+    'All 6 separation modes',
+    'All export formats & mockups',
+    'Unlimited presets & cloud sync',
+    'Live chat support',
+    'Tutorial library built-in',
+  ],
+  annual: [
+    'Everything in Monthly',
+    'Priority feature requests',
+    'Early access to new modes',
+    'Live chat support',
+    'Tutorial library built-in',
+  ],
+  lifetime: [
+    'Everything in Annual',
+    'Pay once, own forever',
+    'All future updates free',
+    'No subscription fees ever',
+    'Tutorial library built-in',
+  ],
+};
+
+function PlanFeatures({ features, accent }: { features: string[]; accent: string }) {
+  return (
+    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {features.map(f => (
+        <li key={f} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 8, lineHeight: 1.4 }}>
+          <span style={{ width: 4, height: 4, borderRadius: '50%', background: accent, flexShrink: 0 }} />
+          {f}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function PricingModal({ onClose }: { onClose: () => void }) {
   return (
     <div
@@ -28,10 +65,9 @@ function PricingModal({ onClose }: { onClose: () => void }) {
     >
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
-        width: '100%', maxWidth: 760, padding: '28px 24px',
+        width: '100%', maxWidth: 800, padding: '28px 24px',
         position: 'relative',
       }}>
-        {/* Header */}
         <button
           onClick={onClose}
           style={{
@@ -40,14 +76,13 @@ function PricingModal({ onClose }: { onClose: () => void }) {
             color: 'var(--text-dim)', fontSize: 18, lineHeight: 1, padding: 4,
           }}
         >✕</button>
+
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{
             fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
             letterSpacing: '0.14em', textTransform: 'uppercase',
             color: 'var(--accent)', marginBottom: 8,
-          }}>
-            Choose a Plan
-          </div>
+          }}>Choose a Plan</div>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>
             Start your 3-day free trial
           </div>
@@ -56,102 +91,59 @@ function PricingModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* Plans */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
 
           {/* Monthly */}
-          <a
-            href={MONTHLY_URL} target="_blank" rel="noopener noreferrer"
-            style={{ textDecoration: 'none' }}
-          >
-            <div style={{
-              border: '1px solid var(--border)', padding: '20px 18px',
-              height: '100%', cursor: 'pointer', transition: 'border-color 0.15s',
-              display: 'flex', flexDirection: 'column',
-            }}
+          <a href={MONTHLY_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'flex' }}>
+            <div
+              style={{ border: '1px solid var(--border)', padding: '22px 20px', width: '100%', cursor: 'pointer', transition: 'border-color 0.15s', display: 'flex', flexDirection: 'column' }}
               onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
               onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
             >
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Monthly</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$8.99</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 4, marginBottom: 16 }}>/month</div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {['All separation modes', 'All export formats', 'Unlimited projects', 'Presets & cloud sync'].map(f => (
-                  <li key={f} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />{f}
-                  </li>
-                ))}
-              </ul>
-              <div style={{ marginTop: 'auto', textAlign: 'center', padding: '9px 0', border: '1px solid var(--accent)', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Monthly</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 20 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$8.99</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-dim)', fontWeight: 400 }}>/mo</span>
+              </div>
+              <PlanFeatures features={PLAN_FEATURES.monthly} accent="var(--accent)" />
+              <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', border: '1px solid var(--accent)', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
                 Start Free Trial →
               </div>
             </div>
           </a>
 
           {/* Annual — featured */}
-          <a
-            href={ANNUAL_URL} target="_blank" rel="noopener noreferrer"
-            style={{ textDecoration: 'none' }}
-          >
-            <div style={{
-              border: '1px solid var(--accent)', padding: '20px 18px',
-              height: '100%', cursor: 'pointer', transition: 'border-color 0.15s',
-              display: 'flex', flexDirection: 'column', position: 'relative',
-            }}>
-              <div style={{
-                position: 'absolute', top: 0, right: 0,
-                background: 'var(--accent)', color: '#000',
-                fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
-                letterSpacing: '0.1em', padding: '3px 8px',
-              }}>SAVE 15%</div>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Annual</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$90.95</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 4, marginBottom: 2 }}>/year</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)', marginBottom: 16 }}>$7.58/month</div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {['Everything in Monthly', 'Best value per separation', 'Priority feature requests', 'Early access to new modes'].map(f => (
-                  <li key={f} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />{f}
-                  </li>
-                ))}
-              </ul>
-              <div style={{ marginTop: 'auto', textAlign: 'center', padding: '9px 0', background: 'var(--accent)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
+          <a href={ANNUAL_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'flex' }}>
+            <div style={{ border: '1px solid var(--accent)', padding: '22px 20px', width: '100%', cursor: 'pointer', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 0, right: 0, background: 'var(--accent)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', padding: '3px 8px' }}>SAVE 15%</div>
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Annual</div>
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$90.95</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-dim)', fontWeight: 400 }}>/yr</span>
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', marginTop: 5, marginBottom: 14 }}>$7.58/mo · billed annually</div>
+              </div>
+              <PlanFeatures features={PLAN_FEATURES.annual} accent="var(--accent)" />
+              <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', background: 'var(--accent)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
                 Start Free Trial →
               </div>
             </div>
           </a>
 
           {/* Lifetime */}
-          <a
-            href={LIFETIME_URL} target="_blank" rel="noopener noreferrer"
-            style={{ textDecoration: 'none' }}
-          >
-            <div style={{
-              border: '1px solid #fbbf24', padding: '20px 18px',
-              height: '100%', cursor: 'pointer', transition: 'border-color 0.15s',
-              display: 'flex', flexDirection: 'column', position: 'relative',
-            }}>
-              <div style={{
-                position: 'absolute', top: 0, right: 0,
-                background: '#fbbf24', color: '#000',
-                fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
-                letterSpacing: '0.1em', padding: '3px 8px',
-              }}>ONE-TIME</div>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 12 }}>Lifetime</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$249.99</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 4, marginBottom: 16 }}>once · never pay again</div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {['Everything in Annual', 'Pay once, own forever', 'All future updates', 'Highest priority support'].map(f => (
-                  <li key={f} style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#fbbf24', flexShrink: 0 }} />{f}
-                  </li>
-                ))}
-              </ul>
-              <div style={{
-                marginTop: 'auto', textAlign: 'center', padding: '9px 0',
-                border: '1px solid #fbbf24', color: '#fbbf24',
-                fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
-              }}>
+          <a href={LIFETIME_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'flex' }}>
+            <div style={{ border: '1px solid #fbbf24', padding: '22px 20px', width: '100%', cursor: 'pointer', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+              <div style={{ position: 'absolute', top: 0, right: 0, background: '#fbbf24', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', padding: '3px 8px' }}>ONE-TIME</div>
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Lifetime</div>
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$249.99</span>
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 5 }}>one-time · never pay again</div>
+              </div>
+              <PlanFeatures features={PLAN_FEATURES.lifetime} accent="#fbbf24" />
+              <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', border: '1px solid #fbbf24', color: '#fbbf24', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
                 Buy Lifetime Access →
               </div>
             </div>
