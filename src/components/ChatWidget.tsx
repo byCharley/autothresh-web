@@ -417,7 +417,10 @@ export function ChatWidget({ session }: { session: Session }) {
       <button
         onClick={() => setOpen(v => !v)}
         style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 921,
+          position: 'fixed',
+          bottom: isMobile ? 'calc(64px + env(safe-area-inset-bottom, 0px) + 12px)' : 24,
+          right: isMobile ? 16 : 24,
+          zIndex: 921,
           width: 52, height: 52,
           background: open ? 'var(--surface-2)' : 'var(--accent)',
           border: open ? '1px solid var(--border)' : 'none',
