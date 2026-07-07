@@ -21,6 +21,32 @@ function getSeenDate(): string {
   return localStorage.getItem('at-changelog-seen') ?? '';
 }
 
+// ── Accent color themes ───────────────────────────────────────────────────────
+const ACCENT_KEY = 'at-accent';
+
+const ACCENTS = [
+  { name: 'Orange',  accent: '#FF6B1A', h: '#E55A0A', dim: 'rgba(255,107,26,0.12)' },
+  { name: 'Citrine', accent: '#D4A820', h: '#B8900A', dim: 'rgba(212,168,32,0.12)' },
+  { name: 'Red',     accent: '#EF4444', h: '#DC2626', dim: 'rgba(239,68,68,0.12)'  },
+  { name: 'Green',   accent: '#22C55E', h: '#16A34A', dim: 'rgba(34,197,94,0.12)'  },
+  { name: 'Blue',    accent: '#3B82F6', h: '#2563EB', dim: 'rgba(59,130,246,0.12)' },
+  { name: 'Grey',    accent: '#9CA3AF', h: '#6B7280', dim: 'rgba(156,163,175,0.12)'},
+] as const;
+
+function applyAccent(accent: string, h: string, dim: string) {
+  const root = document.documentElement;
+  root.style.setProperty('--accent',     accent);
+  root.style.setProperty('--accent-h',   h);
+  root.style.setProperty('--accent-dim', dim);
+}
+
+function loadSavedAccent() {
+  const saved = localStorage.getItem(ACCENT_KEY);
+  if (!saved) return;
+  const found = ACCENTS.find(a => a.accent === saved);
+  if (found) applyAccent(found.accent, found.h, found.dim);
+}
+
 interface TopBarProps {
   onExport: () => void;
   onMockup: () => void;
@@ -46,6 +72,11 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
   const notifScrollRef = useRef<HTMLDivElement>(null);
   const [seenDate, setSeenDate] = useState(getSeenDate);
   const unreadCount = CHANGELOG.filter(e => e.date > seenDate).length;
+  const [gearOpen, setGearOpen] = useState(false);
+  const gearRef = useRef<HTMLDivElement>(null);
+  const [activeAccent, setActiveAccent] = useState(() => localStorage.getItem(ACCENT_KEY) ?? '#FF6B1A');
+
+  useEffect(() => { loadSavedAccent(); }, []);
 
   const daysRemaining = subscriptionExpiresAt
     ? Math.ceil((new Date(subscriptionExpiresAt).getTime() - Date.now()) / 86_400_000)
@@ -81,6 +112,15 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [notifOpen]);
+
+  useEffect(() => {
+    if (!gearOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (gearRef.current && !gearRef.current.contains(e.target as Node)) setGearOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [gearOpen]);
 
   return (
     <header className="topbar">
@@ -356,6 +396,67 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
           </svg>
         </button>
       )}
+
+      {/* Accent color picker */}
+      <div ref={gearRef} style={{ position: 'relative' }}>
+        <button
+          className="btn btn-ghost btn-icon"
+          title="Theme color"
+          onClick={() => setGearOpen(v => !v)}
+          style={{ height: 26, width: 30 }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+
+        {gearOpen && (
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+            padding: '14px 16px', zIndex: 200, minWidth: 180,
+          }}>
+            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 12 }}>
+              Accent Color
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {ACCENTS.map(a => (
+                <button
+                  key={a.accent}
+                  onClick={() => {
+                    applyAccent(a.accent, a.h, a.dim);
+                    localStorage.setItem(ACCENT_KEY, a.accent);
+                    setActiveAccent(a.accent);
+                    setGearOpen(false);
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    background: activeAccent === a.accent ? 'var(--surface-2)' : 'none',
+                    border: `1px solid ${activeAccent === a.accent ? 'var(--border)' : 'transparent'}`,
+                    padding: '6px 8px', cursor: 'pointer', width: '100%', textAlign: 'left',
+                  }}
+                >
+                  <span style={{
+                    width: 14, height: 14, borderRadius: '50%',
+                    background: a.accent, flexShrink: 0,
+                    boxShadow: activeAccent === a.accent ? `0 0 6px ${a.accent}` : 'none',
+                  }} />
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                    {a.name}
+                  </span>
+                  {activeAccent === a.accent && (
+                    <svg style={{ marginLeft: 'auto' }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="3">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Changelog bell */}
       <div ref={notifRef} style={{ position: 'relative' }}>
