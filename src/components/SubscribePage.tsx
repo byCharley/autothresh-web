@@ -229,7 +229,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, onLogout, 
             )}
 
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
-              This account has been flagged and access has been revoked. If you believe this is a mistake, or you have a separate account, try signing in with a different email.
+              It looks like you already have another account. We only allow one login per user — please sign in using your other account instead.
             </div>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
