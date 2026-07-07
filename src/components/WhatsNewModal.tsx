@@ -15,6 +15,21 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-06',
+    label: 'DTG / DTF Mode Overhaul',
+    fixed: [
+      'Fabric export now composites artwork over the garment color before applying the fabric blend — the exported file is pixel-for-pixel identical to the canvas preview. Previously the blend was applied to the solid garment color before artwork was drawn, producing a washed-out result.',
+      'Erase tool in DTG mode now correctly removes painted mask areas instead of toggling incorrectly in certain brush states.',
+    ],
+    improved: [
+      'DTG / DTF mode is now a first-class separation mode alongside Thresh, Dither, Color, CMYK, and Texture — six modes total.',
+      'White channel and fabric preview controls are more responsive during interactive editing.',
+    ],
+    added: [
+      'DTG / DTF showcase added to the landing page — interactive before/after slider showing the full knockout workflow from raw artwork to fabric-blended garment.',
+    ],
+  },
+  {
     date: '2026-07-05',
     label: 'Canvas Controls & Edge Softness',
     added: [
