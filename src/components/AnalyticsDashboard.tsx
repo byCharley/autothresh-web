@@ -1509,11 +1509,10 @@ function SecurityPanel({ session }: { session: Session }) {
                       </div>
                     )}
                     {flag.expired && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                      <div style={{ flexShrink: 0 }}>
                         <button
                           onClick={() => act('unblock', flag.email)}
                           disabled={acting === flag.email + 'unblock'}
-                          title="Restore access — keeps flag for monitoring"
                           style={{
                             height: 24, padding: '0 12px', fontSize: 10,
                             fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
@@ -1522,19 +1521,6 @@ function SecurityPanel({ session }: { session: Session }) {
                           }}
                         >
                           Unblock
-                        </button>
-                        <button
-                          onClick={() => act('unflag', flag.email)}
-                          disabled={acting === flag.email + 'unflag'}
-                          title="Fully activate — restores access and removes flag entirely"
-                          style={{
-                            height: 24, padding: '0 12px', fontSize: 10,
-                            fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                            background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)',
-                            cursor: 'pointer', opacity: acting === flag.email + 'unflag' ? 0.5 : 1,
-                          }}
-                        >
-                          Activate
                         </button>
                       </div>
                     )}
