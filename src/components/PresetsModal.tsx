@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import type { PresetData } from '../store/useStore';
 
-type PresetMode = 'threshold' | 'palette' | 'color-sep';
+type PresetMode = 'threshold' | 'palette' | 'color-sep' | 'cmyk' | 'cmyk-pro' | 'dtg' | 'texture';
 
 interface SavedPreset {
   id: string;
@@ -31,6 +31,10 @@ export function PresetsModal({ token, onClose }: Props) {
   const currentMode: PresetMode =
     separationMode === 'palette'   ? 'palette'   :
     separationMode === 'color-sep' ? 'color-sep' :
+    separationMode === 'cmyk'      ? 'cmyk'      :
+    separationMode === 'cmyk-pro'  ? 'cmyk-pro'  :
+    separationMode === 'dtg'       ? 'dtg'        :
+    separationMode === 'texture'   ? 'texture'   :
     'threshold';
 
   useEffect(() => { fetchPresets(); }, []);
@@ -99,6 +103,10 @@ export function PresetsModal({ token, onClose }: Props) {
     const m = data.separationMode ?? data.mode;
     if (m === 'palette')   return 'palette';
     if (m === 'color-sep') return 'color-sep';
+    if (m === 'cmyk')      return 'cmyk';
+    if (m === 'cmyk-pro')  return 'cmyk-pro';
+    if (m === 'dtg')       return 'dtg';
+    if (m === 'texture')   return 'texture';
     return 'threshold';
   }
 
@@ -106,19 +114,28 @@ export function PresetsModal({ token, onClose }: Props) {
   const isEmpty = !loading && tabPresets.length === 0;
 
   const TAB_LABELS: Record<PresetMode, string> = {
-    threshold:   'Threshold',
+    threshold:   'Screen Print',
     palette:     'Dither',
-    'color-sep': 'Color',
+    'color-sep': 'Color Sep',
+    cmyk:        'CMYK',
+    'cmyk-pro':  'CMYK Pro',
+    dtg:         'DTG / DTF',
+    texture:     'Grain',
   };
 
   const MODE_DESCRIPTIONS: Record<PresetMode, string> = {
     threshold:   'Saves layers, colors, thresholds, patterns, texture, and document settings.',
     palette:     'Saves dither style, ink colors, scale, color mode, and image adjustments.',
     'color-sep': 'Saves color count, priority, pattern, locked colors, and image adjustments.',
+    cmyk:        'Saves CMYK channel settings, LPI, screen angles, and garment color.',
+    'cmyk-pro':  'Saves ICC profile, halftone shape, per-channel LPI, and print settings.',
+    dtg:         'Saves halftone method, frequency, angle, edge detection, and despeckle settings.',
+    texture:     'Saves grain type, intensity, scale, and image adjustments.',
   };
 
   const currentModeLabel: Record<string, string> = {
-    threshold: 'Threshold', palette: 'Dither', 'color-sep': 'Color', vector: 'Vector',
+    threshold: 'Screen Print', palette: 'Dither', 'color-sep': 'Color Sep',
+    cmyk: 'CMYK', 'cmyk-pro': 'CMYK Pro', dtg: 'DTG / DTF', texture: 'Grain',
   };
 
   return (

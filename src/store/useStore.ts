@@ -72,6 +72,13 @@ export interface PresetData {
   cmykVisibility?: Record<string, boolean>;
   // CMYK Pro fields
   proCmykSettings?: ProCmykSettings;
+  // DTG/DTF fields
+  dtgMethod?: 'halftone' | 'none';
+  dtgFrequency?: number;
+  dtgAngle?: number;
+  dtgEdgesOnly?: boolean;
+  dtgDespeckle?: boolean;
+  dtgDespeckleRadius?: number;
 }
 
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
@@ -996,7 +1003,15 @@ export const useStore = create<AppState>((set, get) => ({
     const proCmyk = data.mode === 'cmyk-pro' ? {
       proCmykSettings: data.proCmykSettings ?? s.proCmykSettings,
     } : {};
-    return { ...base, ...dither, ...colorSep, ...cmyk, ...proCmyk };
+    const dtg = data.mode === 'dtg' ? {
+      dtgMethod:          data.dtgMethod          ?? s.dtgMethod,
+      dtgFrequency:       data.dtgFrequency       ?? s.dtgFrequency,
+      dtgAngle:           data.dtgAngle           ?? s.dtgAngle,
+      dtgEdgesOnly:       data.dtgEdgesOnly       ?? s.dtgEdgesOnly,
+      dtgDespeckle:       data.dtgDespeckle       ?? s.dtgDespeckle,
+      dtgDespeckleRadius: data.dtgDespeckleRadius ?? s.dtgDespeckleRadius,
+    } : {};
+    return { ...base, ...dither, ...colorSep, ...cmyk, ...proCmyk, ...dtg };
   }),
   capturePreset: (): PresetData => {
     const s = get();
@@ -1049,6 +1064,14 @@ export const useStore = create<AppState>((set, get) => ({
     }
     if (s.separationMode === 'cmyk-pro') {
       base.proCmykSettings = { ...s.proCmykSettings };
+    }
+    if (s.separationMode === 'dtg') {
+      base.dtgMethod          = s.dtgMethod;
+      base.dtgFrequency       = s.dtgFrequency;
+      base.dtgAngle           = s.dtgAngle;
+      base.dtgEdgesOnly       = s.dtgEdgesOnly;
+      base.dtgDespeckle       = s.dtgDespeckle;
+      base.dtgDespeckleRadius = s.dtgDespeckleRadius;
     }
     return base;
   },
