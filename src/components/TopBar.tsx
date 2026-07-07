@@ -2,49 +2,23 @@ import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { AppIcon } from './AppIcon';
 
-// ── Changelog ──────────────────────────────────────────────────────────────────
-// Add new entries at the TOP. Each `id` must be higher than all previous ones.
-const NOTIFICATIONS = [
-  {
-    id: 5,
-    date: 'Jul 5, 2026',
-    title: 'Canvas Controls & Edge Softness',
-    body: 'New canvas border toggle in the toolbar hides the orange dashed outline around your artwork. B/W button on texture overlays converts any texture to black & white before blending. Edge softness now blurs the artwork mask before patterns are applied — consistent soft edges across all modes.',
-  },
-  {
-    id: 4,
-    date: 'Jul 2, 2026',
-    title: 'v1.0.2 — CorelDRAW Export & Layer Renaming',
-    body: 'New CDR export format produces a ZIP of numbered EPS plates with spot-color headers and a step-by-step CorelDRAW import guide — great for screen printers not on Photoshop. Double-click any layer name in Thresh, Dither, or Color mode to rename it; custom names carry through to every export format. Also fixes CMYK Pro highlight knockout (dark garments no longer show through) and makes dot gain / tone curve controls significantly more responsive.',
-  },
-  {
-    id: 3,
-    date: 'Jul 1, 2026',
-    title: 'Texture & Export Fixes',
-    body: 'Texture distressor now correctly knocks out of ink layers on export — no more overlay effect. Shadow layers stay solid so they don\'t bleed lighter colors through texture holes. Composite and DTG PNGs now include the garment background color when enabled. Passthrough mode exports a true flat PNG with texture and BG removal applied.',
-  },
-  {
-    id: 2,
-    date: 'Jul 1, 2026',
-    title: 'Paint Fix Brush',
-    body: 'After removing a background, use the new Paint Fix controls in the Background panel. "Restore" paints back pixels that were incorrectly removed. "Remove" erases any remaining stray pixels. Switch between modes and drag directly on your image.',
-  },
-  {
-    id: 1,
-    date: 'Jul 1, 2026',
-    title: 'Background Removal & Realistic Fabric Texture',
-    body: 'Background removal now includes an eyedropper tool — click any color in your image to remove it globally on top of the automatic mask. The Background panel also has a new Realistic View toggle: choose Light or Dark shirt to preview how your print looks on an actual fabric texture.',
-  },
-];
+// Bell uses the same CHANGELOG as WhatsNewModal — one source, always in sync.
+import { CHANGELOG, CHANGELOG_LATEST_DATE, hasUnseenUpdates, markChangelogSeen } from './WhatsNewModal';
 
-const SEEN_KEY = 'at-notif-seen';
-const MAX_ID   = NOTIFICATIONS[0].id;
-
-function getSeenId(): number {
-  return parseInt(localStorage.getItem(SEEN_KEY) ?? '0', 10);
+function bellDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
-function markAllSeen() {
-  localStorage.setItem(SEEN_KEY, String(MAX_ID));
+
+function bellBody(entry: typeof CHANGELOG[number]): string {
+  const items = [...(entry.added ?? []), ...(entry.improved ?? [])];
+  if (!items.length) return '';
+  const joined = items.slice(0, 2).join(' · ');
+  return joined.length > 300 ? joined.slice(0, 297) + '…' : joined;
+}
+
+function getSeenDate(): string {
+  return localStorage.getItem('at-changelog-seen') ?? '';
 }
 
 interface TopBarProps {
@@ -70,8 +44,8 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
   const notifRef = useRef<HTMLDivElement>(null);
   const [notifAtBottom, setNotifAtBottom] = useState(false);
   const notifScrollRef = useRef<HTMLDivElement>(null);
-  const [seenId, setSeenId] = useState(getSeenId);
-  const unreadCount = NOTIFICATIONS.filter(n => n.id > seenId).length;
+  const [seenDate, setSeenDate] = useState(getSeenDate);
+  const unreadCount = CHANGELOG.filter(e => e.date > seenDate).length;
 
   const daysRemaining = subscriptionExpiresAt
     ? Math.ceil((new Date(subscriptionExpiresAt).getTime() - Date.now()) / 86_400_000)
@@ -391,7 +365,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
           onClick={() => {
             const opening = !notifOpen;
             setNotifOpen(opening);
-            if (opening) { markAllSeen(); setSeenId(MAX_ID); setNotifAtBottom(false); }
+            if (opening) { markChangelogSeen(); setSeenDate(CHANGELOG_LATEST_DATE); setNotifAtBottom(false); }
           }}
           style={{ position: 'relative', height: 26, width: 30 }}
         >
@@ -439,34 +413,37 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                   setNotifAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 8);
                 }}
               >
-                {NOTIFICATIONS.map((n, i) => (
-                  <div key={n.id} style={{
-                    padding: '12px 14px',
-                    borderBottom: i < NOTIFICATIONS.length - 1 ? '1px solid var(--border)' : 'none',
-                    display: 'flex', gap: 10,
-                    opacity: i >= 4 ? Math.max(0.35, 0.65 - (i - 4) * 0.1) : 1,
-                    animation: `notif-row-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) ${i * 55}ms both`,
-                  }}>
-                    <div style={{
-                      width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 5,
-                      background: n.id > seenId ? 'var(--accent)' : 'var(--border)',
-                      boxShadow: n.id > seenId ? '0 0 5px var(--accent)' : 'none',
-                    }} />
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
-                          {n.title}
-                        </span>
-                        <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
-                          {n.date}
-                        </span>
+                {CHANGELOG.map((entry, i) => {
+                  const unseen = entry.date > seenDate;
+                  return (
+                    <div key={entry.date + entry.label} style={{
+                      padding: '12px 14px',
+                      borderBottom: i < CHANGELOG.length - 1 ? '1px solid var(--border)' : 'none',
+                      display: 'flex', gap: 10,
+                      opacity: i >= 4 ? Math.max(0.35, 0.65 - (i - 4) * 0.1) : 1,
+                      animation: `notif-row-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) ${i * 55}ms both`,
+                    }}>
+                      <div style={{
+                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 5,
+                        background: unseen ? 'var(--accent)' : 'var(--border)',
+                        boxShadow: unseen ? '0 0 5px var(--accent)' : 'none',
+                      }} />
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                            {entry.label}
+                          </span>
+                          <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+                            {bellDate(entry.date)}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0, fontFamily: 'var(--font-mono)' }}>
+                          {bellBody(entry)}
+                        </p>
                       </div>
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0, fontFamily: 'var(--font-mono)' }}>
-                        {n.body}
-                      </p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div style={{
                 position: 'absolute', bottom: 0, left: 0, right: 0, height: 64,
