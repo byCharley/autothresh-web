@@ -870,7 +870,7 @@ interface SecurityFlag {
 
 interface SharedIpEntry {
   ip: string;
-  emails: string[];
+  emails: Array<{ email: string; firstSeen: string }>;
 }
 
 interface SecurityData {
@@ -1323,13 +1323,32 @@ function SecurityPanel({ session, onDataLoad }: { session: Session; onDataLoad?:
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8 }}>
-                      {emails.map(email => {
+                      {emails.map(({ email, firstSeen }, idx) => {
                         const isBlocked = blockedEmails.has(email.toLowerCase());
+                        const isDuplicate = idx > 0;
+                        const signedUpAt = firstSeen
+                          ? new Date(firstSeen).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                          : null;
                         return (
                           <div key={email} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: isBlocked ? '#f87171' : 'var(--text-muted)', flex: '1 1 200px', textDecoration: isBlocked ? 'line-through' : 'none', opacity: isBlocked ? 0.7 : 1 }}>
-                              {email}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 200px', minWidth: 0 }}>
+                              {isDuplicate && !isBlocked && (
+                                <span style={{
+                                  fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                                  letterSpacing: '0.06em', color: '#faad14',
+                                  background: 'rgba(250,173,20,0.1)', border: '1px solid rgba(250,173,20,0.3)',
+                                  padding: '1px 5px', flexShrink: 0,
+                                }}>#{idx + 1}</span>
+                              )}
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: isBlocked ? '#f87171' : 'var(--text-muted)', textDecoration: isBlocked ? 'line-through' : 'none', opacity: isBlocked ? 0.7 : 1 }}>
+                                {email}
+                              </span>
+                              {signedUpAt && (
+                                <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', opacity: 0.6, flexShrink: 0 }}>
+                                  {signedUpAt}
+                                </span>
+                              )}
+                            </div>
                             <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                               {isBlocked ? (
                                 <span style={{

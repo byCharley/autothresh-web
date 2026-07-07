@@ -103,18 +103,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const flags = flagsRes.ok ? await flagsRes.json() as Array<Record<string, unknown>> : [];
       const recent = recentRes.ok ? await recentRes.json() as Array<Record<string, unknown>> : [];
 
-      // Build IP→email map from recent events to count unique IPs with multiple trial accounts
-      const ipEmails = new Map<string, Set<string>>();
+      // Build IP → { email → firstSeen } map from recent events
+      const ipEmailFirstSeen = new Map<string, Map<string, string>>();
       for (const ev of recent) {
-        const ip = String(ev.ip ?? '');
-        const email = String(ev.email ?? '');
-        if (!ip || !email) continue;
-        if (!ipEmails.has(ip)) ipEmails.set(ip, new Set());
-        ipEmails.get(ip)!.add(email);
+        const ip    = String(ev.ip ?? '');
+        const email = String(ev.email ?? '').toLowerCase();
+        const ts    = String(ev.created_at ?? '');
+        if (!ip || !email || !ts) continue;
+        if (!ipEmailFirstSeen.has(ip)) ipEmailFirstSeen.set(ip, new Map());
+        const emailMap = ipEmailFirstSeen.get(ip)!;
+        if (!emailMap.has(email) || ts < emailMap.get(email)!) emailMap.set(email, ts);
       }
-      const sharedIps = [...ipEmails.entries()]
-        .filter(([, emails]) => emails.size > 1)
-        .map(([ip, emails]) => ({ ip, emails: [...emails].sort() }))
+      const sharedIps = [...ipEmailFirstSeen.entries()]
+        .filter(([, emailMap]) => emailMap.size > 1)
+        .map(([ip, emailMap]) => ({
+          ip,
+          emails: [...emailMap.entries()]
+            .sort(([, a], [, b]) => a.localeCompare(b)) // oldest signup first
+            .map(([email, firstSeen]) => ({ email, firstSeen })),
+        }))
         .sort((a, b) => b.emails.length - a.emails.length);
 
       const unreviewed = flags.filter(f => !f.reviewed && !f.expired).length;
