@@ -1356,15 +1356,6 @@ function App() {
           EULA
         </button>
         <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
-        <button onClick={() => setShowDesktopApp(true)}
-          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.06em', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 5 }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent)')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
-        >
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          Desktop App
-        </button>
-        <span style={{ fontSize: 9, color: 'var(--border-2)', userSelect: 'none' }}>·</span>
         <button
           onClick={() => {
             setShowWhatsNew(true);
@@ -1433,40 +1424,16 @@ function App() {
             </div>
             <div style={{ fontSize: 17, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em', marginBottom: 6 }}>AutoThresh™ for Desktop</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', lineHeight: 1.6, marginBottom: 24 }}>
-              Native app for Mac and Windows. Same tool, no browser needed. Free with your active subscription.
+              A native desktop app for Mac and Windows is in the works.
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <a href="https://github.com/byCharley/autothresh-web/releases/latest/download/AutoThresh_1.0.0_universal.dmg" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '22px 16px', border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer', transition: 'border-color 0.15s' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--border)')}
-                >
-                  <svg width="36" height="36" viewBox="0 0 24 24" fill="var(--text)"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-                  <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>Mac</div>
-                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.6 }}>Universal<br/>Intel + Apple Silicon</div>
-                  <div style={{ width: '100%', padding: '8px 0', background: 'var(--accent)', color: '#000', fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', textAlign: 'center', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    Download .dmg
-                  </div>
-                </div>
-              </a>
-              <a href="https://github.com/byCharley/autothresh-web/releases/latest/download/AutoThresh_1.0.0_x64-setup.exe" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '22px 16px', border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer', transition: 'border-color 0.15s' }}
-                  onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)')}
-                  onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--border)')}
-                >
-                  <svg width="36" height="36" viewBox="0 0 88 88" fill="var(--text)"><path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529l.028 34.453L.028 75.48.026 45.7zm4.326-39.025L87.314 0v41.527l-47.318.376zm47.329 39.349l-.011 41.344-47.318-6.633-.066-34.752z"/></svg>
-                  <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>Windows</div>
-                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.6 }}>64-bit Installer<br/>Windows 10+</div>
-                  <div style={{ width: '100%', padding: '8px 0', background: 'var(--accent)', color: '#000', fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', textAlign: 'center', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    Download .exe
-                  </div>
-                </div>
-              </a>
-            </div>
-            <div style={{ marginTop: 16, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', opacity: 0.7 }}>
-              Free with any active subscription · Always up to date
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 16px', border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="1.5" style={{ opacity: 0.4 }}>
+                <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Coming Soon</div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.7 }}>
+                Mac &amp; Windows · Free with any active subscription
+              </div>
             </div>
           </div>
         </div>
