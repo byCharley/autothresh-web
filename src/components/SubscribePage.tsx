@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { AppIcon } from './AppIcon';
 import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
@@ -13,6 +13,7 @@ interface Props {
   email?: string;
   onLogout: () => void;
   onSwitchAccount?: () => void;
+  onRecheck?: () => Promise<boolean>;
 }
 
 const PLAN_FEATURES = {
@@ -158,10 +159,18 @@ function PricingModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: Props) {
-  const [showEula,    setShowEula]    = useState(false);
-  const [showFaq,     setShowFaq]     = useState(false);
-  const [showPricing, setShowPricing] = useState(false);
+export function SubscribePage({ firstName, email, onLogout, onSwitchAccount, onRecheck }: Props) {
+  const [showEula,      setShowEula]      = useState(false);
+  const [showFaq,       setShowFaq]       = useState(false);
+  const [showPricing,   setShowPricing]   = useState(false);
+  const [recheckState,  setRecheckState]  = useState<'idle' | 'checking' | 'denied'>('idle');
+
+  const handleRecheck = useCallback(async () => {
+    if (!onRecheck || recheckState === 'checking') return;
+    setRecheckState('checking');
+    const granted = await onRecheck();
+    if (!granted) setRecheckState('denied');
+  }, [onRecheck, recheckState]);
 
   return (
     <div style={{
@@ -246,6 +255,27 @@ export function SubscribePage({ firstName, email, onLogout, onSwitchAccount }: P
             Sign out
           </button>
         </div>
+
+        {onRecheck && (
+          <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+            <button
+              onClick={handleRecheck}
+              disabled={recheckState === 'checking'}
+              style={{
+                background: 'none', border: 'none', cursor: recheckState === 'checking' ? 'default' : 'pointer',
+                fontSize: 11, fontFamily: 'var(--font-mono)', color: recheckState === 'denied' ? '#ef4444' : 'var(--text-dim)',
+                opacity: recheckState === 'checking' ? 0.5 : 1, padding: 0,
+                transition: 'color 0.15s',
+              }}
+              onMouseEnter={(e) => { if (recheckState === 'idle') (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)'; }}
+              onMouseLeave={(e) => { if (recheckState === 'idle') (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; }}
+            >
+              {recheckState === 'checking' && '↻ Checking…'}
+              {recheckState === 'denied'   && 'No access found — contact support if this is an error'}
+              {recheckState === 'idle'     && 'Already have access? Check again →'}
+            </button>
+          </div>
+        )}
       </div>
 
       <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} />

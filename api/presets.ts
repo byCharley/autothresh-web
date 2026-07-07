@@ -34,7 +34,7 @@ async function verifyToken(token: string): Promise<string | null> {
 // ── Handler ──────────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -72,6 +72,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const r = await fetch(url, { method: 'DELETE', headers: sbHeaders() });
     if (!r.ok) return res.status(500).json({ error: await r.text() });
     return res.status(200).json({ success: true });
+  }
+
+  // PATCH ?type=prefs — upsert user preferences (accent color, etc.)
+  if (req.method === 'PATCH' && req.query.type === 'prefs') {
+    const { accentColor } = req.body as { accentColor?: string };
+    if (!accentColor) return res.status(400).json({ error: 'accentColor required' });
+    const url = `${SUPABASE_URL}/rest/v1/user_preferences`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: sbHeaders({ 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ email, accent_color: accentColor, updated_at: new Date().toISOString() }),
+    });
+    if (!r.ok) return res.status(500).json({ error: await r.text() });
+    return res.status(200).json({ ok: true });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

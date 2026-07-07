@@ -15,6 +15,13 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-07',
+    label: 'Theme Color Picker',
+    added: [
+      'Pick your accent color — gear icon in the top bar lets you switch between Orange, Citrine, Red, Green, Blue, and Grey. Your choice saves to your account and applies automatically on every device you log in from.',
+    ],
+  },
+  {
     date: '2026-07-06',
     label: 'DTG / DTF Mode Overhaul',
     fixed: [

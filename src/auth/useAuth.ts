@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { generateCodeVerifier, generateCodeChallenge, generateState } from './pkce';
+import { applyAccentByHex } from '../lib/accent';
 
 export interface Session {
   token:                   string;
@@ -156,7 +157,7 @@ export function useAuth() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: stored.token }),
     })
-      .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string }>)
+      .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string; accentColor?: string }>)
       .then((data) => {
         if (!data.valid) { clearSession(); setStatus('unauthenticated'); return; }
         // Guard: if logout() ran while verify was in-flight, don't restore.
@@ -167,6 +168,7 @@ export function useAuth() {
           setStatus('unauthenticated');
           return;
         }
+        if (data.accentColor) applyAccentByHex(data.accentColor);
         const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle };
         saveSession(updated);
         setSession(updated);
@@ -181,6 +183,27 @@ export function useAuth() {
   }, []);
 
   const initiateLogin = useCallback(() => startOAuth(), []);
+
+  const recheck = useCallback(async (): Promise<boolean> => {
+    const stored = loadSession();
+    if (!stored) return false;
+    try {
+      const r = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: stored.token }),
+      });
+      const data = await r.json() as { valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string; accentColor?: string };
+      if (!data.valid || !data.hasSubscription) return false;
+      if (isInactiveStatus(data.subscriptionStatus)) return false;
+      if (data.accentColor) applyAccentByHex(data.accentColor);
+      const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle };
+      saveSession(updated);
+      setSession(updated);
+      setStatus('authenticated');
+      return true;
+    } catch { return false; }
+  }, []);
 
   // switchAccount: reads shopify_id_token/refresh_token (kept across regular
   // logouts), refreshes to get a non-expired hint, then hits Shopify's OIDC
@@ -237,5 +260,5 @@ export function useAuth() {
     setStatus('unauthenticated');
   }, []);
 
-  return { status, session, initiateLogin, switchAccount, logout };
+  return { status, session, initiateLogin, switchAccount, logout, recheck };
 }

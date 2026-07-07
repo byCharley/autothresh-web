@@ -30,6 +30,19 @@ function logEvent(data: Record<string, unknown>) {
   sbPost('analytics_events', data);
 }
 
+async function getUserPrefs(email: string): Promise<{ accentColor?: string }> {
+  if (!SUPABASE_URL || !SERVICE_KEY) return {};
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/user_preferences?email=eq.${encodeURIComponent(email)}&select=accent_color&limit=1`,
+      { headers: { 'Authorization': `Bearer ${SERVICE_KEY}`, 'apikey': SERVICE_KEY } }
+    );
+    if (!r.ok) return {};
+    const rows = await r.json() as Array<{ accent_color?: string }>;
+    return rows.length ? { accentColor: rows[0].accent_color ?? undefined } : {};
+  } catch { return {}; }
+}
+
 async function checkTesterStatus(email: string): Promise<'active' | 'paused' | null> {
   if (!SUPABASE_URL || !SERVICE_KEY) return null;
   try {
@@ -241,11 +254,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = CREATOR_EMAILS.has(emailLower);
 
   // ── Run all async checks in parallel ─────────────────────────────────────
-  const [sealResult, lifetimeResult, testerStatus, securityResult] = await Promise.all([
+  const [sealResult, lifetimeResult, testerStatus, securityResult, userPrefs] = await Promise.all([
     sealCheckSubscription(email),
     (!isCreator) ? checkLifetimeOrder(token) : Promise.resolve(false),
     (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve<'active' | 'paused' | null>(null),
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
+    getUserPrefs(emailLower),
   ]);
 
   const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
@@ -297,6 +311,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       subscriptionStatus: 'expired',
       email,
       firstName:          cust.firstName ?? '',
+      accentColor:        userPrefs.accentColor,
     });
   }
 
@@ -308,5 +323,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     planTitle:             finalPlan,
     email,
     firstName:             cust.firstName ?? '',
+    accentColor:           userPrefs.accentColor,
   });
 }

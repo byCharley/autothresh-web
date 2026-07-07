@@ -33,6 +33,20 @@ function logEvent(data: Record<string, unknown>) {
   sbPost('analytics_events', data);
 }
 
+async function checkTesterStatus(email: string): Promise<'active' | 'paused' | null> {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  try {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/testers?email=eq.${encodeURIComponent(email)}&select=status&limit=1`,
+      { headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY } }
+    );
+    if (!r.ok) return null;
+    const rows = await r.json() as Array<{ status: string }>;
+    if (!rows.length) return null;
+    return rows[0].status === 'paused' ? 'paused' : 'active';
+  } catch { return null; }
+}
+
 async function checkSecurityFlag(email: string): Promise<boolean> {
   if (!SUPABASE_URL || !SUPABASE_KEY) return false;
   try {
@@ -254,21 +268,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Customer API error:', e);
   }
 
-  // ── 4. Check subscription via Seal ────────────────────────────────────────
-  const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = await sealCheckSubscription(custEmail);
+  // ── 4. Check subscription, tester status, and security in parallel ────────
   const emailLower = custEmail.toLowerCase();
   const isCreator  = CREATOR_EMAILS.has(emailLower);
-  const isTester   = !isCreator && TESTER_EMAILS.has(emailLower);
+
+  const [sealResult, testerStatus, isSecurityExpired] = await Promise.all([
+    sealCheckSubscription(custEmail),
+    (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve<'active' | 'paused' | null>(null),
+    (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
+  ]);
+
+  const { hasSub, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
+  const envTester  = !isCreator && TESTER_EMAILS.has(emailLower);
+  const isTester   = envTester || (!isCreator && testerStatus === 'active');
   const finalHasSub = hasSub || isCreator || isTester;
 
   const finalStatus  = isCreator ? 'creator' : isTester ? 'tester' : subscriptionStatus;
   const finalPlan    = isCreator ? 'Creator' : isTester ? 'Tester Access' : planTitle;
   const finalExpiry  = (isCreator || isTester) ? undefined : nextBillingDate;
 
-  console.log('Auth result:', { custEmail, hasSub, isCreator, isTester, finalHasSub, nextBillingDate });
-
-  // ── Check if account has been security-expired ────────────────────────────
-  const isSecurityExpired = (!isCreator && !isTester) ? await checkSecurityFlag(emailLower) : false;
+  console.log('Auth result:', { custEmail, hasSub, isCreator, isTester, testerStatus, finalHasSub, nextBillingDate });
 
   // ── Log login + security events (fire-and-forget) ────────────────────────
   const ua = String(req.headers['user-agent'] ?? '');

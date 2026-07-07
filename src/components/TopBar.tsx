@@ -4,6 +4,7 @@ import { AppIcon } from './AppIcon';
 
 // Bell uses the same CHANGELOG as WhatsNewModal — one source, always in sync.
 import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewModal';
+import { ACCENTS, ACCENT_KEY, applyAccentByHex, loadSavedAccent } from '../lib/accent';
 
 function bellDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -21,32 +22,6 @@ function getSeenDate(): string {
   return localStorage.getItem('at-changelog-seen') ?? '';
 }
 
-// ── Accent color themes ───────────────────────────────────────────────────────
-const ACCENT_KEY = 'at-accent';
-
-const ACCENTS = [
-  { name: 'Orange',  accent: '#FF6B1A', h: '#E55A0A', dim: 'rgba(255,107,26,0.12)' },
-  { name: 'Citrine', accent: '#D4A820', h: '#B8900A', dim: 'rgba(212,168,32,0.12)' },
-  { name: 'Red',     accent: '#EF4444', h: '#DC2626', dim: 'rgba(239,68,68,0.12)'  },
-  { name: 'Green',   accent: '#22C55E', h: '#16A34A', dim: 'rgba(34,197,94,0.12)'  },
-  { name: 'Blue',    accent: '#3B82F6', h: '#2563EB', dim: 'rgba(59,130,246,0.12)' },
-  { name: 'Grey',    accent: '#9CA3AF', h: '#6B7280', dim: 'rgba(156,163,175,0.12)'},
-] as const;
-
-function applyAccent(accent: string, h: string, dim: string) {
-  const root = document.documentElement;
-  root.style.setProperty('--accent',     accent);
-  root.style.setProperty('--accent-h',   h);
-  root.style.setProperty('--accent-dim', dim);
-}
-
-function loadSavedAccent() {
-  const saved = localStorage.getItem(ACCENT_KEY);
-  if (!saved) return;
-  const found = ACCENTS.find(a => a.accent === saved);
-  if (found) applyAccent(found.accent, found.h, found.dim);
-}
-
 interface TopBarProps {
   onExport: () => void;
   onMockup: () => void;
@@ -60,9 +35,10 @@ interface TopBarProps {
   subscriptionExpiresAt?: string;
   planTitle?: string;
   subscriptionStatus?: string;
+  sessionToken?: string;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -404,6 +380,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
           title="Theme color"
           onClick={() => setGearOpen(v => !v)}
           style={{ height: 26, width: 30 }}
+          data-tutorial="tutorial-theme"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="3"/>
@@ -426,10 +403,16 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                 <button
                   key={a.accent}
                   onClick={() => {
-                    applyAccent(a.accent, a.h, a.dim);
-                    localStorage.setItem(ACCENT_KEY, a.accent);
+                    applyAccentByHex(a.accent);
                     setActiveAccent(a.accent);
                     setGearOpen(false);
+                    if (sessionToken) {
+                      fetch('/api/presets?type=prefs', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': sessionToken },
+                        body: JSON.stringify({ accentColor: a.accent }),
+                      }).catch(() => {});
+                    }
                   }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10,

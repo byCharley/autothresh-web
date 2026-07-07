@@ -49,6 +49,11 @@ const STEPS: Step[] = [
     title: 'Export',
     desc: 'Download your separated layers as PNGs, a layered Photoshop PSD, a CorelDRAW EPS package (CDR), multi-page PDF, TIFF, or EPS ZIP. Custom layer names appear in every exported file.',
   },
+  {
+    key: 'tutorial-theme',
+    title: 'Theme Color',
+    desc: 'Make it yours — click the gear icon to pick an accent color. Choose from Orange, Citrine, Red, Green, Blue, or Grey. Your preference is saved and applied every time you open the app.',
+  },
 ];
 
 const PAD = 6;

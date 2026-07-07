@@ -317,16 +317,45 @@ export function ChatWidget({ session }: { session: Session }) {
                 </div>
               );
             })}
+            {/* Solved system message — appears in-thread when ticket is closed */}
+            {activeTicket.status === 'solved' && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '8px 0 4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)', borderRadius: 2 }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', color: '#4ade80', textTransform: 'uppercase' }}>
+                      Support Ticket Solved
+                    </span>
+                  </div>
+                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                </div>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  This conversation has been closed
+                </span>
+              </div>
+            )}
+
             <div ref={bottomRef} />
           </div>
 
           {/* Reply / solved state */}
           {activeTicket.status === 'solved' ? (
-            <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
-              <div style={{ textAlign: 'center', fontSize: 10, fontFamily: 'var(--font-mono)', color: '#4ade80' }}>✓ This ticket has been resolved</div>
+            <div style={{ padding: '14px', borderTop: '1px solid var(--border)', flexShrink: 0, background: 'rgba(74,222,128,0.04)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(74,222,128,0.12)', border: '1px solid rgba(74,222,128,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>Chat Closed</div>
+                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Your issue has been resolved</div>
+                </div>
+              </div>
               <button
                 onClick={() => setView('new')}
                 style={{ width: '100%', height: 32, fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; }}
               >
                 Open New Ticket
               </button>
