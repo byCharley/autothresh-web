@@ -469,11 +469,11 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
   // ── Desktop layout ─────────────────────────────────────────────────────────
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 960, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={onClose}
     >
       <div
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)', width: '98vw', height: '94vh', display: 'flex', flexDirection: 'column', zIndex: 51 }}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)', width: '98vw', height: '94vh', display: 'flex', flexDirection: 'column', zIndex: 961 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
@@ -486,6 +486,19 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
               <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
                 {mockup.brand} {mockup.model} · {mockup.view} · {variant?.name}
               </span>
+            )}
+            {mockup?.credit && (
+              <a
+                href={mockup.credit.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = '0.75')}
+                onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+              >
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+                {mockup.credit.handle}
+              </a>
             )}
           </div>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>
@@ -597,7 +610,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                     <img
                       src={variant.file}
                       alt={mockup?.name}
-                      style={{ maxHeight: 'calc(94vh - 44px - 32px - 32px)', maxWidth: '100%', opacity: 0.5, pointerEvents: 'none' }}
+                      style={{ maxHeight: 'calc(94vh - 44px - 32px - 32px)', maxWidth: '100%', opacity: 0.5, pointerEvents: 'none', display: 'block', clipPath: 'inset(1px)' }}
                     />
                   )}
                   <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: '#555', marginTop: 12 }}>
@@ -614,6 +627,7 @@ export function MockupPreview({ onClose }: { onClose: () => void }) {
                       maxWidth: 'calc(98vw - 260px - 220px - 32px)',
                       pointerEvents: 'none',
                       transition: 'opacity 0.15s ease',
+                      clipPath: 'inset(1px)',
                     }}
                     alt={mockup?.name}
                     draggable={false}

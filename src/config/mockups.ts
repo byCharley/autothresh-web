@@ -23,6 +23,7 @@ export const MOCKUPS: MockupDef[] = [
     name: 'Heavyweight Tee',
     category: 'T-Shirt',
     view: 'Front',
+    credit: { handle: '@charleypangus', url: 'https://www.instagram.com/charleypangus' },
     variants: [
       { name: 'White',       hex: '#FFFFFF', file: '/mockups/LosAngelesApparel_1801_Front_White.png' },
       { name: 'Black',       hex: '#141414', file: '/mockups/LosAngelesApparel_1801_Front.png' },
@@ -35,6 +36,7 @@ export const MOCKUPS: MockupDef[] = [
     name: 'Heavyweight Tee',
     category: 'T-Shirt',
     view: 'Back',
+    credit: { handle: '@charleypangus', url: 'https://www.instagram.com/charleypangus' },
     variants: [
       { name: 'White',       hex: '#FFFFFF', file: '/mockups/LosAngelesApparel_1801_Back_White.png' },
       { name: 'Black',       hex: '#141414', file: '/mockups/LosAngelesApparel_1801_Back.png' },
@@ -47,6 +49,7 @@ export const MOCKUPS: MockupDef[] = [
     name: 'Core Tee',
     category: 'T-Shirt',
     view: 'Front',
+    credit: { handle: '@charleypangus', url: 'https://www.instagram.com/charleypangus' },
     variants: [
       { name: 'Black',       hex: '#141414', file: '/mockups/Elwood_Black_Front.png' },
       { name: 'Thrift Black',hex: '#3A3633', file: '/mockups/Elwood_ThriftBlack_Front.png' },
@@ -62,6 +65,7 @@ export const MOCKUPS: MockupDef[] = [
     name: 'Core Tee',
     category: 'T-Shirt',
     view: 'Back',
+    credit: { handle: '@charleypangus', url: 'https://www.instagram.com/charleypangus' },
     variants: [
       { name: 'Black',       hex: '#141414', file: '/mockups/Elwood_Black_Back.png' },
       { name: 'Thrift Black',hex: '#3A3633', file: '/mockups/Elwood_ThriftBlack_Back.png' },
@@ -79,10 +83,11 @@ export const MOCKUPS: MockupDef[] = [
     view: 'Front',
     credit: { handle: '@chazmadethat', url: 'https://www.instagram.com/chazmadethat' },
     variants: [
-      { name: 'White',      hex: '#F0EDE8', file: '/mockups/PremiumHoodie__White_Front_byChazemadethat.png' },
-      { name: 'Black',      hex: '#1A1A1A', file: '/mockups/PremiumHoodie__Black_Front_byChazemadethat.png' },
-      { name: 'Dark Grey',  hex: '#3D3D3D', file: '/mockups/PremiumHoodie__DarkGrey_Front_byChazemadethat.png' },
-      { name: 'Brown',      hex: '#7A5C45', file: '/mockups/PremiumHoodie__Brown_Front_byChazemadethat.png' },
+      { name: 'White',       hex: '#F0EDE8', file: '/mockups/PremiumHoodie__White_Front_byChazemadethat.png' },
+      { name: 'Black',       hex: '#1A1A1A', file: '/mockups/PremiumHoodie__Black_Front_byChazemadethat.png' },
+      { name: 'Faded Black', hex: '#2E2B28', file: '/mockups/PremiumHoodie__FadedBlack_Front_byChazemadethat.png' },
+      { name: 'Dark Grey',   hex: '#3D3D3D', file: '/mockups/PremiumHoodie__DarkGrey_Front_byChazemadethat.png' },
+      { name: 'Brown',       hex: '#7A5C45', file: '/mockups/PremiumHoodie__Brown_Front_byChazemadethat.png' },
     ],
   },
   {
@@ -94,10 +99,11 @@ export const MOCKUPS: MockupDef[] = [
     view: 'Back',
     credit: { handle: '@chazmadethat', url: 'https://www.instagram.com/chazmadethat' },
     variants: [
-      { name: 'White',      hex: '#F0EDE8', file: '/mockups/PremiumHoodie__White_Back_byChazemadethat.png' },
-      { name: 'Black',      hex: '#1A1A1A', file: '/mockups/PremiumHoodie__Black_Back_byChazemadethat.png' },
-      { name: 'Dark Grey',  hex: '#3D3D3D', file: '/mockups/PremiumHoodie__DarkGrey_Back_byChazemadethat.png' },
-      { name: 'Brown',      hex: '#7A5C45', file: '/mockups/PremiumHoodie__Brown_Back_byChazemadethat.png' },
+      { name: 'White',       hex: '#F0EDE8', file: '/mockups/PremiumHoodie__White_Back_byChazemadethat.png' },
+      { name: 'Black',       hex: '#1A1A1A', file: '/mockups/PremiumHoodie__Black_Back_byChazemadethat.png' },
+      { name: 'Faded Black', hex: '#2E2B28', file: '/mockups/PremiumHoodie__FadedBlack_Back_byChazemadethat.png' },
+      { name: 'Dark Grey',   hex: '#3D3D3D', file: '/mockups/PremiumHoodie__DarkGrey_Back_byChazemadethat.png' },
+      { name: 'Brown',       hex: '#7A5C45', file: '/mockups/PremiumHoodie__Brown_Back_byChazemadethat.png' },
     ],
   },
 ];
