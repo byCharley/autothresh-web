@@ -98,7 +98,7 @@ function runFraudCheck(email: string, ip: string, firstName: string, subscriptio
         confidence,
         auto_flagged: true,
         reviewed: false,
-        expired: false,
+        expired: true,
       }),
     }).catch(() => {});
   }).catch(() => {});
