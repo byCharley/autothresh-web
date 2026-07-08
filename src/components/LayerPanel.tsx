@@ -741,11 +741,14 @@ function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = 
     bgRemovalEnabled, bgTolerance, bgEdgeSoftness, setBgRemovalEnabled, setBgTolerance, setBgEdgeSoftness,
     bgSeedColors, setBgSeedColors, bgEyedropperActive, setBgEyedropperActive,
     bgPaintMask, bgPaintMode, setBgPaintMask, setBgPaintMode,
+    dtgPaintMask, dtgPaintMode, setDtgPaintMask, setDtgPaintMode,
+    brushSize, setBrushSize,
     canvasColor, setCanvasColor, showFabricBg, setShowFabricBg,
     fabricTexture, setFabricTexture,
     fabricBlendStrength, setFabricBlendStrength,
     fabricTextureDepth, setFabricTextureDepth,
   } = useStore();
+  const isDtg = separationMode === 'dtg';
 
   const palette = BRAND_PALETTES.find((b) => b.brand === brand)?.colors ?? [];
   const matchedColor = palette.find((c) => c.hex.toLowerCase() === canvasColor.toLowerCase());
@@ -753,7 +756,7 @@ function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = 
 
   return (
     <>
-      <SectionHeader title="Background" open={open} onToggle={() => setOpen(!open)} />
+      <SectionHeader title={isDtg ? 'Background & Edges' : 'Background'} open={open} onToggle={() => setOpen(!open)} />
       {open && (
         <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {/* BG removal */}
@@ -825,56 +828,121 @@ function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = 
                 </div>
               )}
 
-              {/* Paint-fix brush — hidden in DTG mode (dedicated DtgPaintSection handles it) */}
-              <div style={{ display: separationMode === 'dtg' ? 'none' : 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+              {/* Paint-fix brush (non-DTG) */}
+              {!isDtg && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                    <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      Paint Fix
+                    </span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button
+                        onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
+                        title="Paint to restore areas incorrectly removed"
+                        style={{
+                          padding: '4px 8px', fontSize: 9,
+                          fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                          background: bgPaintMode === 'restore' ? '#2866cc' : 'var(--surface-2)',
+                          color: bgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
+                          border: `1px solid ${bgPaintMode === 'restore' ? '#2866cc' : 'var(--border)'}`,
+                          borderRadius: 3, cursor: 'pointer',
+                        }}
+                      >Restore</button>
+                      <button
+                        onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
+                        title="Paint to remove additional pixels"
+                        style={{
+                          padding: '4px 8px', fontSize: 9,
+                          fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                          background: bgPaintMode === 'remove' ? '#cc6600' : 'var(--surface-2)',
+                          color: bgPaintMode === 'remove' ? '#fff' : 'var(--text-dim)',
+                          border: `1px solid ${bgPaintMode === 'remove' ? '#cc6600' : 'var(--border)'}`,
+                          borderRadius: 3, cursor: 'pointer',
+                        }}
+                      >Remove</button>
+                    </div>
+                  </div>
+                  {bgPaintMode !== 'off' && (
+                    <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 1 }}>
+                      Drag on image to {bgPaintMode} · [ ] to resize brush
+                    </div>
+                  )}
+                  {bgPaintMask && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
+                        style={{
+                          fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+                          background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: '0 2px',
+                        }}
+                      >clear paint fixes</button>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+          {/* DTG refine brush — merged here so users understand it's for fixing BG edges */}
+          {isDtg && (
+            <>
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+              <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>
+                Refine with Brush
+              </div>
+              <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginBottom: 6 }}>
+                Paint on the image to manually erase or restore areas the auto-removal missed.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Paint Fix
+                  Brush
                 </span>
                 <div style={{ display: 'flex', gap: 4 }}>
                   <button
-                    onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
-                    title="Paint to restore areas incorrectly removed"
+                    onClick={() => setDtgPaintMode(dtgPaintMode === 'erase' ? 'off' : 'erase')}
+                    title="Paint to erase (make transparent)"
                     style={{
                       padding: '4px 8px', fontSize: 9,
                       fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                      background: bgPaintMode === 'restore' ? '#2866cc' : 'var(--surface-2)',
-                      color: bgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
-                      border: `1px solid ${bgPaintMode === 'restore' ? '#2866cc' : 'var(--border)'}`,
+                      background: dtgPaintMode === 'erase' ? '#cc4400' : 'var(--surface-2)',
+                      color: dtgPaintMode === 'erase' ? '#fff' : 'var(--text-dim)',
+                      border: `1px solid ${dtgPaintMode === 'erase' ? '#cc4400' : 'var(--border)'}`,
+                      borderRadius: 3, cursor: 'pointer',
+                    }}
+                  >Erase</button>
+                  <button
+                    onClick={() => setDtgPaintMode(dtgPaintMode === 'restore' ? 'off' : 'restore')}
+                    title="Paint to restore (make opaque)"
+                    style={{
+                      padding: '4px 8px', fontSize: 9,
+                      fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: dtgPaintMode === 'restore' ? '#1a7a40' : 'var(--surface-2)',
+                      color: dtgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
+                      border: `1px solid ${dtgPaintMode === 'restore' ? '#1a7a40' : 'var(--border)'}`,
                       borderRadius: 3, cursor: 'pointer',
                     }}
                   >Restore</button>
-                  <button
-                    onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
-                    title="Paint to remove additional pixels"
-                    style={{
-                      padding: '4px 8px', fontSize: 9,
-                      fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                      background: bgPaintMode === 'remove' ? '#cc6600' : 'var(--surface-2)',
-                      color: bgPaintMode === 'remove' ? '#fff' : 'var(--text-dim)',
-                      border: `1px solid ${bgPaintMode === 'remove' ? '#cc6600' : 'var(--border)'}`,
-                      borderRadius: 3, cursor: 'pointer',
-                    }}
-                  >Remove</button>
                 </div>
               </div>
-              {bgPaintMode !== 'off' && separationMode !== 'dtg' && (
-                <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 1 }}>
-                  Drag on image to {bgPaintMode} · [ ] to resize brush
+              {dtgPaintMode !== 'off' && (
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: -2 }}>
+                  Drag on image to {dtgPaintMode} · [ ] to resize brush
                 </div>
               )}
-              {bgPaintMask && separationMode !== 'dtg' && (
+              <Slider label="Brush Size" value={brushSize} min={2} max={120} step={1} onChange={setBrushSize} unit="px" />
+              {dtgPaintMask && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button
-                    onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
+                    onClick={() => { setDtgPaintMask(null, null); setDtgPaintMode('off'); }}
                     style={{
                       fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
                       background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: '0 2px',
                     }}
-                  >clear paint fixes</button>
+                  >clear paint</button>
                 </div>
               )}
             </>
           )}
+
           <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
 
           <SwitchRow label="Show Background" checked={showFabricBg} onChange={setShowFabricBg} />
@@ -2521,7 +2589,6 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
         ) : separationMode === 'dtg' ? (
           <>
             <BackgroundSection defaultOpen={true} />
-            <DtgPaintSection />
             <TextureSection />
           </>
         ) : separationMode === 'cmyk' ? (

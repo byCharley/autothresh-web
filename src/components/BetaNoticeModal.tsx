@@ -11,7 +11,7 @@ interface Props {
   onContact?: () => void;
 }
 
-export function BetaNoticeModal({ onClose, onContact }: Props) {
+export function BetaNoticeModal({ onClose }: Props) {
   const [neverShow, setNeverShow] = useState(false);
 
   const handleClose = () => {
@@ -66,29 +66,41 @@ export function BetaNoticeModal({ onClose, onContact }: Props) {
         {/* Body */}
         <div style={{ padding: '22px 24px', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.85, fontFamily: 'var(--font-sans)' }}>
           <p style={{ margin: '0 0 14px' }}>
-            AutoThresh™ Web is currently in <span style={{ color: 'var(--text)', fontWeight: 600 }}>Beta</span>.
-            Features, workflows, and the interface are subject to change as we continue to improve the product.
+            AutoThresh™ is an active work in progress. New features, improvements, and workflow updates
+            ship regularly — and the roadmap is shaped directly by the{' '}
+            <span style={{ color: 'var(--text)', fontWeight: 600 }}>community using it</span>.
           </p>
+
+          {/* Live chat callout */}
+          <div style={{
+            display: 'flex', gap: 14, alignItems: 'flex-start',
+            padding: '14px 16px',
+            background: 'color-mix(in srgb, var(--accent) 8%, var(--surface-2))',
+            border: '1px solid color-mix(in srgb, var(--accent) 25%, var(--border))',
+            marginBottom: 14,
+          }}>
+            <div style={{
+              flexShrink: 0, width: 34, height: 34, borderRadius: '50%',
+              background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', marginBottom: 4, letterSpacing: '0.04em' }}>
+                Live Support Chat
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.7, fontFamily: 'var(--font-sans)' }}>
+                Have a question, hit a bug, or want a feature? Use the{' '}
+                <span style={{ color: 'var(--text)', fontWeight: 500 }}>chat icon in the bottom right</span>.
+                We respond fast and take every request seriously.
+              </div>
+            </div>
+          </div>
+
           <p style={{ margin: 0 }}>
-            We value your feedback and use it to shape every update. If you run into anything or have a suggestion,{' '}
-            {onContact ? (
-              <button
-                onClick={() => { handleClose(); onContact(); }}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 500 }}
-              >
-                send us a message
-              </button>
-            ) : (
-              <a
-                href="https://charleypangus.com/pages/support/contact"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}
-              >
-                send us a message
-              </a>
-            )}
-            .
+            Thank you for being part of this early — your input directly drives what gets built next.
           </p>
         </div>
 
