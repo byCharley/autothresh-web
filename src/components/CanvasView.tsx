@@ -1763,7 +1763,8 @@ export function CanvasView() {
     const dtgActive = separationMode === 'dtg' && dtgPaintMode !== 'off';
     if (paintMode === 'off' && bgPaintMode === 'off' && !dtgActive) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
       if (e.key === '[') setBrushSize(brushSizeRef.current - 5);
       else if (e.key === ']') setBrushSize(brushSizeRef.current + 5);
     };
@@ -1774,7 +1775,8 @@ export function CanvasView() {
   // Spacebar: hold to temporarily pan instead of paint.
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
       if (e.code === 'Space' && !e.repeat) {
         e.preventDefault();
         spaceHeldRef.current = true;
@@ -1798,7 +1800,8 @@ export function CanvasView() {
   // Ctrl/Cmd+Z: undo the last paint stroke on the selected layer.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         if (!selectedLayerId) return;
