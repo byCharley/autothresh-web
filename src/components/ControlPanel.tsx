@@ -1006,7 +1006,7 @@ function DtgSection() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Greyscale Mask</span>
-                {(dtgLevelsBlack !== 0 || dtgLevelsWhite !== 200 || dtgLevelsGamma !== 1.0) && (
+                {(dtgLevelsBlack !== 10 || dtgLevelsWhite !== 200 || dtgLevelsGamma !== 4.0) && (
                   <button className="btn btn-ghost" style={{ fontSize: 9, padding: '2px 8px', height: 20 }} onClick={resetDtgMask}>Reset</button>
                 )}
               </div>

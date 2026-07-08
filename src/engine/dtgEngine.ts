@@ -169,11 +169,10 @@ function dtgShapeTest(
   cellSize: number, halfCell: number,
   frequency: number,
 ): boolean {
-  // Dark pixels drop out; bright pixels go solid before the dot formula
-  // can show corner gaps (a round dot at coverage=1.0 still leaves ~22% of
-  // the cell transparent in the corners — threshold at 0.92 closes that seam).
   if (coverage <= 0.0) return false;
-  if (coverage >= 0.92) return true;
+  // Raised from 0.92 → 0.97 so dots grow organically into solid rather than
+  // hard-clipping. Keeps a natural halftone texture up to near-full coverage.
+  if (coverage >= 0.97) return true;
 
   if (method === 'bayer-4') {
     const scale = Math.max(1, Math.round(frequency / 15));
@@ -280,7 +279,10 @@ export function applyDtgHalftone(
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
-      const coverage = applyLevels(lumMap[i], levelsBlack, levelsWhite, levelsGamma);
+      let coverage = applyLevels(lumMap[i], levelsBlack, levelsWhite, levelsGamma);
+      // Quadratic ease-in on the low end so dots shrink smoothly to transparent
+      // rather than cutting off hard. The 0.12 knee keeps the midrange linear.
+      if (coverage < 0.12) coverage = (coverage * coverage) / 0.12;
 
       if (!dtgShapeTest(normalizedMethod, x, y, coverage, cosA, sinA, cellSize, halfCell, frequency)) {
         outD[i * 4 + 3] = 0;
