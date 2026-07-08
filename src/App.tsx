@@ -1218,6 +1218,24 @@ function App() {
   };
 
   const subStatus = session?.subscriptionStatus;
+  const isCreator = subStatus === 'creator';
+
+  // Poll for unread customer messages — creator only, shown as dot on Command Center icon
+  const [creatorChatUnread, setCreatorChatUnread] = useState(0);
+  useEffect(() => {
+    if (!isCreator || !session?.token) return;
+    const check = () => {
+      fetch('/api/chat?resource=tickets&all=1', { headers: { Authorization: `Bearer ${session.token}` } })
+        .then(r => r.ok ? r.json() : [])
+        .then((ts: { unread_by_creator?: number }[]) =>
+          setCreatorChatUnread(ts.reduce((s, t) => s + (t.unread_by_creator ?? 0), 0))
+        )
+        .catch(() => {});
+    };
+    check();
+    const id = setInterval(check, 20_000);
+    return () => clearInterval(id);
+  }, [isCreator, session?.token]);
 
   if (isMobile) {
     return (
@@ -1239,7 +1257,7 @@ function App() {
         {showVideo    && <TutorialsModal  onClose={() => setShowVideo(false)} />}
         {showSplash   && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
         {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
-        {session && <ChatWidget session={session} />}
+        {session && !isCreator && <ChatWidget session={session} />}
       </MobileLayout>
       </Suspense>
     );
@@ -1248,7 +1266,7 @@ function App() {
   return (
     <Suspense fallback={null}>
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => setShowAnalytics(true)} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => { setShowAnalytics(true); setCreatorChatUnread(0); }} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} chatUnread={creatorChatUnread} />
 
 
       <div className="workspace">

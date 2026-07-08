@@ -36,9 +36,10 @@ interface TopBarProps {
   planTitle?: string;
   subscriptionStatus?: string;
   sessionToken?: string;
+  chatUnread?: number;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, chatUnread = 0 }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -363,13 +364,22 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
       {subscriptionStatus === 'creator' && onAnalytics && (
         <button
           className="btn btn-ghost btn-icon"
-          title="Command Center"
+          title={chatUnread > 0 ? `Command Center · ${chatUnread} unread` : 'Command Center'}
           onClick={onAnalytics}
-          style={{ height: 26, width: 30 }}
+          style={{ height: 26, width: 30, position: 'relative' }}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
+          {chatUnread > 0 && (
+            <span style={{
+              position: 'absolute', top: 2, right: 2,
+              width: 7, height: 7, borderRadius: '50%',
+              background: '#ef4444',
+              border: '1.5px solid var(--bg)',
+              display: 'block',
+            }} />
+          )}
         </button>
       )}
 
