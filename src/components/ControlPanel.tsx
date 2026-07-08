@@ -970,7 +970,31 @@ function DtgSection() {
           })}
         </div>
 
-        {/* 2. Greyscale Mask — shown when a pattern is selected */}
+        {/* 2. Screen Settings — immediately below pattern picker */}
+        {isPatternMode && (
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
+            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>Screen Settings</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Slider
+                label={isGridPattern ? 'Frequency' : 'Scale'}
+                value={dtgFrequency}
+                min={10} max={85} step={1}
+                onChange={setDtgFrequency}
+                unit={isGridPattern ? ' LPI' : ''}
+              />
+              {isGridPattern && (
+                <Slider label="Angle" value={dtgAngle} min={0} max={180} step={0.5} onChange={setDtgAngle} unit="°" />
+              )}
+            </div>
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 10, marginBottom: 4 }}>
+              {isGridPattern
+                ? 'Photoshop default: 35 LPI · 22.5°. Lower = larger visible dots.'
+                : 'Lower values = finer pattern. Higher = larger/coarser.'}
+            </div>
+          </div>
+        )}
+
+        {/* 3. Greyscale Mask — shown when a pattern is selected */}
         {isPatternMode && (
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -997,32 +1021,10 @@ function DtgSection() {
               <Slider label="White Point" value={dtgLevelsWhite} min={55} max={255} step={1} onChange={setDtgLevelsWhite} />
               <Slider label="Midtones" value={dtgLevelsGamma} min={0.25} max={4.0} step={0.05} onChange={setDtgLevelsGamma} />
             </div>
-            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 10, marginBottom: 10 }}>
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 10, marginBottom: 4 }}>
               {dtgGreyscalePreview
                 ? 'Mask preview: white = solid ink, black = transparent. Adjust, then toggle off to see halftone.'
                 : 'Dark areas drop out; bright areas hold ink. Lower White Point for more solid coverage.'}
-            </div>
-
-            {/* 3. Screen Settings */}
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>Screen Settings</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <Slider
-                  label={isGridPattern ? 'Frequency' : 'Scale'}
-                  value={dtgFrequency}
-                  min={10} max={85} step={1}
-                  onChange={setDtgFrequency}
-                  unit={isGridPattern ? ' LPI' : ''}
-                />
-                {isGridPattern && (
-                  <Slider label="Angle" value={dtgAngle} min={0} max={180} step={0.5} onChange={setDtgAngle} unit="°" />
-                )}
-              </div>
-              <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 10, marginBottom: 4 }}>
-                {isGridPattern
-                  ? 'Photoshop default: 35 LPI · 22.5°. Lower = larger visible dots.'
-                  : 'Lower values = finer pattern. Higher = larger/coarser.'}
-              </div>
             </div>
           </div>
         )}
