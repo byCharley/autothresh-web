@@ -15,6 +15,21 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-08',
+    label: 'DTG/DTF Halftone Engine Rewrite',
+    added: [
+      'Photoshop-style bitmap workflow — greyscale levels → halftone → alpha mask. Dark pixels drop out naturally; no background removal step needed.',
+      'Greyscale Mask controls (Black Point, White Point, Midtones) with a live Preview toggle so you can dial in the mask before seeing the halftone result.',
+      'Image Adjustments (Exposure, Contrast, Shadows, Highlights, Saturation, Levels, Curves) now live on the left panel in DTG mode — always open and ready.',
+      'Touch Up brush moved to the right panel alongside the screen controls — Erase and Restore buttons are full-width and touch-friendly.',
+    ],
+    improved: [
+      'Garment color picker redesigned — large active swatch, color name display, and a clean 6-column rounded swatch grid replacing the old tiny squares.',
+      'Slider knobs are circular in DTG mode on both panels.',
+      'Consistent spacing between all sliders in the Greyscale Mask and Screen Settings sections.',
+    ],
+  },
+  {
     date: '2026-07-07',
     label: 'Theme Color Picker',
     added: [
