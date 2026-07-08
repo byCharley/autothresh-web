@@ -1398,7 +1398,7 @@ function App() {
       {showVideo    && <TutorialsModal  onClose={() => setShowVideo(false)} />}
       {showSplash && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
       {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
-      {session && <ChatWidget session={session} />}
+      {session && !isCreator && <ChatWidget session={session} />}
 
       {updateAvailable && (
         <div style={{
