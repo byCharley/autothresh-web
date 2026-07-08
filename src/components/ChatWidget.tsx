@@ -283,7 +283,7 @@ export function ChatWidget({ session }: { session: Session }) {
               const isUser = msg.sender === 'user';
               const showDate = idx === 0 || fmtDate(messages[idx - 1].created_at) !== fmtDate(msg.created_at);
               const isLast = idx === messages.length - 1;
-              const isRead = isUser && isLast && activeTicket.unread_by_user === 0 && messages.some(m => m.sender === 'creator');
+              const isRead = isUser && isLast && msg.read_at !== null;
               return (
                 <div key={msg.id}>
                   {showDate && (
