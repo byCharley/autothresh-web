@@ -22,7 +22,7 @@ import {
 } from '../engine/inkSimulator';
 import { generateCmykProUnderbase, chokeWhitePlate } from '../engine/underbaseEngine';
 import { applyFabricBlend } from '../engine/fabricBlend';
-import { applyDtgHalftone, detectDtgBgColor } from '../engine/dtgEngine';
+import { applyDtgHalftone, detectDtgBgColor, renderDtgGreyscalePreview } from '../engine/dtgEngine';
 
 
 // ── CMYK Inspect Grid ─────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ export function CanvasView() {
     showCanvasBorder, setShowCanvasBorder,
     proCmykSettings, setProCmykPlates,
     printSimActive, setPrintSimLoading, viewingDistance,
-    dtgMethod, dtgFrequency, dtgAngle, dtgEdgesOnly, dtgDespeckle, dtgDespeckleRadius,
+    dtgMethod, dtgFrequency, dtgAngle, dtgLevelsBlack, dtgLevelsWhite, dtgLevelsGamma, dtgSoftness, dtgGreyscalePreview, dtgDespeckle, dtgDespeckleRadius,
     dtgPaintMask, dtgPaintMaskDims, dtgPaintMode, setDtgPaintMask, pushHistory,
   } = useStore();
 
@@ -611,7 +611,7 @@ export function CanvasView() {
     let cancelled = false;
     let cmykProRunning = false;
     let rafId: number | undefined;
-    const delay = separationMode === 'cmyk-pro' ? 200 : 40;
+    const delay = separationMode === 'cmyk-pro' ? 200 : separationMode === 'dtg' ? 0 : 40;
     const tid = setTimeout(() => {
       setIsProcessing(true);
       rafId = requestAnimationFrame(() => {
@@ -1304,35 +1304,49 @@ export function CanvasView() {
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
         } else if (separationMode === 'dtg') {
-          // ── DTG/DTF: color-keyed bg knockout + AM halftone edge blend ─────────
-          // Detects artwork background color (auto or manual), knocks out matching
-          // pixels via color distance, and halftone-screens the transition zone so
-          // it blends naturally into the garment fabric.
-          const adjScaled = applyAdjToImage(artScaled, imageAdjustments);
+          // ── DTG/DTF: greyscale levels → halftone → alpha mask ────────────────
+          // Apply pre-blur first (imageAdjustments.blur) using Canvas API,
+          // which blurs the source artwork before any processing starts.
+          let dtgBase = artScaled;
+          if (imageAdjustments.blur > 0) {
+            const srcC = document.createElement('canvas');
+            srcC.width = artPrevW; srcC.height = artPrevH;
+            srcC.getContext('2d')!.putImageData(artScaled, 0, 0);
+            const blurC = document.createElement('canvas');
+            blurC.width = artPrevW; blurC.height = artPrevH;
+            const blurCtx = blurC.getContext('2d')!;
+            blurCtx.filter = `blur(${imageAdjustments.blur}px)`;
+            blurCtx.drawImage(srcC, 0, 0);
+            blurCtx.filter = 'none';
+            dtgBase = blurCtx.getImageData(0, 0, artPrevW, artPrevH);
+          }
+          const adjScaled = applyAdjToImage(dtgBase, imageAdjustments);
           const previewDpi = artPrevW / Math.max(0.001, documentWidthIn);
 
-          // Use the first bgSeedColor (auto-detected or eyedropper) as the knockout target.
-          // bgTolerance (1–100) maps to 0–200 color-distance range in the engine.
-          const dtgBgRgb: [number, number, number] | null =
-            bgSeedColors.length > 0 ? hexToRgb(bgSeedColors[0]) : null;
-
-          artComposite = applyDtgHalftone(
-            adjScaled,
-            {
-              method: dtgMethod,
-              frequency: dtgFrequency,
-              angle: dtgAngle,
-              edgesOnly: dtgEdgesOnly,
-              bgColor: dtgBgRgb,
-              bgTolerance: bgTolerance * 2,
-              despeckle: dtgDespeckle,
-              despeckleRadius: dtgDespeckleRadius,
-            },
-            // Whole-image mode uses the flood-fill bgMask for bg removal (left-panel controls).
-            // Edges-only mode builds its own color-keyed proximity map internally.
-            dtgEdgesOnly ? null : localBgMask,
-            previewDpi,
-          );
+          if (dtgGreyscalePreview) {
+            // Show the levels-adjusted greyscale mask so users can dial in levels
+            // before seeing the final halftone. White = full dot, black = transparent.
+            artComposite = renderDtgGreyscalePreview(adjScaled, dtgLevelsBlack, dtgLevelsWhite, dtgLevelsGamma, dtgSoftness);
+          } else {
+            // Greyscale luminance is the sole alpha driver — dark areas naturally
+            // drop out (coverage=0), no separate bg mask needed.
+            artComposite = applyDtgHalftone(
+              adjScaled,
+              {
+                method: dtgMethod,
+                frequency: dtgFrequency,
+                angle: dtgAngle,
+                levelsBlack: dtgLevelsBlack,
+                levelsWhite: dtgLevelsWhite,
+                levelsGamma: dtgLevelsGamma,
+                softness: dtgSoftness,
+                despeckle: dtgDespeckle,
+                despeckleRadius: dtgDespeckleRadius,
+              },
+              null,
+              previewDpi,
+            );
+          }
           // Apply DTG paint mask (erase/restore brush strokes — DTG-specific, no other mode affected).
           // val=2 (erase): force transparent. val=1 (restore): leave halftone alpha intact so
           // background pixels stay transparent even when the restore brush passes over them.
@@ -1567,7 +1581,7 @@ export function CanvasView() {
     grainColorBlend, grainColorCount, grainBlur, grainOverlays, grainOverlayVersion,
     grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
     bgEdgeSoftness,
-    dtgMethod, dtgFrequency, dtgAngle, dtgEdgesOnly, dtgDespeckle, dtgDespeckleRadius,
+    dtgMethod, dtgFrequency, dtgAngle, dtgLevelsBlack, dtgLevelsWhite, dtgLevelsGamma, dtgSoftness, dtgGreyscalePreview, dtgDespeckle, dtgDespeckleRadius,
     dtgPaintMask, dtgPaintMaskDims,
     underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     proCmykSettings,

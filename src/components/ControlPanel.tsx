@@ -802,86 +802,273 @@ function DtgSection() {
     dtgMethod, setDtgMethod,
     dtgFrequency, setDtgFrequency,
     dtgAngle, setDtgAngle,
-    dtgEdgesOnly, setDtgEdgesOnly,
-    dtgDespeckle, setDtgDespeckle,
-    dtgDespeckleRadius, setDtgDespeckleRadius,
+    dtgLevelsBlack, setDtgLevelsBlack,
+    dtgLevelsWhite, setDtgLevelsWhite,
+    dtgLevelsGamma, setDtgLevelsGamma,
+    dtgGreyscalePreview, setDtgGreyscalePreview,
+    dtgPaintMode, setDtgPaintMode,
+    setDtgPaintMask,
+    brushSize, setBrushSize,
   } = useStore();
-  const isHalftone = dtgMethod === 'halftone';
+
+  const isPatternMode = dtgMethod !== 'none';
+  const isGridPattern  = isPatternMode && dtgMethod !== 'bayer-4' && dtgMethod !== 'grain';
   const disabled = !originalImage;
 
-  const btnStyle = (active: boolean) => ({
-    flex: 1, height: 28, fontSize: 10, fontFamily: 'var(--font-mono)',
-    border: '1px solid var(--border-2)', borderRadius: 3, cursor: 'pointer',
-    background: active ? 'var(--accent)' : 'var(--bg-3)',
-    color: active ? '#000' : 'var(--text-dim)',
+  const touchBtnStyle = (active: boolean) => ({
+    flex: 1, height: 40, fontSize: 11, fontFamily: 'var(--font-mono)',
+    border: active ? '1.5px solid var(--accent)' : '1px solid var(--border-2)',
+    borderRadius: 4, cursor: 'pointer',
+    background: active ? 'color-mix(in srgb, var(--accent) 15%, var(--surface-2))' : 'var(--surface-2)',
+    color: active ? 'var(--accent)' : 'var(--text-dim)',
     fontWeight: active ? 700 : 400,
-    letterSpacing: '0.04em', textTransform: 'uppercase' as const,
-    transition: 'background 0.15s, color 0.15s',
+    letterSpacing: '0.05em', textTransform: 'uppercase' as const,
+    transition: 'all 0.12s',
+    minWidth: 0,
   });
+
+  const PATTERNS = [
+    {
+      id: 'none' as const, label: 'None',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+          <line x1="20" y1="4" x2="4" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'halftone-round' as const, label: 'Round',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="6" cy="6" r="4.5"/><circle cx="18" cy="6" r="4.5"/>
+          <circle cx="6" cy="18" r="4.5"/><circle cx="18" cy="18" r="4.5"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'halftone-diamond' as const, label: 'Diamond',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <polygon points="6,1 11,6 6,11 1,6"/>
+          <polygon points="18,1 23,6 18,11 13,6"/>
+          <polygon points="6,13 11,18 6,23 1,18"/>
+          <polygon points="18,13 23,18 18,23 13,18"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'halftone-ellipse' as const, label: 'Ellipse',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <ellipse cx="6"  cy="6"  rx="5.5" ry="3.2"/>
+          <ellipse cx="18" cy="6"  rx="5.5" ry="3.2"/>
+          <ellipse cx="6"  cy="18" rx="5.5" ry="3.2"/>
+          <ellipse cx="18" cy="18" rx="5.5" ry="3.2"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'halftone-square' as const, label: 'Square',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="1"  y="1"  width="9.5" height="9.5"/>
+          <rect x="13.5" y="1"  width="9.5" height="9.5"/>
+          <rect x="1"  y="13.5" width="9.5" height="9.5"/>
+          <rect x="13.5" y="13.5" width="9.5" height="9.5"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'halftone-line' as const, label: 'Line',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="0"  y="0" width="5.5" height="24"/>
+          <rect x="9"  y="0" width="5.5" height="24"/>
+          <rect x="18" y="0" width="5.5" height="24"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'halftone-crosshatch' as const, label: 'Cross',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="0" y="0"  width="24" height="5.5"/>
+          <rect x="0" y="9"  width="24" height="5.5"/>
+          <rect x="0" y="18" width="24" height="5.5"/>
+          <rect x="0"  y="0" width="5.5" height="24"/>
+          <rect x="9"  y="0" width="5.5" height="24"/>
+          <rect x="18" y="0" width="5.5" height="24"/>
+        </svg>
+      ),
+    },
+    {
+      id: 'bayer-4' as const, label: 'Dither',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24">
+          {([
+            [0,0,0],[6,0,0.85],[12,0,0.12],[18,0,0.62],
+            [0,6,0.75],[6,6,0.25],[12,6,0.87],[18,6,0.37],
+            [0,12,0.18],[6,12,0.68],[12,12,0.06],[18,12,0.56],
+            [0,18,0.93],[6,18,0.43],[12,18,0.81],[18,18,0.31],
+          ] as [number,number,number][]).map(([x,y,v],idx) => (
+            <rect key={idx} x={x} y={y} width="6" height="6" fill="currentColor" fillOpacity={v}/>
+          ))}
+        </svg>
+      ),
+    },
+    {
+      id: 'grain' as const, label: 'Grain',
+      icon: (
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          {([
+            [3,2],[11,1],[19,3],[7,7],[15,6],[21,8],
+            [2,12],[9,13],[17,11],[5,17],[13,18],[20,15],[1,21],[10,22],[19,20],
+          ] as [number,number][]).map(([x,y],idx) => (
+            <circle key={idx} cx={x} cy={y} r="1.6"/>
+          ))}
+        </svg>
+      ),
+    },
+  ];
 
   return (
     <Section title="DTG Screen" defaultOpen={true}>
       <div style={{ opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
-      {/* Screen type */}
-      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 5 }}>Screen</div>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>
-        <button style={btnStyle(!isHalftone)} onClick={() => setDtgMethod('none')}>No Pattern</button>
-        <button style={btnStyle(isHalftone)}  onClick={() => setDtgMethod('halftone')}>Halftone</button>
-      </div>
 
-      {/* Pattern scope */}
-      <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 5 }}>Apply Pattern To</div>
-      <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
-        <button style={btnStyle(!dtgEdgesOnly)} onClick={() => setDtgEdgesOnly(false)}>Whole Image</button>
-        <button style={btnStyle(dtgEdgesOnly)}  onClick={() => setDtgEdgesOnly(true)}>Edges Only</button>
-      </div>
-      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginBottom: 12 }}>
-        {dtgEdgesOnly
-          ? 'Pattern only fades the artwork-to-background transition zone.'
-          : 'Pattern screens the entire image based on color distance from bg.'}
-      </div>
+        {/* 1. Screen Pattern */}
+        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>Screen Pattern</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 14 }}>
+          {PATTERNS.map(p => {
+            const active = dtgMethod === p.id || ((dtgMethod as string) === 'halftone' && p.id === 'halftone-round');
+            return (
+              <button
+                key={p.id}
+                onClick={() => setDtgMethod(p.id)}
+                title={p.label}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  gap: 5, padding: '9px 4px 7px',
+                  border: active ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                  background: active ? 'color-mix(in srgb, var(--accent) 10%, var(--surface-2))' : 'var(--surface-2)',
+                  cursor: 'pointer', borderRadius: 3,
+                  color: active ? 'var(--accent)' : 'var(--text-dim)',
+                  transition: 'border-color 0.12s, background 0.12s, color 0.12s',
+                }}
+              >
+                {p.icon}
+                <span style={{
+                  fontSize: 8, fontFamily: 'var(--font-mono)',
+                  fontWeight: active ? 700 : 400,
+                  letterSpacing: '0.06em', textTransform: 'uppercase' as const,
+                  lineHeight: 1,
+                }}>
+                  {p.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-      {isHalftone && (
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-          <Slider
-            label="Frequency"
-            value={dtgFrequency}
-            min={10} max={85} step={1}
-            onChange={setDtgFrequency}
-            unit=" LPI"
-          />
-          <Slider
-            label="Angle"
-            value={dtgAngle}
-            min={0} max={180} step={0.5}
-            onChange={setDtgAngle}
-            unit="°"
-          />
-          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 6, marginBottom: 12 }}>
-            Photoshop default: 35 LPI · 22.5°. Lower = larger visible dots.
+        {/* 2. Greyscale Mask — shown when a pattern is selected */}
+        {isPatternMode && (
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Greyscale Mask</span>
+              <button
+                onClick={() => setDtgGreyscalePreview(!dtgGreyscalePreview)}
+                title="Preview the greyscale mask — white areas get dots, black areas become transparent"
+                style={{
+                  fontSize: 8, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em',
+                  textTransform: 'uppercase' as const, padding: '3px 7px',
+                  border: dtgGreyscalePreview ? '1.5px solid var(--accent)' : '1px solid var(--border-2)',
+                  borderRadius: 3, cursor: 'pointer',
+                  background: dtgGreyscalePreview ? 'color-mix(in srgb, var(--accent) 15%, var(--surface-2))' : 'var(--surface-2)',
+                  color: dtgGreyscalePreview ? 'var(--accent)' : 'var(--text-dim)',
+                  fontWeight: dtgGreyscalePreview ? 700 : 400,
+                  transition: 'all 0.12s',
+                }}
+              >
+                {dtgGreyscalePreview ? 'Preview On' : 'Preview'}
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Slider label="Black Point" value={dtgLevelsBlack} min={0} max={200} step={1} onChange={setDtgLevelsBlack} />
+              <Slider label="White Point" value={dtgLevelsWhite} min={55} max={255} step={1} onChange={setDtgLevelsWhite} />
+              <Slider label="Midtones" value={dtgLevelsGamma} min={0.25} max={4.0} step={0.05} onChange={setDtgLevelsGamma} />
+            </div>
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 10, marginBottom: 10 }}>
+              {dtgGreyscalePreview
+                ? 'Mask preview: white = solid ink, black = transparent. Adjust, then toggle off to see halftone.'
+                : 'Dark areas drop out; bright areas hold ink. Lower White Point for more solid coverage.'}
+            </div>
+
+            {/* 3. Screen Settings */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>Screen Settings</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <Slider
+                  label={isGridPattern ? 'Frequency' : 'Scale'}
+                  value={dtgFrequency}
+                  min={10} max={85} step={1}
+                  onChange={setDtgFrequency}
+                  unit={isGridPattern ? ' LPI' : ''}
+                />
+                {isGridPattern && (
+                  <Slider label="Angle" value={dtgAngle} min={0} max={180} step={0.5} onChange={setDtgAngle} unit="°" />
+                )}
+              </div>
+              <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 10, marginBottom: 4 }}>
+                {isGridPattern
+                  ? 'Photoshop default: 35 LPI · 22.5°. Lower = larger visible dots.'
+                  : 'Lower values = finer pattern. Higher = larger/coarser.'}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4. Touch Up — refine mask with brush */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: isPatternMode ? 0 : 4 }}>
+          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>Touch Up</div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <button
+              onClick={() => setDtgPaintMode(dtgPaintMode === 'erase' ? 'off' : 'erase')}
+              style={touchBtnStyle(dtgPaintMode === 'erase')}
+            >
+              Erase
+            </button>
+            <button
+              onClick={() => setDtgPaintMode(dtgPaintMode === 'restore' ? 'off' : 'restore')}
+              style={touchBtnStyle(dtgPaintMode === 'restore')}
+            >
+              Restore
+            </button>
+          </div>
+          {dtgPaintMode !== 'off' && (
+            <>
+              <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginBottom: 8 }}>
+                {dtgPaintMode === 'erase'
+                  ? 'Paint on the canvas to erase areas from the halftone.'
+                  : 'Paint on the canvas to restore erased areas.'}
+              </div>
+              <Slider label="Brush Size" value={brushSize} min={4} max={120} step={2} onChange={setBrushSize} unit="px" />
+            </>
+          )}
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 10 }}>
+            <button
+              onClick={() => setDtgPaintMask(null, null)}
+              style={{
+                width: '100%', height: 32, fontSize: 10, fontFamily: 'var(--font-mono)',
+                border: '1px solid var(--border-2)', borderRadius: 4, cursor: 'pointer',
+                background: 'var(--surface-2)', color: 'var(--text-dim)',
+                letterSpacing: '0.05em', textTransform: 'uppercase' as const,
+                transition: 'background 0.12s, color 0.12s',
+              }}
+            >
+              Clear Touch Up
+            </button>
           </div>
         </div>
-      )}
-
-      {/* Despeckle */}
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: dtgDespeckle ? 8 : 0 }}>
-          <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Despeckle</span>
-          <button
-            onClick={() => setDtgDespeckle(!dtgDespeckle)}
-            style={{ ...btnStyle(dtgDespeckle), flex: 'none', minWidth: 48 }}
-          >{dtgDespeckle ? 'On' : 'Off'}</button>
-        </div>
-        {dtgDespeckle && (
-          <Slider
-            label="Radius"
-            value={dtgDespeckleRadius}
-            min={1} max={5} step={1}
-            onChange={setDtgDespeckleRadius}
-            unit="px"
-          />
-        )}
-      </div>
       </div>
     </Section>
   );
@@ -1399,7 +1586,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
 
   if (!originalImage) {
     return (
-      <aside className="panel-right" data-tutorial="tutorial-controls">
+      <aside className="panel-right" data-tutorial="tutorial-controls" data-mode={separationMode}>
         <div className="control-scroll">
           <DocumentSection />
           <RegistrationSection />
@@ -1409,6 +1596,22 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
               <ImageAdjustmentsSection />
             </>
           )}
+          {separationMode === 'threshold' && (
+            <>
+              <div style={{ opacity: 0.4, pointerEvents: 'none' }}>
+                <GlobalPatternSection />
+              </div>
+              <ImageAdjustmentsSection />
+              <div style={{ padding: '20px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-dim)', opacity: 0.4 }}>
+                  <polyline points="15 18 9 12 15 6"/>
+                </svg>
+                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.6 }}>
+                  Select a layer on the left<br/>to adjust its threshold
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </aside>
     );
@@ -1416,7 +1619,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
 
   if (passthroughMode) {
     return (
-      <aside className="panel-right" data-tutorial="tutorial-controls">
+      <aside className="panel-right" data-tutorial="tutorial-controls" data-mode={separationMode}>
         <div className="control-scroll">
           <DocumentSection />
           <RegistrationSection />
@@ -1435,7 +1638,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
   }
 
   return (
-    <aside className="panel-right" data-tutorial="tutorial-controls">
+    <aside className="panel-right" data-tutorial="tutorial-controls" data-mode={separationMode}>
       <div className="control-scroll">
         <DocumentSection />
         <RegistrationSection />
@@ -1462,27 +1665,34 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         ) : (
           <GlobalPatternSection />
         )}
-        {separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && <ImageAdjustmentsSection />}
+        {separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && separationMode !== 'dtg' && <ImageAdjustmentsSection />}
 
         {/* Per-layer controls — threshold mode only */}
         {separationMode === 'threshold' && layer ? (
           <>
-            <Section title="Color">
-              <div className="field">
-                <span className="field-label">Ink Color</span>
-                <div className="color-field">
-                  <div className="color-swatch-btn" style={{ background: layer.color }}>
-                    <input type="color" value={layer.color}
-                      onChange={(e) => updateLayer(layer.id, { color: e.target.value })} />
-                  </div>
-                  <input className="color-hex" type="text" value={layer.color} maxLength={7}
-                    onChange={(e) => {
-                      if (/^#[0-9a-fA-F]{6}$/.test(e.target.value))
-                        updateLayer(layer.id, { color: e.target.value });
-                    }} />
-                </div>
-              </div>
-            </Section>
+            {/* Context strip — shows which layer you're editing so left/right feel connected */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 14px', borderTop: '1px solid var(--border)',
+              background: 'var(--surface-2)',
+            }}>
+              <div style={{
+                width: 11, height: 11, borderRadius: '50%',
+                background: layer.color, flexShrink: 0,
+                border: '1px solid rgba(255,255,255,0.12)',
+                boxShadow: `0 0 0 2px color-mix(in srgb, ${layer.color} 25%, transparent)`,
+              }} />
+              <span style={{
+                fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono)',
+                color: 'var(--text)', letterSpacing: '0.04em',
+                flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {layer.name}
+              </span>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>
+                {layer.thresholdMin}–{layer.thresholdMax}
+              </span>
+            </div>
 
             <Section title="Threshold">
               <div className="field">
@@ -1502,11 +1712,15 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
               <Slider label="Blur" value={layer.blur} min={0} max={20}
                 onChange={(v) => updateLayer(layer.id, { blur: v })} />
             </Section>
-
           </>
         ) : separationMode === 'threshold' && !layer ? (
-          <div className="no-layer-selected" style={{ flex: 'none', padding: '16px 14px' }}>
-            <span className="no-layer-label">Select a layer to edit</span>
+          <div style={{ padding: '20px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-dim)', opacity: 0.4 }}>
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.6 }}>
+              Select a layer on the left<br/>to adjust its threshold
+            </span>
           </div>
         ) : null}
 

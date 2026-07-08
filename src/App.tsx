@@ -171,7 +171,7 @@ function App() {
     underbaseIncludeShadows, underbaseEnabled, underbaseDensity, underbaseChoke: storeUnderbaseChoke,
     passthroughMode, bgSeedColors, bgPaintMask, bgPaintMaskDims,
     fabricTexture, fabricBlendStrength, fabricTextureDepth,
-    dtgMethod, dtgFrequency, dtgAngle, dtgEdgesOnly, dtgDespeckle, dtgDespeckleRadius,
+    dtgMethod, dtgFrequency, dtgAngle, dtgLevelsBlack, dtgLevelsWhite, dtgLevelsGamma, dtgSoftness, dtgDespeckle, dtgDespeckleRadius,
     dtgPaintMask, dtgPaintMaskDims,
   } = useStore();
 
@@ -468,21 +468,20 @@ function App() {
         }
       }
     } else if (separationMode === 'dtg') {
-      const dtgBgRgb: [number, number, number] | null =
-        bgSeedColors.length > 0 ? hexToRgb(bgSeedColors[0]) : null;
       dtgExportImageData = applyDtgHalftone(
         applyAdjToImageData(artImageData),
         {
           method: dtgMethod,
           frequency: dtgFrequency,
           angle: dtgAngle,
-          edgesOnly: dtgEdgesOnly,
-          bgColor: dtgBgRgb,
-          bgTolerance: bgTolerance * 2,
+          levelsBlack: dtgLevelsBlack,
+          levelsWhite: dtgLevelsWhite,
+          levelsGamma: dtgLevelsGamma,
+          softness: dtgSoftness,
           despeckle: dtgDespeckle,
           despeckleRadius: dtgDespeckleRadius,
         },
-        dtgEdgesOnly ? null : artBgMask,
+        null,
         documentDpi,
       );
       // Apply DTG paint mask (erase strokes only — restore lets halftone result stand)

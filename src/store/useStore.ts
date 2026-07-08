@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { LayerConfig, PatternConfig, ProcessedLayer, ImageAdjustments, SeparationMode, CmykParams, PatternType } from '../engine/imageProcessor';
+import type { DtgMethod } from '../engine/dtgEngine';
 
 export type GrainBlendMode = 'multiply' | 'screen' | 'overlay' | 'soft-light' | 'hard-light' | 'color-burn' | 'color-dodge' | 'luminosity';
 
@@ -73,10 +74,14 @@ export interface PresetData {
   // CMYK Pro fields
   proCmykSettings?: ProCmykSettings;
   // DTG/DTF fields
-  dtgMethod?: 'halftone' | 'none';
+  dtgMethod?: DtgMethod;
   dtgFrequency?: number;
   dtgAngle?: number;
   dtgEdgesOnly?: boolean;
+  dtgLevelsBlack?: number;
+  dtgLevelsWhite?: number;
+  dtgLevelsGamma?: number;
+  dtgSoftness?: number;
   dtgDespeckle?: boolean;
   dtgDespeckleRadius?: number;
 }
@@ -369,12 +374,17 @@ interface AppState {
   colorSepNames:         string[];
 
   // DTG/DTF mode
-  dtgMethod:          'halftone' | 'none';
-  dtgFrequency:       number;
-  dtgAngle:           number;
-  dtgEdgesOnly:       boolean;
-  dtgDespeckle:       boolean;
-  dtgDespeckleRadius: number;
+  dtgMethod:             DtgMethod;
+  dtgFrequency:          number;
+  dtgAngle:              number;
+  dtgEdgesOnly:          boolean;
+  dtgLevelsBlack:        number;
+  dtgLevelsWhite:        number;
+  dtgLevelsGamma:        number;
+  dtgSoftness:           number;
+  dtgGreyscalePreview:   boolean;
+  dtgDespeckle:          boolean;
+  dtgDespeckleRadius:    number;
 
   // Grain mode
   grainColorBlend:    number;  // 0 = B/W, 100 = full color
@@ -502,12 +512,17 @@ interface AppState {
   setColorSepVisibility:    (id: string, v: boolean) => void;
   setColorSepNames:         (v: string[]) => void;
 
-  setDtgMethod:          (v: 'halftone' | 'none') => void;
-  setDtgFrequency:       (v: number) => void;
-  setDtgAngle:           (v: number) => void;
-  setDtgEdgesOnly:       (v: boolean) => void;
-  setDtgDespeckle:       (v: boolean) => void;
-  setDtgDespeckleRadius: (v: number) => void;
+  setDtgMethod:             (v: DtgMethod) => void;
+  setDtgFrequency:          (v: number) => void;
+  setDtgAngle:              (v: number) => void;
+  setDtgEdgesOnly:          (v: boolean) => void;
+  setDtgLevelsBlack:        (v: number) => void;
+  setDtgLevelsWhite:        (v: number) => void;
+  setDtgLevelsGamma:        (v: number) => void;
+  setDtgSoftness:           (v: number) => void;
+  setDtgGreyscalePreview:   (v: boolean) => void;
+  setDtgDespeckle:          (v: boolean) => void;
+  setDtgDespeckleRadius:    (v: number) => void;
 
   setGrainColorBlend:    (v: number) => void;
   setGrainColorCount:    (v: number) => void;
@@ -623,12 +638,17 @@ export const useStore = create<AppState>((set, get) => ({
   colorSepVisibility:    {},
   colorSepNames:         [],
 
-  dtgMethod:          'halftone' as const,
-  dtgFrequency:       35,
-  dtgAngle:           22.5,
-  dtgEdgesOnly:       true,
-  dtgDespeckle:       false,
-  dtgDespeckleRadius: 2,
+  dtgMethod:             'halftone-round' as const,
+  dtgFrequency:          35,
+  dtgAngle:              22.5,
+  dtgEdgesOnly:          true,
+  dtgLevelsBlack:        0,
+  dtgLevelsWhite:        200,
+  dtgLevelsGamma:        1.0,
+  dtgSoftness:           3,
+  dtgGreyscalePreview:   false,
+  dtgDespeckle:          false,
+  dtgDespeckleRadius:    2,
 
   grainColorBlend:    50,
   grainColorCount:    8,
@@ -931,7 +951,12 @@ export const useStore = create<AppState>((set, get) => ({
   setDtgFrequency:       (dtgFrequency)       => set({ dtgFrequency: Math.max(1, Math.min(150, dtgFrequency)) }),
   setDtgAngle:           (dtgAngle)           => set({ dtgAngle: Math.max(0, Math.min(180, dtgAngle)) }),
   setDtgEdgesOnly:       (dtgEdgesOnly)       => set({ dtgEdgesOnly }),
-  setDtgDespeckle:       (dtgDespeckle)       => set({ dtgDespeckle }),
+  setDtgLevelsBlack:        (dtgLevelsBlack)        => set({ dtgLevelsBlack: Math.max(0, Math.min(200, dtgLevelsBlack)) }),
+  setDtgLevelsWhite:        (dtgLevelsWhite)        => set({ dtgLevelsWhite: Math.max(55, Math.min(255, dtgLevelsWhite)) }),
+  setDtgLevelsGamma:        (dtgLevelsGamma)        => set({ dtgLevelsGamma: Math.max(0.25, Math.min(4.0, dtgLevelsGamma)) }),
+  setDtgSoftness:           (dtgSoftness)           => set({ dtgSoftness: Math.max(0, Math.min(20, dtgSoftness)) }),
+  setDtgGreyscalePreview:   (dtgGreyscalePreview)   => set({ dtgGreyscalePreview }),
+  setDtgDespeckle:          (dtgDespeckle)          => set({ dtgDespeckle }),
   setDtgDespeckleRadius: (dtgDespeckleRadius) => set({ dtgDespeckleRadius: Math.max(1, Math.min(5, dtgDespeckleRadius)) }),
 
   setGrainColorBlend:    (grainColorBlend)    => set({ grainColorBlend }),
@@ -1008,6 +1033,10 @@ export const useStore = create<AppState>((set, get) => ({
       dtgFrequency:       data.dtgFrequency       ?? s.dtgFrequency,
       dtgAngle:           data.dtgAngle           ?? s.dtgAngle,
       dtgEdgesOnly:       data.dtgEdgesOnly       ?? s.dtgEdgesOnly,
+      dtgLevelsBlack:     data.dtgLevelsBlack     ?? s.dtgLevelsBlack,
+      dtgLevelsWhite:     data.dtgLevelsWhite     ?? s.dtgLevelsWhite,
+      dtgLevelsGamma:     data.dtgLevelsGamma     ?? s.dtgLevelsGamma,
+      dtgSoftness:        data.dtgSoftness        ?? s.dtgSoftness,
       dtgDespeckle:       data.dtgDespeckle       ?? s.dtgDespeckle,
       dtgDespeckleRadius: data.dtgDespeckleRadius ?? s.dtgDespeckleRadius,
     } : {};
@@ -1070,6 +1099,10 @@ export const useStore = create<AppState>((set, get) => ({
       base.dtgFrequency       = s.dtgFrequency;
       base.dtgAngle           = s.dtgAngle;
       base.dtgEdgesOnly       = s.dtgEdgesOnly;
+      base.dtgLevelsBlack     = s.dtgLevelsBlack;
+      base.dtgLevelsWhite     = s.dtgLevelsWhite;
+      base.dtgLevelsGamma     = s.dtgLevelsGamma;
+      base.dtgSoftness        = s.dtgSoftness;
       base.dtgDespeckle       = s.dtgDespeckle;
       base.dtgDespeckleRadius = s.dtgDespeckleRadius;
     }

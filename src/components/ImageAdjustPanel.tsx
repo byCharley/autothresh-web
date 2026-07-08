@@ -317,6 +317,7 @@ interface Props {
   onReset:        () => void;
   onBasic:        (key: string, v: number) => void;
   showSaturation?: boolean;
+  showBlur?: boolean;
 }
 
 function TabBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -392,7 +393,7 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
   );
 }
 
-export function ImageAdjustPanel({ adj, onAdjMode, onLevels, onCurves, onReset, onBasic, showSaturation }: Props) {
+export function ImageAdjustPanel({ adj, onAdjMode, onLevels, onCurves, onReset, onBasic, showSaturation, showBlur = true }: Props) {
   const mode    = adj.adjMode ?? 'basic';
   const isDirty = mode !== 'basic'
     ? true
@@ -436,8 +437,7 @@ export function ImageAdjustPanel({ adj, onAdjMode, onLevels, onCurves, onReset, 
         <CurvesEditor points={adj.curves ?? [[0, 0], [255, 255]]} onChange={onCurves} />
       )}
 
-      {/* Pre-blur always visible */}
-      <Slider label="Pre-blur" value={adj.blur} min={0} max={15} onChange={v => onBasic('blur', v)} />
+      {showBlur && <Slider label="Pre-blur" value={adj.blur} min={0} max={15} onChange={v => onBasic('blur', v)} />}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { nearestPantone, isShadowColor } from '../engine/pantoneMatch';
 import { OVERLAY_CATEGORIES } from '../engine/overlayManifest';
 import { preloadOverlay } from '../engine/overlayCache';
 import { detectDtgBgColor } from '../engine/dtgEngine';
+import { ImageAdjustPanel } from './ImageAdjustPanel';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -731,7 +732,36 @@ function InksSection() {
   );
 }
 
-// ─── Fabric Section ───────────────────────────────────────────────────────────
+// ─── DTG Image Adjustments Section (left panel) ──────────────────────────────
+
+function DtgImageAdjustSection() {
+  const [open, setOpen] = useState(true);
+  const {
+    imageAdjustments, setImageAdjustment, setAdjMode, setLevels, setCurves, resetImageAdjustments,
+  } = useStore();
+
+  return (
+    <>
+      <SectionHeader title="Image Adjustments" open={open} onToggle={() => setOpen(!open)} />
+      {open && (
+        <div style={{ padding: '10px 12px' }}>
+          <ImageAdjustPanel
+            adj={imageAdjustments}
+            onAdjMode={setAdjMode}
+            onLevels={setLevels}
+            onCurves={setCurves}
+            onReset={resetImageAdjustments}
+            onBasic={(key, v) => setImageAdjustment(key as keyof typeof imageAdjustments, v)}
+            showSaturation={true}
+            showBlur={false}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+// ─── Fabric / Background Section ─────────────────────────────────────────────
 
 function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
   const [open, setOpen] = useState(defaultOpen);
@@ -756,12 +786,12 @@ function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = 
 
   return (
     <>
-      <SectionHeader title={isDtg ? 'Background & Edges' : 'Background'} open={open} onToggle={() => setOpen(!open)} />
+      <SectionHeader title="Background" open={open} onToggle={() => setOpen(!open)} />
       {open && (
         <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* BG removal */}
-          <SwitchRow label="Remove BG" checked={bgRemovalEnabled} onChange={setBgRemovalEnabled} />
-          {bgRemovalEnabled && (
+          {/* BG removal — hidden in DTG mode (greyscale levels handle bg dropout) */}
+          {!isDtg && <SwitchRow label="Remove BG" checked={bgRemovalEnabled} onChange={setBgRemovalEnabled} />}
+          {!isDtg && bgRemovalEnabled && (
             <>
               <Slider label="Tolerance" value={bgTolerance} min={1} max={100}
                 onChange={setBgTolerance} unit="%" />
@@ -882,66 +912,6 @@ function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = 
               )}
             </>
           )}
-          {/* DTG refine brush — merged here so users understand it's for fixing BG edges */}
-          {isDtg && (
-            <>
-              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
-              <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>
-                Refine with Brush
-              </div>
-              <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginBottom: 6 }}>
-                Paint on the image to manually erase or restore areas the auto-removal missed.
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Brush
-                </span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button
-                    onClick={() => setDtgPaintMode(dtgPaintMode === 'erase' ? 'off' : 'erase')}
-                    title="Paint to erase (make transparent)"
-                    style={{
-                      padding: '4px 8px', fontSize: 9,
-                      fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                      background: dtgPaintMode === 'erase' ? '#cc4400' : 'var(--surface-2)',
-                      color: dtgPaintMode === 'erase' ? '#fff' : 'var(--text-dim)',
-                      border: `1px solid ${dtgPaintMode === 'erase' ? '#cc4400' : 'var(--border)'}`,
-                      borderRadius: 3, cursor: 'pointer',
-                    }}
-                  >Erase</button>
-                  <button
-                    onClick={() => setDtgPaintMode(dtgPaintMode === 'restore' ? 'off' : 'restore')}
-                    title="Paint to restore (make opaque)"
-                    style={{
-                      padding: '4px 8px', fontSize: 9,
-                      fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                      background: dtgPaintMode === 'restore' ? '#1a7a40' : 'var(--surface-2)',
-                      color: dtgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
-                      border: `1px solid ${dtgPaintMode === 'restore' ? '#1a7a40' : 'var(--border)'}`,
-                      borderRadius: 3, cursor: 'pointer',
-                    }}
-                  >Restore</button>
-                </div>
-              </div>
-              {dtgPaintMode !== 'off' && (
-                <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: -2 }}>
-                  Drag on image to {dtgPaintMode} · [ ] to resize brush
-                </div>
-              )}
-              <Slider label="Brush Size" value={brushSize} min={2} max={120} step={1} onChange={setBrushSize} unit="px" />
-              {dtgPaintMask && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={() => { setDtgPaintMask(null, null); setDtgPaintMode('off'); }}
-                    style={{
-                      fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
-                      background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: '0 2px',
-                    }}
-                  >clear paint</button>
-                </div>
-              )}
-            </>
-          )}
 
           <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
 
@@ -1000,49 +970,61 @@ function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = 
             </div>
           )}
 
-          <div style={{ opacity: showFabricBg ? 1 : 0.45, pointerEvents: showFabricBg ? 'auto' : 'none', transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ opacity: showFabricBg ? 1 : 0.45, pointerEvents: showFabricBg ? 'auto' : 'none', transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+            {/* Active garment color — big swatch + name + custom hex */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="color-swatch-btn" style={{
+                background: canvasColor, width: 44, height: 44, flexShrink: 0,
+                borderRadius: 6, border: '2px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+              }}>
+                <input type="color" value={canvasColor} onChange={(e) => setCanvasColor(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)', letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {matchedColor ? matchedColor.name : 'Custom'}
+                </div>
+                <input
+                  className="color-hex"
+                  type="text"
+                  value={canvasColor}
+                  maxLength={7}
+                  style={{ width: '100%', minWidth: 0 }}
+                  onChange={(e) => {
+                    if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) setCanvasColor(e.target.value);
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Brand selector */}
             <select className="at-select" value={brand} onChange={(e) => setBrand(e.target.value)}>
               {BRAND_PALETTES.map((b) => (
                 <option key={b.brand} value={b.brand}>{b.brand}</option>
               ))}
             </select>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="color-swatch-btn" style={{ background: canvasColor, width: 26, height: 26, flexShrink: 0 }}>
-                <input type="color" value={canvasColor} onChange={(e) => setCanvasColor(e.target.value)} />
-              </div>
-              <input
-                className="color-hex"
-                type="text"
-                value={canvasColor}
-                maxLength={7}
-                style={{ flex: 1, minWidth: 0 }}
-                onChange={(e) => {
-                  if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) setCanvasColor(e.target.value);
-                }}
-              />
-            </div>
-
-            {matchedColor && (
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: -4 }}>
-                {matchedColor.name}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {palette.map(({ hex, name }) => (
-                <button
-                  key={hex + name}
-                  onClick={() => setCanvasColor(hex)}
-                  title={name}
-                  style={{
-                    width: 20, height: 20, background: hex, cursor: 'pointer', flexShrink: 0,
-                    border: canvasColor.toLowerCase() === hex.toLowerCase() ? '2px solid var(--accent)' : '1px solid var(--border-2)',
-                    boxShadow: canvasColor.toLowerCase() === hex.toLowerCase() ? '0 0 0 1px var(--accent)' : 'none',
-                    transition: 'border 0.1s, box-shadow 0.1s',
-                  }}
-                />
-              ))}
+            {/* Palette swatch grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 5 }}>
+              {palette.map(({ hex, name }) => {
+                const active = canvasColor.toLowerCase() === hex.toLowerCase();
+                return (
+                  <button
+                    key={hex + name}
+                    onClick={() => setCanvasColor(hex)}
+                    title={name}
+                    style={{
+                      aspectRatio: '1', background: hex, cursor: 'pointer',
+                      borderRadius: 5,
+                      border: active ? '2px solid var(--accent)' : '1.5px solid color-mix(in srgb, var(--border-2) 60%, transparent)',
+                      boxShadow: active ? '0 0 0 1.5px var(--accent)' : 'inset 0 1px 2px rgba(0,0,0,0.15)',
+                      transition: 'border 0.1s, box-shadow 0.1s, transform 0.1s',
+                      transform: active ? 'scale(1.12)' : 'scale(1)',
+                    }}
+                  />
+                );
+              })}
             </div>
           </div>
         </div>
@@ -2345,7 +2327,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
   };
 
   return (
-    <aside className="panel-left" data-tutorial="tutorial-layers">
+    <aside className="panel-left" data-tutorial="tutorial-layers" data-mode={separationMode}>
 
       {/* Single scrollable column */}
       <div className="left-scroll">
@@ -2497,6 +2479,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
           </>
         ) : separationMode === 'dtg' ? (
           <>
+            <DtgImageAdjustSection />
             <BackgroundSection defaultOpen={true} />
             <TextureSection />
           </>

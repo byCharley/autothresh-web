@@ -1,12 +1,22 @@
-export type DtgMethod = 'halftone' | 'none';
+export type DtgMethod =
+  | 'none'
+  | 'halftone-round'
+  | 'halftone-diamond'
+  | 'halftone-ellipse'
+  | 'halftone-square'
+  | 'halftone-line'
+  | 'halftone-crosshatch'
+  | 'bayer-4'
+  | 'grain';
 
 export interface DtgSettings {
   method:          DtgMethod;
   frequency:       number;   // lines per inch (e.g. 35)
   angle:           number;   // screen angle in degrees (e.g. 22.5)
-  edgesOnly:       boolean;  // false = whole-image luminance screen, true = edge-blend only
-  bgColor:         [number, number, number] | null;  // used by edges-only mode
-  bgTolerance:     number;   // perceptual color distance threshold (0–200), edges-only mode
+  levelsBlack:     number;   // input black point 0–200
+  levelsWhite:     number;   // input white point 55–255 (drag left to brighten)
+  levelsGamma:     number;   // midtone gamma 0.25–4.0
+  softness:        number;   // pre-blur radius on luminance map (0 = none, 1–20)
   despeckle:       boolean;
   despeckleRadius: number;   // neighborhood radius in pixels (1–5)
 }
@@ -37,33 +47,58 @@ export function detectDtgBgColor(img: ImageData): [number, number, number] {
   return [Math.round(avg[0] / 4), Math.round(avg[1] / 4), Math.round(avg[2] / 4)];
 }
 
-function boxBlur2D(src: Float32Array, w: number, h: number, radius: number): Float32Array {
-  const tmp = new Float32Array(w * h);
-  const dst = new Float32Array(w * h);
-  for (let y = 0; y < h; y++) {
-    const off = y * w;
-    const prefix = new Float32Array(w + 1);
-    for (let x = 0; x < w; x++) prefix[x + 1] = prefix[x] + src[off + x];
-    for (let x = 0; x < w; x++) {
-      const x0 = Math.max(0, x - radius), x1 = Math.min(w, x + radius + 1);
-      tmp[off + x] = (prefix[x1] - prefix[x0]) / (x1 - x0);
-    }
+// Photoshop-style levels: maps lum from [black,white] → [0,1] with gamma
+export function applyLevels(lum: number, black: number, white: number, gamma: number): number {
+  const range = Math.max(1, white - black);
+  const t = Math.max(0, Math.min(1, (lum - black) / range));
+  return Math.pow(t, 1 / Math.max(0.01, gamma));
+}
+
+// Returns a greyscale preview of the levels-adjusted mask — what the halftone
+// threshold will see. White = fully opaque dots, black = fully transparent.
+export function renderDtgGreyscalePreview(
+  src: ImageData,
+  levelsBlack: number,
+  levelsWhite: number,
+  levelsGamma: number,
+  softness: number,
+): ImageData {
+  const { width: w, height: h } = src;
+  const srcD = src.data;
+  const lumMap = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    lumMap[i] = 0.299 * srcD[i * 4] + 0.587 * srcD[i * 4 + 1] + 0.114 * srcD[i * 4 + 2];
   }
-  for (let x = 0; x < w; x++) {
-    const prefix = new Float32Array(h + 1);
-    for (let y = 0; y < h; y++) prefix[y + 1] = prefix[y] + tmp[y * w + x];
+  if (softness > 0) {
+    const radius = Math.round(softness);
+    const tmp = new Float32Array(w * h);
     for (let y = 0; y < h; y++) {
-      const y0 = Math.max(0, y - radius), y1 = Math.min(h, y + radius + 1);
-      dst[y * w + x] = (prefix[y1] - prefix[y0]) / (y1 - y0);
+      const off = y * w;
+      const prefix = new Float32Array(w + 1);
+      for (let x = 0; x < w; x++) prefix[x + 1] = prefix[x] + lumMap[off + x];
+      for (let x = 0; x < w; x++) {
+        const x0 = Math.max(0, x - radius), x1 = Math.min(w, x + radius + 1);
+        tmp[off + x] = (prefix[x1] - prefix[x0]) / (x1 - x0);
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      const prefix = new Float32Array(h + 1);
+      for (let y = 0; y < h; y++) prefix[y + 1] = prefix[y] + tmp[y * w + x];
+      for (let y = 0; y < h; y++) {
+        const y0 = Math.max(0, y - radius), y1 = Math.min(h, y + radius + 1);
+        lumMap[y * w + x] = (prefix[y1] - prefix[y0]) / (y1 - y0);
+      }
     }
   }
-  return dst;
+  const outD = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < w * h; i++) {
+    const v = Math.round(applyLevels(lumMap[i], levelsBlack, levelsWhite, levelsGamma) * 255);
+    outD[i * 4] = v; outD[i * 4 + 1] = v; outD[i * 4 + 2] = v; outD[i * 4 + 3] = 255;
+  }
+  return new ImageData(outD, w, h);
 }
 
 // Remove isolated opaque pixels via two passes of density check + connected-component island removal.
-// Pass 1: prefix-sum density check removes obvious strays.
-// Pass 2: re-checks after pass 1 so newly isolated neighbors are caught.
-// Island removal: BFS to find connected opaque regions, remove any smaller than radius².
 function applyDespeckle(data: Uint8ClampedArray, w: number, h: number, radius: number): void {
   const stride = w + 1;
   const MIN_FRACTION = 0.3;
@@ -99,7 +134,6 @@ function applyDespeckle(data: Uint8ClampedArray, w: number, h: number, radius: n
   densityPass();
   densityPass();
 
-  // BFS island removal: connected opaque regions smaller than minIslandSize get erased.
   const minIslandSize = Math.max(4, (radius + 1) * (radius + 1));
   const visited = new Uint8Array(w * h);
   const queue: number[] = [];
@@ -124,108 +158,132 @@ function applyDespeckle(data: Uint8ClampedArray, w: number, h: number, radius: n
   }
 }
 
+// Row-major 4×4 bayer thresholds, normalized to [0,1)
+const BAYER4_NORM = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5].map(v => v / 16);
+
+function dtgShapeTest(
+  method: DtgMethod,
+  x: number, y: number,
+  coverage: number,
+  cosA: number, sinA: number,
+  cellSize: number, halfCell: number,
+  frequency: number,
+): boolean {
+  // Dark pixels drop out; bright pixels go solid before the dot formula
+  // can show corner gaps (a round dot at coverage=1.0 still leaves ~22% of
+  // the cell transparent in the corners — threshold at 0.92 closes that seam).
+  if (coverage <= 0.0) return false;
+  if (coverage >= 0.92) return true;
+
+  if (method === 'bayer-4') {
+    const scale = Math.max(1, Math.round(frequency / 15));
+    const bx = (Math.floor(x / scale)) & 3;
+    const by = (Math.floor(y / scale)) & 3;
+    return coverage > BAYER4_NORM[by * 4 + bx];
+  }
+  if (method === 'grain') {
+    const grainCell = Math.max(1, Math.round(frequency / 15));
+    const gx = Math.floor(x / grainCell);
+    const gy = Math.floor(y / grainCell);
+    let h = (gx * 2053 ^ gy * 4001) >>> 0;
+    h = (Math.imul(h ^ (h >>> 16), 0x45d9f3b)) >>> 0;
+    h = (h ^ (h >>> 16)) >>> 0;
+    return coverage > h / 0xFFFFFFFF;
+  }
+
+  // Rotated halftone grid
+  const xr = x * cosA + y * sinA;
+  const yr = -x * sinA + y * cosA;
+  const dxr = xr - Math.round(xr / cellSize) * cellSize;
+  const dyr = yr - Math.round(yr / cellSize) * cellSize;
+  const r = halfCell * Math.sqrt(coverage);
+
+  switch (method) {
+    case 'halftone-round':
+      return dxr * dxr + dyr * dyr <= r * r;
+    case 'halftone-diamond':
+      return Math.abs(dxr) + Math.abs(dyr) <= r * 1.414;
+    case 'halftone-ellipse':
+      return (dxr / (r * 1.6)) ** 2 + (dyr / (r * 0.8)) ** 2 <= 1;
+    case 'halftone-square':
+      return Math.max(Math.abs(dxr), Math.abs(dyr)) <= r;
+    case 'halftone-line':
+      return Math.abs(dxr) <= halfCell * coverage;
+    case 'halftone-crosshatch':
+      return Math.abs(dxr) <= halfCell * coverage * 0.5 || Math.abs(dyr) <= halfCell * coverage * 0.5;
+    default:
+      return dxr * dxr + dyr * dyr <= r * r;
+  }
+}
+
 export function applyDtgHalftone(
   src:           ImageData,
   settings:      DtgSettings,
-  bgMask:        Uint8Array | null,   // flood-fill bg mask from left panel; used by whole-image mode
+  _bgMask:       Uint8Array | null,
   pixelsPerInch: number,
 ): ImageData {
   const { width: w, height: h } = src;
   const srcD = src.data;
   const outD = new Uint8ClampedArray(srcD);
 
-  const { method, frequency, angle, edgesOnly, bgColor, bgTolerance, despeckle, despeckleRadius } = settings;
+  const { method, frequency, angle, levelsBlack, levelsWhite, levelsGamma, softness, despeckle, despeckleRadius } = settings;
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  // Color-distance coverage: 0 = matches bgColor (transparent), 1 = far from bg (opaque).
-  // Used only in edges-only mode where color-based boundary detection drives the screen.
-  const [bgR, bgG, bgB] = bgColor ?? [0, 0, 0];
-  const tolSq = Math.max(1, bgTolerance) ** 2;
-  function colorCoverage(r: number, g: number, b: number): number {
-    if (!bgColor) return 1;
-    const dr = r - bgR, dg = g - bgG, db = b - bgB;
-    return Math.min(1, (0.299 * dr * dr + 0.587 * dg * dg + 0.114 * db * db) / tolSq);
+  // Build luminance map, optionally blurred to smooth halftone-to-solid transitions
+  const lumMap = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    lumMap[i] = 0.299 * srcD[i * 4] + 0.587 * srcD[i * 4 + 1] + 0.114 * srcD[i * 4 + 2];
+  }
+  if (softness > 0) {
+    const radius = Math.round(softness);
+    // Two-pass separable box blur on luminance
+    const tmp = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const off = y * w;
+      const prefix = new Float32Array(w + 1);
+      for (let x = 0; x < w; x++) prefix[x + 1] = prefix[x] + lumMap[off + x];
+      for (let x = 0; x < w; x++) {
+        const x0 = Math.max(0, x - radius), x1 = Math.min(w, x + radius + 1);
+        tmp[off + x] = (prefix[x1] - prefix[x0]) / (x1 - x0);
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      const prefix = new Float32Array(h + 1);
+      for (let y = 0; y < h; y++) prefix[y + 1] = prefix[y] + tmp[y * w + x];
+      for (let y = 0; y < h; y++) {
+        const y0 = Math.max(0, y - radius), y1 = Math.min(h, y + radius + 1);
+        lumMap[y * w + x] = (prefix[y1] - prefix[y0]) / (y1 - y0);
+      }
+    }
   }
 
-  // ── No-Pattern mode: hard knockout, no halftone dots ───────────────────────
+  // No-pattern mode: greyscale levels dropout only (black = transparent)
   if (method === 'none') {
-    if (bgMask) {
-      for (let i = 0; i < w * h; i++) if (bgMask[i] === 255) outD[i * 4 + 3] = 0;
-    } else {
-      for (let i = 0; i < w * h; i++) {
-        const r = srcD[i * 4], g = srcD[i * 4 + 1], b = srcD[i * 4 + 2];
-        if (colorCoverage(r, g, b) < 0.5) outD[i * 4 + 3] = 0;
-      }
+    for (let i = 0; i < w * h; i++) {
+      if (applyLevels(lumMap[i], levelsBlack, levelsWhite, levelsGamma) === 0) outD[i * 4 + 3] = 0;
     }
     if (despeckle) applyDespeckle(outD, w, h, despeckleRadius);
     return new ImageData(outD, w, h);
   }
 
-  // ── Halftone setup ─────────────────────────────────────────────────────────
-  const cellSize = Math.max(1, pixelsPerInch / Math.max(1, frequency));
+  // Backward compat: old 'halftone' value → 'halftone-round'
+  const normalizedMethod: DtgMethod = (method as string) === 'halftone' ? 'halftone-round' : method;
+
+  // Minimum 3px cell so the grid stays legible at any preview resolution.
+  const cellSize = Math.max(3, pixelsPerInch / Math.max(1, frequency));
   const halfCell = cellSize * 0.5;
   const angleRad = (angle * Math.PI) / 180;
   const cosA = Math.cos(angleRad);
   const sinA = Math.sin(angleRad);
 
-  // ── Edges-only proximity map ────────────────────────────────────────────────
-  // Built from color-keyed pixels (not bgMask) so it stays tight to the actual
-  // color boundary regardless of flood-fill seed configuration.
-  let edgeProx: Float32Array | null = null;
-  if (edgesOnly) {
-    const keyMask = new Float32Array(w * h);
-    for (let i = 0; i < w * h; i++) {
-      const r = srcD[i * 4], g = srcD[i * 4 + 1], b = srcD[i * 4 + 2];
-      keyMask[i] = colorCoverage(r, g, b) < 0.5 ? 1.0 : 0.0;
-    }
-    edgeProx = boxBlur2D(keyMask, w, h, Math.max(2, Math.round(cellSize * 2.5)));
-  }
-
-  // ── Main halftone loop ─────────────────────────────────────────────────────
+  // Greyscale luminance drives dot coverage — dark areas naturally drop to 0
+  // coverage (transparent), bright areas become solid. No separate bg removal needed.
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
-      const r = srcD[i * 4], g = srcD[i * 4 + 1], b = srcD[i * 4 + 2];
+      const coverage = applyLevels(lumMap[i], levelsBlack, levelsWhite, levelsGamma);
 
-      let coverage: number;
-
-      if (!edgesOnly) {
-        // ── Whole Image ─────────────────────────────────────────────────────
-        // Background removed by bgMask (left-panel flood-fill controls).
-        // Halftone applied over all remaining artwork pixels based on luminance —
-        // the same luminance→dot-size logic threshold mode uses per layer, but
-        // applied directly to the full-color artwork with no ink-layer separation.
-        if (bgMask && bgMask[i] === 255) { outD[i * 4 + 3] = 0; continue; }
-        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-        // Lighter pixels → bigger dots → more opaque (DTG: bright colors need
-        // more ink to cover the dark garment beneath).
-        coverage = lum / 255;
-      } else {
-        // ── Edges Only ──────────────────────────────────────────────────────
-        // Color-distance from detected bg drives the screen; only the
-        // artwork-to-bg transition zone is halftone-screened.
-        coverage = colorCoverage(r, g, b);
-      }
-
-      // Halftone grid
-      const xr = x * cosA + y * sinA;
-      const yr = -x * sinA + y * cosA;
-      const cx = Math.round(xr / cellSize) * cellSize;
-      const cy = Math.round(yr / cellSize) * cellSize;
-      const dxr = xr - cx, dyr = yr - cy;
-      const pixDist = Math.sqrt(dxr * dxr + dyr * dyr);
-      const dotRadius = halfCell * Math.sqrt(coverage);
-      const isInsideDot = pixDist <= dotRadius;
-
-      if (edgesOnly && edgeProx !== null) {
-        const prox = edgeProx[i];
-        if (prox < 0.01) continue; // deep interior stays fully opaque
-        const htAlpha = isInsideDot ? 255 : 0;
-        const blended = Math.round(255 * (1 - prox) + htAlpha * prox);
-        if (blended < outD[i * 4 + 3]) outD[i * 4 + 3] = blended;
-      } else {
-        if (!isInsideDot) outD[i * 4 + 3] = 0;
+      if (!dtgShapeTest(normalizedMethod, x, y, coverage, cosA, sinA, cellSize, halfCell, frequency)) {
+        outD[i * 4 + 3] = 0;
       }
     }
   }

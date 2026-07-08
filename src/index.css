@@ -767,6 +767,10 @@ input[type='range']::-moz-range-thumb {
   border: none;
 }
 
+/* Rounded knobs in DTG mode only */
+[data-mode="dtg"] input[type='range']::-webkit-slider-thumb { border-radius: 50%; }
+[data-mode="dtg"] input[type='range']::-moz-range-thumb    { border-radius: 50%; }
+
 /* Dual range slider */
 .dual-range {
   position: relative;
