@@ -181,6 +181,23 @@ function App() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // Poll for unread customer messages — creator only, shown as dot on Command Center icon
+  const [creatorChatUnread, setCreatorChatUnread] = useState(0);
+  useEffect(() => {
+    if (session?.subscriptionStatus !== 'creator' || !session?.token) return;
+    const token = session.token;
+    const check = () => {
+      fetch('/api/chat?resource=tickets&all=1', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.ok ? r.json() : [])
+        .then((ts: { unread_by_creator?: number }[]) =>
+          setCreatorChatUnread(ts.reduce((s, t) => s + (t.unread_by_creator ?? 0), 0))
+        )
+        .catch(() => {});
+    };
+    check();
+    const id = setInterval(check, 20_000);
+    return () => clearInterval(id);
+  }, [session?.subscriptionStatus, session?.token]);
 
   if (status === 'loading') {
     return (
@@ -1219,23 +1236,6 @@ function App() {
 
   const subStatus = session?.subscriptionStatus;
   const isCreator = subStatus === 'creator';
-
-  // Poll for unread customer messages — creator only, shown as dot on Command Center icon
-  const [creatorChatUnread, setCreatorChatUnread] = useState(0);
-  useEffect(() => {
-    if (!isCreator || !session?.token) return;
-    const check = () => {
-      fetch('/api/chat?resource=tickets&all=1', { headers: { Authorization: `Bearer ${session.token}` } })
-        .then(r => r.ok ? r.json() : [])
-        .then((ts: { unread_by_creator?: number }[]) =>
-          setCreatorChatUnread(ts.reduce((s, t) => s + (t.unread_by_creator ?? 0), 0))
-        )
-        .catch(() => {});
-    };
-    check();
-    const id = setInterval(check, 20_000);
-    return () => clearInterval(id);
-  }, [isCreator, session?.token]);
 
   if (isMobile) {
     return (
