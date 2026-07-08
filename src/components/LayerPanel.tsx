@@ -771,8 +771,6 @@ function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = 
     bgRemovalEnabled, bgTolerance, bgEdgeSoftness, setBgRemovalEnabled, setBgTolerance, setBgEdgeSoftness,
     bgSeedColors, setBgSeedColors, bgEyedropperActive, setBgEyedropperActive,
     bgPaintMask, bgPaintMode, setBgPaintMask, setBgPaintMode,
-    dtgPaintMask, dtgPaintMode, setDtgPaintMask, setDtgPaintMode,
-    brushSize, setBrushSize,
     canvasColor, setCanvasColor, showFabricBg, setShowFabricBg,
     fabricTexture, setFabricTexture,
     fabricBlendStrength, setFabricBlendStrength,
