@@ -228,11 +228,11 @@ function flagDuplicateSubs(email: string, ip: string, count: number) {
     body: JSON.stringify({
       email,
       ip: ip || null,
-      reason: `Duplicate subscriptions detected: ${count} active Seal subscriptions on same account`,
+      reason: `Duplicate subscriptions detected: ${count} active Seal subscriptions on same account — review for duplicate charge`,
       confidence: 'high',
       auto_flagged: true,
       reviewed: false,
-      expired: true,
+      expired: false,
     }),
   }).catch(() => {});
 }

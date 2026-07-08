@@ -1127,7 +1127,7 @@ function SecurityPanel({ session, onDataLoad }: { session: Session; onDataLoad?:
   const [error, setError]       = useState<string | null>(null);
   const [acting, setActing]     = useState<string | null>(null);
   const [notes, setNotes]       = useState<Record<string, string>>({});
-  const [filter, setFilter]     = useState<'all' | 'unreviewed' | 'expired'>('unreviewed');
+  const [filter, setFilter]     = useState<'all' | 'unreviewed' | 'expired'>('all');
   const [manualEmail, setManualEmail] = useState('');
   const [manualNote, setManualNote]   = useState('');
   const [manualActing, setManualActing] = useState(false);
@@ -1193,7 +1193,10 @@ function SecurityPanel({ session, onDataLoad }: { session: Session; onDataLoad?:
   }) ?? [];
 
   const CONF_ORDER = { high: 0, medium: 1, low: 2 };
+  // Unreviewed first, then blocked, then reviewed; within each group sort by confidence
+  const STATUS_ORDER = (f: SecurityFlag) => f.expired ? 1 : !f.reviewed ? 0 : 2;
   const sorted = [...filtered].sort((a, b) =>
+    STATUS_ORDER(a) - STATUS_ORDER(b) ||
     (CONF_ORDER[a.confidence] ?? 3) - (CONF_ORDER[b.confidence] ?? 3)
   );
 
@@ -1442,6 +1445,16 @@ function SecurityPanel({ session, onDataLoad }: { session: Session; onDataLoad?:
                         {flag.expired && (
                           <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}>
                             BLOCKED
+                          </span>
+                        )}
+                        {!flag.expired && !flag.reviewed && (
+                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(250,173,20,0.15)', color: '#faad14', border: '1px solid rgba(250,173,20,0.3)' }}>
+                            NEEDS REVIEW
+                          </span>
+                        )}
+                        {!flag.expired && flag.reviewed && (
+                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)' }}>
+                            REVIEWED
                           </span>
                         )}
                         {!flag.auto_flagged && (
