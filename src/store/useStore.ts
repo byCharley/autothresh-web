@@ -521,6 +521,8 @@ interface AppState {
   setDtgLevelsGamma:        (v: number) => void;
   setDtgSoftness:           (v: number) => void;
   setDtgGreyscalePreview:   (v: boolean) => void;
+  resetDtgScreen: () => void;
+  resetDtgMask:   () => void;
   setDtgDespeckle:          (v: boolean) => void;
   setDtgDespeckleRadius:    (v: number) => void;
 
@@ -956,6 +958,8 @@ export const useStore = create<AppState>((set, get) => ({
   setDtgLevelsGamma:        (dtgLevelsGamma)        => set({ dtgLevelsGamma: Math.max(0.25, Math.min(4.0, dtgLevelsGamma)) }),
   setDtgSoftness:           (dtgSoftness)           => set({ dtgSoftness: Math.max(0, Math.min(20, dtgSoftness)) }),
   setDtgGreyscalePreview:   (dtgGreyscalePreview)   => set({ dtgGreyscalePreview }),
+  resetDtgScreen: () => set({ dtgMethod: 'halftone-round', dtgFrequency: 35, dtgAngle: 22.5 }),
+  resetDtgMask:   () => set({ dtgLevelsBlack: 0, dtgLevelsWhite: 200, dtgLevelsGamma: 1.0, dtgGreyscalePreview: false }),
   setDtgDespeckle:          (dtgDespeckle)          => set({ dtgDespeckle }),
   setDtgDespeckleRadius: (dtgDespeckleRadius) => set({ dtgDespeckleRadius: Math.max(1, Math.min(5, dtgDespeckleRadius)) }),
 

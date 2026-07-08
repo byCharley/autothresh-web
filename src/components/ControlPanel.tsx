@@ -806,6 +806,7 @@ function DtgSection() {
     dtgLevelsWhite, setDtgLevelsWhite,
     dtgLevelsGamma, setDtgLevelsGamma,
     dtgGreyscalePreview, setDtgGreyscalePreview,
+    resetDtgScreen, resetDtgMask,
     dtgPaintMode, setDtgPaintMode,
     setDtgPaintMask,
     brushSize, setBrushSize,
@@ -973,7 +974,12 @@ function DtgSection() {
         {/* 2. Screen Settings — immediately below pattern picker */}
         {isPatternMode && (
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
-            <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>Screen Settings</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Screen Settings</span>
+            {(dtgMethod !== 'halftone-round' || dtgFrequency !== 35 || dtgAngle !== 22.5) && (
+              <button className="btn btn-ghost" style={{ fontSize: 9, padding: '2px 8px', height: 20 }} onClick={resetDtgScreen}>Reset</button>
+            )}
+          </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <Slider
                 label={isGridPattern ? 'Frequency' : 'Scale'}
@@ -998,7 +1004,12 @@ function DtgSection() {
         {isPatternMode && (
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Greyscale Mask</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Greyscale Mask</span>
+                {(dtgLevelsBlack !== 0 || dtgLevelsWhite !== 200 || dtgLevelsGamma !== 1.0) && (
+                  <button className="btn btn-ghost" style={{ fontSize: 9, padding: '2px 8px', height: 20 }} onClick={resetDtgMask}>Reset</button>
+                )}
+              </div>
               <button
                 onClick={() => setDtgGreyscalePreview(!dtgGreyscalePreview)}
                 title="Preview the greyscale mask — white areas get dots, black areas become transparent"
