@@ -147,8 +147,8 @@ export function runXerox(src: ImageData, cfg: XeroxSettings): ImageData {
   const { width: w, height: h } = src;
   let data = new Uint8ClampedArray(src.data);
 
-  if (cfg.preBlur >= 1) data = boxBlur(data, w, h, Math.round(cfg.preBlur));
-  if (cfg.edgeEmphasis > 0) data = unsharpMask(data, w, h, cfg.edgeEmphasis);
+  if (cfg.preBlur >= 1) data = boxBlur(data, w, h, Math.round(cfg.preBlur)) as Uint8ClampedArray<ArrayBuffer>;
+  if (cfg.edgeEmphasis > 0) data = unsharpMask(data, w, h, cfg.edgeEmphasis) as Uint8ClampedArray<ArrayBuffer>;
 
   const out  = new Uint8ClampedArray(w * h * 4);
   const sc   = 0.22;
