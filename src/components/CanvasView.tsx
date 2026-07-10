@@ -22,7 +22,7 @@ import {
 } from '../engine/inkSimulator';
 import { generateCmykProUnderbase, chokeWhitePlate } from '../engine/underbaseEngine';
 import { applyFabricBlend } from '../engine/fabricBlend';
-import { applyDtgHalftone, detectDtgBgColor, renderDtgGreyscalePreview } from '../engine/dtgEngine';
+import { runV2Halftone, sampleV2Color } from '../engine/dtgEngineV2';
 
 
 // ── CMYK Inspect Grid ─────────────────────────────────────────────────────────
@@ -160,6 +160,7 @@ function RegMark({ x, y, size }: { x: number; y: number; size: number }) {
   );
 }
 
+
 export function CanvasView() {
   const canvasRef           = useRef<HTMLCanvasElement>(null);
   const paintOverlayRef     = useRef<HTMLCanvasElement>(null);
@@ -225,11 +226,11 @@ export function CanvasView() {
   const {
     originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     globalPattern,
-    bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgRemovalEnabled, setBgSeedColors, setBgEyedropperActive,
+    bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgSeedColors, setBgEyedropperActive,
     bgPaintMask, bgPaintMaskDims, bgPaintMode, setBgPaintMask,
     showRegistrationMarks, regMarkPadding, documentBleed,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
-    canvasColor, showFabricBg, setShowFabricBg, fabricTexture, fabricBlendStrength, fabricTextureDepth,
+    canvasColor, showFabricBg, fabricTexture, fabricBlendStrength, fabricTextureDepth,
     imageAdjustments,
     documentDpi, documentWidthIn, documentHeightIn,
     separationMode, cmykLpi, cmykVisibility, cmykAngles, cmykParams, cmykViewMode,
@@ -253,8 +254,9 @@ export function CanvasView() {
     showCanvasBorder, setShowCanvasBorder,
     proCmykSettings, setProCmykPlates,
     printSimActive, setPrintSimLoading, viewingDistance,
-    dtgMethod, dtgFrequency, dtgAngle, dtgLevelsBlack, dtgLevelsWhite, dtgLevelsGamma, dtgSoftness, dtgGreyscalePreview, dtgDespeckle, dtgDespeckleRadius,
+    printSettings, updatePrintSettings, printBgEyedropperActive, setPrintBgEyedropperActive,
     dtgPaintMask, dtgPaintMaskDims, dtgPaintMode, setDtgPaintMask, pushHistory,
+    thresholdPreBlur,
   } = useStore();
 
   // Raw ICC planes cache — keyed by image+profile+adjustments only.
@@ -392,7 +394,7 @@ export function CanvasView() {
       };
       img.src = src;
     };
-    load('/textures/Noise_Texture.png', 'noise-texture');
+    load('/textures/Noise_Texture.jpg', 'noise-texture');
   }, []);
 
   // Load fabric texture into ImageData cache when the texture selection changes.
@@ -404,8 +406,8 @@ export function CanvasView() {
       return;
     }
     const path = fabricTexture === 'light'
-      ? '/textures/White_Fabric_ATW.png'
-      : '/textures/Black_Fabric_ATW.png';
+      ? '/textures/White_Fabric_ATW.jpg'
+      : '/textures/Black_Fabric_ATW.jpg';
     if (fabricLoadKeyRef.current === path) return; // already loaded
     const img = new Image();
     img.onload = () => {
@@ -590,18 +592,6 @@ export function CanvasView() {
     ctx.putImageData(artData, 0, 0);
   }
 
-  // Auto-detect the DTG background color whenever the image changes while in DTG mode.
-  // Writes into bgSeedColors (left-panel bg controls). Fabric texture is NOT set here —
-  // it is only auto-selected when the user explicitly toggles Realistic View on.
-  useEffect(() => {
-    if (separationMode !== 'dtg' || !originalImage) return;
-    const [r, g, b] = detectDtgBgColor(originalImage);
-    const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-    setBgSeedColors([hex]);
-    setBgRemovalEnabled(true);
-    setShowFabricBg(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [originalImage, separationMode]);
 
   // Main processing effect.
   // Runs when settings change — zoom is a pure CSS transform and never triggers a reprocess.
@@ -611,7 +601,7 @@ export function CanvasView() {
     let cancelled = false;
     let cmykProRunning = false;
     let rafId: number | undefined;
-    const delay = separationMode === 'cmyk-pro' ? 200 : separationMode === 'dtg' ? 0 : 40;
+    const delay = separationMode === 'cmyk-pro' ? 200 : separationMode === 'dtg' ? 150 : 40;
     const tid = setTimeout(() => {
       setIsProcessing(true);
       rafId = requestAnimationFrame(() => {
@@ -1304,49 +1294,25 @@ export function CanvasView() {
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
         } else if (separationMode === 'dtg') {
-          // ── DTG/DTF: greyscale levels → halftone → alpha mask ────────────────
-          // Apply pre-blur first (imageAdjustments.blur) using Canvas API,
-          // which blurs the source artwork before any processing starts.
-          let dtgBase = artScaled;
-          if (imageAdjustments.blur > 0) {
-            const srcC = document.createElement('canvas');
-            srcC.width = artPrevW; srcC.height = artPrevH;
-            srcC.getContext('2d')!.putImageData(artScaled, 0, 0);
-            const blurC = document.createElement('canvas');
-            blurC.width = artPrevW; blurC.height = artPrevH;
-            const blurCtx = blurC.getContext('2d')!;
-            blurCtx.filter = `blur(${imageAdjustments.blur}px)`;
-            blurCtx.drawImage(srcC, 0, 0);
-            blurCtx.filter = 'none';
-            dtgBase = blurCtx.getImageData(0, 0, artPrevW, artPrevH);
-          }
-          const adjScaled = applyAdjToImage(dtgBase, imageAdjustments);
-          const previewDpi = artPrevW / Math.max(0.001, documentWidthIn);
+          // ── DTG Engine V2 — sine-wave halftone ────────────────────────────────
+          const adjScaled = applyAdjToImage(artScaled, imageAdjustments);
 
-          if (dtgGreyscalePreview) {
-            // Show the levels-adjusted greyscale mask so users can dial in levels
-            // before seeing the final halftone. White = full dot, black = transparent.
-            artComposite = renderDtgGreyscalePreview(adjScaled, dtgLevelsBlack, dtgLevelsWhite, dtgLevelsGamma, dtgSoftness);
-          } else {
-            // Greyscale luminance is the sole alpha driver — dark areas naturally
-            // drop out (coverage=0), no separate bg mask needed.
-            artComposite = applyDtgHalftone(
-              adjScaled,
-              {
-                method: dtgMethod,
-                frequency: dtgFrequency,
-                angle: dtgAngle,
-                levelsBlack: dtgLevelsBlack,
-                levelsWhite: dtgLevelsWhite,
-                levelsGamma: dtgLevelsGamma,
-                softness: dtgSoftness,
-                despeckle: dtgDespeckle,
-                despeckleRadius: dtgDespeckleRadius,
-              },
-              null,
-              previewDpi,
-            );
+          // Apply bg paint mask before pipeline so manually erased areas are transparent.
+          let dtgSource = adjScaled;
+          if (bgPaintMask && bgPaintMaskDims &&
+              bgPaintMaskDims.w === artPrevW && bgPaintMaskDims.h === artPrevH) {
+            const masked = new ImageData(new Uint8ClampedArray(adjScaled.data), artPrevW, artPrevH);
+            for (let i = 0; i < bgPaintMask.length; i++) {
+              if (bgPaintMask[i] === 2) masked.data[i * 4 + 3] = 0;
+            }
+            dtgSource = masked;
           }
+
+          // Width-based cell size matches the reference tool's auto-sizing (width/375 at 45 LPI).
+          // Higher LPI → proportionally finer dots; scales naturally with preview canvas size.
+          const cellSizePx = Math.max(1.5, artPrevW / (printSettings.lpi * (375 / 45)));
+          const v2Result = runV2Halftone(dtgSource, printSettings, cellSizePx);
+          artComposite = v2Result.output;
           // Apply DTG paint mask (erase/restore brush strokes — DTG-specific, no other mode affected).
           // val=2 (erase): force transparent. val=1 (restore): leave halftone alpha intact so
           // background pixels stay transparent even when the restore brush passes over them.
@@ -1369,9 +1335,25 @@ export function CanvasView() {
         } else {
           setDitherComposite(null);
           const resolved = resolvePatterns(layers, globalPattern);
+
+          // Apply pre-blur to source before thresholding so patterns blend across tonal zones.
+          let threshSource = artScaled;
+          if (thresholdPreBlur > 0) {
+            const blurC = document.createElement('canvas');
+            blurC.width = artPrevW; blurC.height = artPrevH;
+            const blurCtx = blurC.getContext('2d')!;
+            const srcC = document.createElement('canvas');
+            srcC.width = artPrevW; srcC.height = artPrevH;
+            srcC.getContext('2d')!.putImageData(artScaled, 0, 0);
+            blurCtx.filter = `blur(${thresholdPreBlur}px)`;
+            blurCtx.drawImage(srcC, 0, 0);
+            blurCtx.filter = 'none';
+            threshSource = blurCtx.getImageData(0, 0, artPrevW, artPrevH);
+          }
+
           // Run without internal knockout so paint masks can be applied first,
           // then the external applyKnockout call below handles overlap removal.
-          const processed = processImage(artScaled, resolved, false, localBgMask, imageAdjustments, 1, importanceMap);
+          const processed = processImage(threshSource, resolved, false, localBgMask, imageAdjustments, 1, importanceMap);
 
           if (textureEnabled) {
             const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
@@ -1564,7 +1546,7 @@ export function CanvasView() {
     }, delay);
     return () => { cancelled = true; clearTimeout(tid); if (rafId !== undefined) cancelAnimationFrame(rafId); };
   }, [
-    originalImage, layers, knockoutEnabled, globalPattern,
+    originalImage, layers, knockoutEnabled, globalPattern, thresholdPreBlur,
     bgRemovalEnabled, bgTolerance, bgSeedColors, bgPaintMask, passthroughMode, canvasColor, showFabricBg, imageAdjustments,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     textureVersion,
@@ -1581,7 +1563,7 @@ export function CanvasView() {
     grainColorBlend, grainColorCount, grainBlur, grainOverlays, grainOverlayVersion,
     grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
     bgEdgeSoftness,
-    dtgMethod, dtgFrequency, dtgAngle, dtgLevelsBlack, dtgLevelsWhite, dtgLevelsGamma, dtgSoftness, dtgGreyscalePreview, dtgDespeckle, dtgDespeckleRadius,
+    printSettings,
     dtgPaintMask, dtgPaintMaskDims,
     underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     proCmykSettings,
@@ -1942,7 +1924,7 @@ export function CanvasView() {
 
   // ── Eyedropper click: sample original image pixel at clicked position ──────────
   const handleEyedropperClick = (e: React.MouseEvent<HTMLElement>) => {
-    if (!bgEyedropperActive || !originalImage || !artworkBounds || !canvasRef.current) return;
+    if (!originalImage || !artworkBounds || !canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const canvasX = (e.clientX - rect.left) / cssScale;
     const canvasY = (e.clientY - rect.top)  / cssScale;
@@ -1951,6 +1933,14 @@ export function CanvasView() {
     if (relX < 0 || relX > 1 || relY < 0 || relY > 1) return;
     const px = Math.floor(relX * (originalImage.width  - 1));
     const py = Math.floor(relY * (originalImage.height - 1));
+
+    if (printBgEyedropperActive) {
+      const color = sampleV2Color(originalImage, px, py);
+      updatePrintSettings({ bgColor: color });
+      setPrintBgEyedropperActive(false);
+      return;
+    }
+
     const pi = (py * originalImage.width + px) * 4;
     const r = originalImage.data[pi];
     const g = originalImage.data[pi + 1];
@@ -2237,9 +2227,9 @@ export function CanvasView() {
       onPointerLeave={() => {
         if (!isPaintingRef.current && !isBgPaintingRef.current && !isDtgPaintingRef.current) setBrushPos(null);
       }}
-      onClick={bgEyedropperActive ? handleEyedropperClick : undefined}
+      onClick={(bgEyedropperActive || printBgEyedropperActive) ? handleEyedropperClick : undefined}
       style={{
-        cursor: bgEyedropperActive
+        cursor: (bgEyedropperActive || printBgEyedropperActive)
           ? 'crosshair'
           : (bgPaintMode !== 'off' || paintMode !== 'off' || (separationMode === 'dtg' && dtgPaintMode !== 'off')) && !isSpacePanning
           ? 'none'
@@ -2590,6 +2580,7 @@ export function CanvasView() {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) loadFile(f); }} />
         </>
       )}
+
     </div>
   );
 }

@@ -54,7 +54,7 @@ export type PatternType =
   | 'pixel-sort'
   | 'voronoi'
   | 'ascii'
-  | 'grain-micro';
+  | 'film-grain';
 
 import type { LevelsAdjustment, CurvePoint } from './adjustments';
 import { buildLevelsLUT, buildCurvesLUT, DEFAULT_LEVELS, DEFAULT_CURVES } from './adjustments';
@@ -258,8 +258,9 @@ function samplePatternTexture(key: string, ow: number, oh: number, scale: number
 function noiseValues(w: number, h: number, scale: number, seed: number): F32 {
   // 3-octave fBm: base scale + two higher-frequency octaves ensure fine
   // micro-texture at every scale so the result never looks blurry.
+  // Scale mapping: slider 1 → s≈0.5 (per-pixel noise, super fine), slider 6 → s≈3 (visible blobs).
   const vals = new Float32Array(w * h) as F32;
-  const s = Math.max(0.5, scale);
+  const s = Math.max(0.25, scale * 0.5);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const nx = x / s, ny = y / s;
@@ -273,34 +274,47 @@ function noiseValues(w: number, h: number, scale: number, seed: number): F32 {
 }
 
 function noiseCoarseValues(w: number, h: number, scale: number, seed: number): F32 {
-  // 3-octave fBm for coarse noise: large blobs with mid-scale and fine detail.
+  // True coarse noise: large organic blobs clearly distinct from standard.
+  // 4× larger effective scale so blobs are unmistakably bigger at the same slider value.
+  // 2 octaves only (dominant base + subtle edge roughness) — suppresses fine detail entirely.
+  // S-curve contrast sharpens blob boundaries so there are clear blob vs. gap regions.
   const noise = new Float32Array(w * h) as F32;
-  const s = Math.max(0.5, scale);
+  const s = Math.max(1, scale * 2.0); // scale=1→2px, scale=6→12px blobs
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const nx = x / s, ny = y / s;
-      let v = valueNoise(nx,       ny,       seed         ) * 0.55
-            + valueNoise(nx * 2.1, ny * 2.1, seed ^ 0xC0FFEE) * 0.30
-            + valueNoise(nx * 5.3, ny * 5.3, seed ^ 0xBEEF  ) * 0.15;
-      noise[y * w + x] = Math.max(0, Math.min(1, (v - 0.5) * 1.4 + 0.5));
+      const v = valueNoise(nx,       ny,       seed           ) * 0.88
+              + valueNoise(nx * 2.3, ny * 2.3, seed ^ 0xC0FFEE) * 0.12;
+      // S-curve: sharpen blob edges so blobs are solid, gaps are clear
+      const c = (v - 0.5) * 2.5 + 0.5;
+      noise[y * w + x] = Math.max(0, Math.min(1, c));
     }
   }
   return noise;
 }
 
-function grainMicroValues(w: number, h: number, seed: number): F32 {
-  // Per-pixel Gaussian-approximated noise (average of 3 independent uniform samples).
-  // The Gaussian distribution (bell-curve at 0.5) produces organic, photographic-
-  // looking grain: mid-tones get the most activity, shadows/highlights stay clean.
-  // This pattern intentionally ignores patternScale — the export code also skips
-  // the scale multiplier so grain stays at 1px at any output resolution.
+function filmGrainValues(w: number, h: number, scale: number, seed: number): F32 {
+  // Simulates silver-halide film grain: per-pixel Gaussian noise (Box-Muller) blended
+  // with fine-scale spatial clustering (crystal-growth clumping).
+  // scale=1 → ISO 100 style (barely visible, very fine); scale=6 → ISO 3200 (gritty, organic).
+  // Midtones get peak grain activity; extremes stay cleaner — matches real film response.
   const vals = new Float32Array(w * h) as F32;
+  const s = Math.max(0.5, scale * 0.7); // spatial cluster size
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const a = pseudoRandom(x,          y,          seed);
-      const b = pseudoRandom(x ^ 0x1357, y ^ 0x2468, seed);
-      const c = pseudoRandom(x ^ 0xFEDC, y ^ 0xBA98, seed);
-      vals[y * w + x] = (a + b + c) / 3;
+      // Box-Muller: true Gaussian noise
+      const u1 = Math.max(1e-7, pseudoRandom(x,          y,          seed));
+      const u2 =                pseudoRandom(x ^ 0x8B4F, y ^ 0x3D2C, seed);
+      const gauss = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      // Gaussian centred at 0.5, σ = 0.16 — most values in [0.2, 0.8]
+      const perPixel = gauss * 0.16 + 0.5;
+      // Spatial clumping: two-octave fBm for organic crystal clustering
+      const nx = x / s, ny = y / s;
+      const spatial = valueNoise(nx,       ny,       seed ^ 0xF00D) * 0.65
+                    + valueNoise(nx * 3.1, ny * 3.1, seed ^ 0xCAFE) * 0.35;
+      // Blend: 60% spatial clustering + 40% per-pixel Gaussian grain
+      const v = spatial * 0.6 + perPixel * 0.4;
+      vals[y * w + x] = Math.max(0, Math.min(1, v));
     }
   }
   return vals;
@@ -543,7 +557,7 @@ export function buildPatternValues(w: number, h: number, layer: LayerConfig, idx
     case 'noise-coarse':
     case 'grain-coarse':     return noiseCoarseValues(w, h, patternScale, seed);
     case 'noise-texture':    return samplePatternTexture('noise-texture', w, h, patternScale, seed) ?? noiseValues(w, h, patternScale, seed);
-    case 'grain-micro':      return grainMicroValues(w, h, seed);
+    case 'film-grain':       return filmGrainValues(w, h, patternScale, seed);
     case 'halftone-round':   return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'round');
     case 'halftone-diamond': return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'diamond');
     case 'halftone-ellipse': return halftoneValues(w, h, patternScale, patternAngle, patternDensity, 'ellipse');
@@ -987,7 +1001,7 @@ export function processImage(
   const scaleLayer = (l: LayerConfig): LayerConfig => {
     // grain-micro always renders at 1px regardless of output resolution —
     // skip the export scale multiplier so it stays genuinely fine at print DPI.
-    if (patternScaleFactor === 1 || l.pattern === 'grain-micro') return l;
+    if (patternScaleFactor === 1) return l;
     return { ...l, patternScale: l.patternScale * patternScaleFactor };
   };
 

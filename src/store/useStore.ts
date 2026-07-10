@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { LayerConfig, PatternConfig, ProcessedLayer, ImageAdjustments, SeparationMode, CmykParams, PatternType } from '../engine/imageProcessor';
-import type { DtgMethod } from '../engine/dtgEngine';
+import type { V2Settings } from '../engine/dtgEngineV2';
+import { DEFAULT_V2_SETTINGS } from '../engine/dtgEngineV2';
+export type { V2Settings };
 
 export type GrainBlendMode = 'multiply' | 'screen' | 'overlay' | 'soft-light' | 'hard-light' | 'color-burn' | 'color-dodge' | 'luminosity';
 
@@ -73,22 +75,13 @@ export interface PresetData {
   cmykVisibility?: Record<string, boolean>;
   // CMYK Pro fields
   proCmykSettings?: ProCmykSettings;
-  // DTG/DTF fields
-  dtgMethod?: DtgMethod;
-  dtgFrequency?: number;
-  dtgAngle?: number;
-  dtgEdgesOnly?: boolean;
-  dtgLevelsBlack?: number;
-  dtgLevelsWhite?: number;
-  dtgLevelsGamma?: number;
-  dtgSoftness?: number;
-  dtgDespeckle?: boolean;
-  dtgDespeckleRadius?: number;
+  // DTG/DTF fields (new pipeline)
+  printSettings?: Partial<V2Settings>;
 }
 
 const DEFAULT_IMAGE_ADJ: ImageAdjustments = {
   exposure: 0, contrast: 0, shadows: 0, highlights: 0, saturation: 0, blur: 0,
-  adjMode: 'basic',
+  adjMode: 'levels',
   levels: { inBlack: 0, inGamma: 1.00, inWhite: 255, outBlack: 0, outWhite: 255 },
   curves: [[0, 0], [255, 255]],
 };
@@ -289,6 +282,7 @@ interface AppState {
   showCanvasBorder: boolean;
 
   globalPattern: PatternConfig;
+  thresholdPreBlur: number;  // Gaussian blur applied to source image before thresholding (0 = off)
 
   bgRemovalEnabled: boolean;
   bgTolerance: number;
@@ -373,18 +367,9 @@ interface AppState {
   colorSepVisibility:    Record<string, boolean>;
   colorSepNames:         string[];
 
-  // DTG/DTF mode
-  dtgMethod:             DtgMethod;
-  dtgFrequency:          number;
-  dtgAngle:              number;
-  dtgEdgesOnly:          boolean;
-  dtgLevelsBlack:        number;
-  dtgLevelsWhite:        number;
-  dtgLevelsGamma:        number;
-  dtgSoftness:           number;
-  dtgGreyscalePreview:   boolean;
-  dtgDespeckle:          boolean;
-  dtgDespeckleRadius:    number;
+  // DTG/DTF mode (V2 engine)
+  printSettings:         V2Settings;
+  printBgEyedropperActive: boolean;
 
   // Grain mode
   grainColorBlend:    number;  // 0 = B/W, 100 = full color
@@ -426,6 +411,7 @@ interface AppState {
   setSplitView: (v: boolean) => void;
   setShowCanvasBorder: (v: boolean) => void;
   updateGlobalPattern: (updates: Partial<PatternConfig>) => void;
+  setThresholdPreBlur: (v: number) => void;
   setBgRemovalEnabled: (v: boolean) => void;
   setBgTolerance: (v: number) => void;
   setBgEdgeSoftness: (v: number) => void;
@@ -512,19 +498,9 @@ interface AppState {
   setColorSepVisibility:    (id: string, v: boolean) => void;
   setColorSepNames:         (v: string[]) => void;
 
-  setDtgMethod:             (v: DtgMethod) => void;
-  setDtgFrequency:          (v: number) => void;
-  setDtgAngle:              (v: number) => void;
-  setDtgEdgesOnly:          (v: boolean) => void;
-  setDtgLevelsBlack:        (v: number) => void;
-  setDtgLevelsWhite:        (v: number) => void;
-  setDtgLevelsGamma:        (v: number) => void;
-  setDtgSoftness:           (v: number) => void;
-  setDtgGreyscalePreview:   (v: boolean) => void;
-  resetDtgScreen: () => void;
-  resetDtgMask:   () => void;
-  setDtgDespeckle:          (v: boolean) => void;
-  setDtgDespeckleRadius:    (v: number) => void;
+  updatePrintSettings:      (partial: Partial<V2Settings>) => void;
+  resetPrintSettings:       () => void;
+  setPrintBgEyedropperActive: (v: boolean) => void;
 
   setGrainColorBlend:    (v: number) => void;
   setGrainColorCount:    (v: number) => void;
@@ -567,6 +543,7 @@ export const useStore = create<AppState>((set, get) => ({
   splitView: false,
   showCanvasBorder: true,
   globalPattern: DEFAULT_GLOBAL_PATTERN,
+  thresholdPreBlur: 0,
   bgRemovalEnabled: ((localStorage.getItem('at-mode') as string | null) === 'cmyk-pro') ? false : true,
   bgTolerance: 30,
   bgEdgeSoftness: 0,
@@ -640,17 +617,8 @@ export const useStore = create<AppState>((set, get) => ({
   colorSepVisibility:    {},
   colorSepNames:         [],
 
-  dtgMethod:             'halftone-round' as const,
-  dtgFrequency:          35,
-  dtgAngle:              22.5,
-  dtgEdgesOnly:          true,
-  dtgLevelsBlack:        10,
-  dtgLevelsWhite:        55,
-  dtgLevelsGamma:        4.0,
-  dtgSoftness:           3,
-  dtgGreyscalePreview:   false,
-  dtgDespeckle:          false,
-  dtgDespeckleRadius:    2,
+  printSettings:           DEFAULT_V2_SETTINGS,
+  printBgEyedropperActive: false,
 
   grainColorBlend:    50,
   grainColorCount:    8,
@@ -717,6 +685,7 @@ export const useStore = create<AppState>((set, get) => ({
   setShowCanvasBorder: (showCanvasBorder) => set({ showCanvasBorder }),
   updateGlobalPattern: (updates) =>
     set((s) => ({ globalPattern: { ...s.globalPattern, ...updates } })),
+  setThresholdPreBlur: (thresholdPreBlur) => set({ thresholdPreBlur }),
   setBgRemovalEnabled: (bgRemovalEnabled) => set({ bgRemovalEnabled, ...(!bgRemovalEnabled ? { bgPaintMode: 'off' as const } : {}) }),
   setBgTolerance: (bgTolerance) => set({ bgTolerance }),
   setBgEdgeSoftness: (bgEdgeSoftness) => set({ bgEdgeSoftness }),
@@ -949,19 +918,9 @@ export const useStore = create<AppState>((set, get) => ({
   setColorSepVisibility: (id, v) => set((s) => ({ colorSepVisibility: { ...s.colorSepVisibility, [id]: v } })),
   setColorSepNames: (colorSepNames) => set({ colorSepNames }),
 
-  setDtgMethod:          (dtgMethod)          => set({ dtgMethod }),
-  setDtgFrequency:       (dtgFrequency)       => set({ dtgFrequency: Math.max(1, Math.min(150, dtgFrequency)) }),
-  setDtgAngle:           (dtgAngle)           => set({ dtgAngle: Math.max(0, Math.min(180, dtgAngle)) }),
-  setDtgEdgesOnly:       (dtgEdgesOnly)       => set({ dtgEdgesOnly }),
-  setDtgLevelsBlack:        (dtgLevelsBlack)        => set({ dtgLevelsBlack: Math.max(0, Math.min(200, dtgLevelsBlack)) }),
-  setDtgLevelsWhite:        (dtgLevelsWhite)        => set({ dtgLevelsWhite: Math.max(55, Math.min(255, dtgLevelsWhite)) }),
-  setDtgLevelsGamma:        (dtgLevelsGamma)        => set({ dtgLevelsGamma: Math.max(0.25, Math.min(4.0, dtgLevelsGamma)) }),
-  setDtgSoftness:           (dtgSoftness)           => set({ dtgSoftness: Math.max(0, Math.min(20, dtgSoftness)) }),
-  setDtgGreyscalePreview:   (dtgGreyscalePreview)   => set({ dtgGreyscalePreview }),
-  resetDtgScreen: () => set({ dtgMethod: 'halftone-round', dtgFrequency: 35, dtgAngle: 22.5 }),
-  resetDtgMask:   () => set({ dtgLevelsBlack: 10, dtgLevelsWhite: 55, dtgLevelsGamma: 4.0, dtgGreyscalePreview: false }),
-  setDtgDespeckle:          (dtgDespeckle)          => set({ dtgDespeckle }),
-  setDtgDespeckleRadius: (dtgDespeckleRadius) => set({ dtgDespeckleRadius: Math.max(1, Math.min(5, dtgDespeckleRadius)) }),
+  updatePrintSettings: (partial) => set((s) => ({ printSettings: { ...s.printSettings, ...partial } })),
+  resetPrintSettings:  () => set({ printSettings: DEFAULT_V2_SETTINGS }),
+  setPrintBgEyedropperActive: (printBgEyedropperActive) => set({ printBgEyedropperActive }),
 
   setGrainColorBlend:    (grainColorBlend)    => set({ grainColorBlend }),
   setGrainColorCount:    (grainColorCount)    => set({ grainColorCount }),
@@ -1033,16 +992,7 @@ export const useStore = create<AppState>((set, get) => ({
       proCmykSettings: data.proCmykSettings ?? s.proCmykSettings,
     } : {};
     const dtg = data.mode === 'dtg' ? {
-      dtgMethod:          data.dtgMethod          ?? s.dtgMethod,
-      dtgFrequency:       data.dtgFrequency       ?? s.dtgFrequency,
-      dtgAngle:           data.dtgAngle           ?? s.dtgAngle,
-      dtgEdgesOnly:       data.dtgEdgesOnly       ?? s.dtgEdgesOnly,
-      dtgLevelsBlack:     data.dtgLevelsBlack     ?? s.dtgLevelsBlack,
-      dtgLevelsWhite:     data.dtgLevelsWhite     ?? s.dtgLevelsWhite,
-      dtgLevelsGamma:     data.dtgLevelsGamma     ?? s.dtgLevelsGamma,
-      dtgSoftness:        data.dtgSoftness        ?? s.dtgSoftness,
-      dtgDespeckle:       data.dtgDespeckle       ?? s.dtgDespeckle,
-      dtgDespeckleRadius: data.dtgDespeckleRadius ?? s.dtgDespeckleRadius,
+      printSettings: { ...s.printSettings, ...(data.printSettings ?? {}) },
     } : {};
     return { ...base, ...dither, ...colorSep, ...cmyk, ...proCmyk, ...dtg };
   }),
@@ -1099,16 +1049,7 @@ export const useStore = create<AppState>((set, get) => ({
       base.proCmykSettings = { ...s.proCmykSettings };
     }
     if (s.separationMode === 'dtg') {
-      base.dtgMethod          = s.dtgMethod;
-      base.dtgFrequency       = s.dtgFrequency;
-      base.dtgAngle           = s.dtgAngle;
-      base.dtgEdgesOnly       = s.dtgEdgesOnly;
-      base.dtgLevelsBlack     = s.dtgLevelsBlack;
-      base.dtgLevelsWhite     = s.dtgLevelsWhite;
-      base.dtgLevelsGamma     = s.dtgLevelsGamma;
-      base.dtgSoftness        = s.dtgSoftness;
-      base.dtgDespeckle       = s.dtgDespeckle;
-      base.dtgDespeckleRadius = s.dtgDespeckleRadius;
+      base.printSettings = { ...s.printSettings };
     }
     return base;
   },

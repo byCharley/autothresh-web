@@ -17,6 +17,7 @@
     "desktop:icons": "tauri icon public/AutoThresh_Web_Icon.svg"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@radix-ui/react-dialog": "^1.1.17",
     "@radix-ui/react-select": "^2.3.1",
     "@radix-ui/react-slider": "^1.4.1",
@@ -43,6 +44,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.1",
+    "@tauri-apps/cli": "^2",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
@@ -57,7 +59,6 @@
     "tailwindcss": "^4.3.1",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
-    "vite": "^8.0.12",
-    "@tauri-apps/cli": "^2"
+    "vite": "^8.0.12"
   }
 }

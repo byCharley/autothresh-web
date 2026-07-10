@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import type { PatternType } from '../engine/imageProcessor';
-import { autoDetectPatternSettings } from '../engine/imageProcessor';
 import { getBayer } from '../engine/colorSeparation';
+import { DEFAULT_V2_SETTINGS } from '../engine/dtgEngineV2';
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -30,9 +30,9 @@ function Section({ title, children, defaultOpen = true }: {
   );
 }
 
-function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
+function Slider({ label, value, min, max, step = 1, onChange, unit = '', hint }: {
   label: string; value: number; min: number; max: number;
-  step?: number; onChange: (v: number) => void; unit?: string;
+  step?: number; onChange: (v: number) => void; unit?: string; hint?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -84,6 +84,7 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
         <input type="range" min={min} max={max} step={step} value={value}
           onChange={(e) => onChange(Number(e.target.value))} />
       </div>
+      {hint && <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 2, lineHeight: 1.4 }}>{hint}</div>}
     </div>
   );
 }
@@ -134,7 +135,7 @@ const PATTERN_LABELS: Record<PatternType, string> = {
   'grain':               'Noise · Standard',
   'grain-soft':          'Noise · Standard',
   'grain-coarse':        'Noise · Coarse',
-  'grain-micro':         'Grain · Micro (Print-Res)',
+  'film-grain':          'Film Grain',
   'halftone-round':      'Halftone · Round',
   'halftone-diamond':    'Halftone · Diamond',
   'halftone-ellipse':    'Halftone · Ellipse',
@@ -183,7 +184,6 @@ function PatternSelect({ value, onChange }: { value: PatternType; onChange: (v: 
         <option value="noise">Noise · Standard</option>
         <option value="noise-coarse">Noise · Coarse</option>
         <option value="noise-texture">Noise · Texture</option>
-        <option value="grain-micro">Grain · Micro (Print-Res)</option>
       </optgroup>
       <optgroup label="─ Halftone Dots ─">
         <option value="halftone-round">Halftone · Round</option>
@@ -221,7 +221,6 @@ function PatternControls({
 }) {
   const isHalftone  = pattern.startsWith('halftone-');
   const isGrain     = pattern.startsWith('grain') || pattern.startsWith('noise');
-  const isMicro     = pattern === 'grain-micro';
   const hasPattern = pattern !== 'none';
   const scaleMax  = scaleMaxOverride ?? (isGrain ? 6 : 40);
   const scaleStep = isGrain ? 0.5 : 1;
@@ -237,17 +236,10 @@ function PatternControls({
       </div>
       {hasPattern && (
         <>
-          {!isMicro && (
-            <Slider label="Scale" value={Math.min(scale, scaleMax)} min={1} max={scaleMax} step={scaleStep} onChange={onScale} />
-          )}
+          <Slider label="Scale" value={Math.min(scale, scaleMax)} min={1} max={scaleMax} step={scaleStep} onChange={onScale} />
           <Slider label="Density" value={density} min={5} max={100} onChange={onDensity} unit="%" />
           {isHalftone && (
             <Slider label="Angle" value={angle} min={0} max={180} onChange={onAngle} unit="°" />
-          )}
-          {isMicro && (
-            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.5, marginTop: 2 }}>
-              1px at print resolution · preview appears coarser
-            </div>
           )}
         </>
       )}
@@ -258,31 +250,15 @@ function PatternControls({
 // ─── Global Pattern Section ───────────────────────────────────────────────────
 
 function GlobalPatternSection() {
-  const { globalPattern, updateGlobalPattern, previewImage, originalImage, separationMode } = useStore();
+  const { globalPattern, updateGlobalPattern, separationMode, thresholdPreBlur, setThresholdPreBlur } = useStore();
   const isDtg = separationMode === 'dtg';
-
-  const handleAutoDetect = () => {
-    if (!previewImage) return;
-    updateGlobalPattern(autoDetectPatternSettings(previewImage, originalImage));
-  };
+  const isThreshold = separationMode === 'threshold';
 
   return (
     <Section title={isDtg ? 'Print Pattern' : 'Global Pattern'} defaultOpen={true}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>
-          {isDtg ? 'Screen applied over artwork' : 'Applies to all layers'}
-        </span>
-        {!isDtg && previewImage && (
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: 10, padding: '2px 8px', height: 22 }}
-            onClick={handleAutoDetect}
-            title="Auto-detect best grain settings for this image"
-          >
-            Auto Detect
-          </button>
-        )}
-      </div>
+      <p style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', margin: '0 0 8px', lineHeight: 1.5 }}>
+        {isDtg ? 'Screen applied over artwork.' : 'Applied to all separations. Override per layer below.'}
+      </p>
       <PatternControls
         pattern={globalPattern.pattern}
         scale={globalPattern.patternScale}
@@ -296,6 +272,45 @@ function GlobalPatternSection() {
         onDensity={(v) => updateGlobalPattern({ patternDensity: v })}
         onAngle={(v) => updateGlobalPattern({ patternAngle: v })}
       />
+      {isThreshold && (
+        <Slider
+          label="Pre-blur"
+          value={thresholdPreBlur}
+          min={0} max={20} step={0.5}
+          onChange={setThresholdPreBlur}
+          unit="px"
+        />
+      )}
+    </Section>
+  );
+}
+
+// ─── Distressed Texture Section ───────────────────────────────────────────────
+
+function DistressedTextureSection() {
+  const {
+    textureEnabled, textureIntensity, textureScale, textureSeed,
+    setTextureEnabled, setTextureIntensity, setTextureScale, setTextureSeed,
+  } = useStore();
+  return (
+    <Section title="Distressed Texture" defaultOpen={true}>
+      <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginBottom: 6, opacity: 0.7 }}>
+        Texture engine made using real Plastisol Ink Crack Scans
+      </div>
+      <SwitchRow label="Enable" checked={textureEnabled} onChange={setTextureEnabled} />
+      <div style={{ opacity: textureEnabled ? 1 : 0.4, pointerEvents: textureEnabled ? 'auto' : 'none', transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+        <Slider label="Intensity" value={textureIntensity} min={0} max={100} step={1} onChange={setTextureIntensity} unit="%" />
+        <Slider label="Scale" value={textureScale} min={0.25} max={4} step={0.25} onChange={setTextureScale} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            Seed: {textureSeed}
+          </span>
+          <button className="btn btn-ghost" style={{ fontSize: 10, height: 24, padding: '0 8px' }}
+            onClick={() => setTextureSeed(Math.floor(Math.random() * 99999))}>
+            Randomize
+          </button>
+        </div>
+      </div>
     </Section>
   );
 }
@@ -310,7 +325,7 @@ function ImageAdjustmentsSection() {
   const showSaturation = separationMode === 'dtg' || separationMode === 'texture';
 
   return (
-    <Section title="Image Adjustments" defaultOpen={false}>
+    <Section title="Image Adjustments" defaultOpen={true}>
       <div style={{ opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
       <ImageAdjustPanel
         adj={imageAdjustments}
@@ -799,250 +814,160 @@ function ColorSepSection() {
 function DtgSection() {
   const {
     originalImage,
-    dtgMethod, setDtgMethod,
-    dtgFrequency, setDtgFrequency,
-    dtgAngle, setDtgAngle,
-    dtgLevelsBlack, setDtgLevelsBlack,
-    dtgLevelsWhite, setDtgLevelsWhite,
-    dtgLevelsGamma, setDtgLevelsGamma,
-    dtgGreyscalePreview, setDtgGreyscalePreview,
-    resetDtgScreen, resetDtgMask,
+    printSettings, updatePrintSettings, resetPrintSettings,
+    printBgEyedropperActive, setPrintBgEyedropperActive,
     dtgPaintMode, setDtgPaintMode,
     setDtgPaintMask,
     brushSize, setBrushSize,
   } = useStore();
 
-  const isPatternMode = dtgMethod !== 'none';
-  const isGridPattern  = isPatternMode && dtgMethod !== 'bayer-4' && dtgMethod !== 'grain';
   const disabled = !originalImage;
 
-  const touchBtnStyle = (active: boolean) => ({
-    flex: 1, height: 40, fontSize: 11, fontFamily: 'var(--font-mono)',
+  const labelStyle: React.CSSProperties = {
+    fontSize: 9, fontWeight: 600, letterSpacing: '0.08em',
+    textTransform: 'uppercase', color: 'var(--text-muted)',
+    fontFamily: 'var(--font-mono)',
+  };
+
+  const subheadStyle: React.CSSProperties = {
+    ...labelStyle,
+    marginBottom: 8,
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+  };
+
+  const touchBtnStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1, height: 36, fontSize: 10, fontFamily: 'var(--font-mono)',
     border: active ? '1.5px solid var(--accent)' : '1px solid var(--border-2)',
     borderRadius: 4, cursor: 'pointer',
     background: active ? 'color-mix(in srgb, var(--accent) 15%, var(--surface-2))' : 'var(--surface-2)',
     color: active ? 'var(--accent)' : 'var(--text-dim)',
     fontWeight: active ? 700 : 400,
-    letterSpacing: '0.05em', textTransform: 'uppercase' as const,
-    transition: 'all 0.12s',
-    minWidth: 0,
+    letterSpacing: '0.05em', textTransform: 'uppercase',
+    transition: 'all 0.12s', minWidth: 0,
   });
 
-  const PATTERNS = [
-    {
-      id: 'none' as const, label: 'None',
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-          <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-          <line x1="20" y1="4" x2="4" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-        </svg>
-      ),
-    },
-    {
-      id: 'halftone-round' as const, label: 'Round',
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="6" cy="6" r="4.5"/><circle cx="18" cy="6" r="4.5"/>
-          <circle cx="6" cy="18" r="4.5"/><circle cx="18" cy="18" r="4.5"/>
-        </svg>
-      ),
-    },
-    {
-      id: 'halftone-diamond' as const, label: 'Diamond',
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <polygon points="6,1 11,6 6,11 1,6"/>
-          <polygon points="18,1 23,6 18,11 13,6"/>
-          <polygon points="6,13 11,18 6,23 1,18"/>
-          <polygon points="18,13 23,18 18,23 13,18"/>
-        </svg>
-      ),
-    },
-    {
-      id: 'halftone-ellipse' as const, label: 'Ellipse',
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <ellipse cx="6"  cy="6"  rx="5.5" ry="3.2"/>
-          <ellipse cx="18" cy="6"  rx="5.5" ry="3.2"/>
-          <ellipse cx="6"  cy="18" rx="5.5" ry="3.2"/>
-          <ellipse cx="18" cy="18" rx="5.5" ry="3.2"/>
-        </svg>
-      ),
-    },
-    {
-      id: 'halftone-square' as const, label: 'Square',
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="1"  y="1"  width="9.5" height="9.5"/>
-          <rect x="13.5" y="1"  width="9.5" height="9.5"/>
-          <rect x="1"  y="13.5" width="9.5" height="9.5"/>
-          <rect x="13.5" y="13.5" width="9.5" height="9.5"/>
-        </svg>
-      ),
-    },
-    {
-      id: 'halftone-line' as const, label: 'Line',
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="0"  y="0" width="5.5" height="24"/>
-          <rect x="9"  y="0" width="5.5" height="24"/>
-          <rect x="18" y="0" width="5.5" height="24"/>
-        </svg>
-      ),
-    },
-    {
-      id: 'halftone-crosshatch' as const, label: 'Cross',
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="0" y="0"  width="24" height="5.5"/>
-          <rect x="0" y="9"  width="24" height="5.5"/>
-          <rect x="0" y="18" width="24" height="5.5"/>
-          <rect x="0"  y="0" width="5.5" height="24"/>
-          <rect x="9"  y="0" width="5.5" height="24"/>
-          <rect x="18" y="0" width="5.5" height="24"/>
-        </svg>
-      ),
-    },
-    {
-      id: 'bayer-4' as const, label: 'Dither',
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24">
-          {([
-            [0,0,0],[6,0,0.85],[12,0,0.12],[18,0,0.62],
-            [0,6,0.75],[6,6,0.25],[12,6,0.87],[18,6,0.37],
-            [0,12,0.18],[6,12,0.68],[12,12,0.06],[18,12,0.56],
-            [0,18,0.93],[6,18,0.43],[12,18,0.81],[18,18,0.31],
-          ] as [number,number,number][]).map(([x,y,v],idx) => (
-            <rect key={idx} x={x} y={y} width="6" height="6" fill="currentColor" fillOpacity={v}/>
-          ))}
-        </svg>
-      ),
-    },
-    {
-      id: 'grain' as const, label: 'Grain',
-      icon: (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          {([
-            [3,2],[11,1],[19,3],[7,7],[15,6],[21,8],
-            [2,12],[9,13],[17,11],[5,17],[13,18],[20,15],[1,21],[10,22],[19,20],
-          ] as [number,number][]).map(([x,y],idx) => (
-            <circle key={idx} cx={x} cy={y} r="1.6"/>
-          ))}
-        </svg>
-      ),
-    },
-  ];
+  const isChanged = (
+    printSettings.lpi     !== DEFAULT_V2_SETTINGS.lpi     ||
+    printSettings.angle   !== DEFAULT_V2_SETTINGS.angle   ||
+    printSettings.shadow  !== DEFAULT_V2_SETTINGS.shadow  ||
+    printSettings.highlight !== DEFAULT_V2_SETTINGS.highlight ||
+    printSettings.gamma   !== DEFAULT_V2_SETTINGS.gamma   ||
+    printSettings.bgColor !== DEFAULT_V2_SETTINGS.bgColor
+  );
+
+  const bgColor = printSettings.bgColor;
 
   return (
-    <Section title="DTG Screen" defaultOpen={true}>
+    <Section title="Print Prep" defaultOpen={true}>
       <div style={{ opacity: disabled ? 0.4 : 1, pointerEvents: disabled ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
 
-        {/* 1. Screen Pattern */}
-        <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>Screen Pattern</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4, marginBottom: 14 }}>
-          {PATTERNS.map(p => {
-            const active = dtgMethod === p.id || ((dtgMethod as string) === 'halftone' && p.id === 'halftone-round');
-            return (
-              <button
-                key={p.id}
-                onClick={() => setDtgMethod(p.id)}
-                title={p.label}
-                style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  gap: 5, padding: '9px 4px 7px',
-                  border: active ? '1.5px solid var(--accent)' : '1px solid var(--border)',
-                  background: active ? 'color-mix(in srgb, var(--accent) 10%, var(--surface-2))' : 'var(--surface-2)',
-                  cursor: 'pointer', borderRadius: 3,
-                  color: active ? 'var(--accent)' : 'var(--text-dim)',
-                  transition: 'border-color 0.12s, background 0.12s, color 0.12s',
-                }}
-              >
-                {p.icon}
-                <span style={{
-                  fontSize: 8, fontFamily: 'var(--font-mono)',
-                  fontWeight: active ? 700 : 400,
-                  letterSpacing: '0.06em', textTransform: 'uppercase' as const,
-                  lineHeight: 1,
-                }}>
-                  {p.label}
-                </span>
-              </button>
-            );
-          })}
+        {/* Workflow tip */}
+        <div style={{
+          fontSize: 9, fontFamily: 'var(--font-mono)', lineHeight: 1.65,
+          color: 'var(--text-dim)', background: 'var(--surface-1)',
+          border: '1px solid var(--border)', borderRadius: 4,
+          padding: '7px 9px', marginBottom: 10,
+        }}>
+          <strong style={{ color: 'var(--text)' }}>How it works:</strong> Each pixel's colour distance from the background drives dot size. Use the eyedropper to pick your background, or leave on Auto to sample the image corners.
         </div>
 
-        {/* 2. Screen Settings — immediately below pattern picker */}
-        {isPatternMode && (
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Screen Settings</span>
-            {(dtgMethod !== 'halftone-round' || dtgFrequency !== 35 || dtgAngle !== 22.5) && (
-              <button className="btn btn-ghost" style={{ fontSize: 9, padding: '2px 8px', height: 20 }} onClick={resetDtgScreen}>Reset</button>
+        {/* ── Background ── */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
+          <div style={{ ...subheadStyle, marginBottom: 8 }}>
+            <span>Background</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: bgColor ? 8 : 0 }}>
+            <button
+              onClick={() => updatePrintSettings({ bgColor: null })}
+              title="Auto-detect background from image corners"
+              style={{
+                flex: 1, height: 30, fontSize: 10, fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.05em',
+                border: !bgColor ? '1.5px solid var(--accent)' : '1px solid var(--border-2)',
+                borderRadius: 4, cursor: 'pointer',
+                background: !bgColor
+                  ? 'color-mix(in srgb, var(--accent) 15%, var(--surface-2))'
+                  : 'var(--surface-2)',
+                color: !bgColor ? 'var(--accent)' : 'var(--text-dim)',
+                transition: 'all 0.12s',
+              }}
+            >
+              Auto
+            </button>
+            <button
+              onClick={() => setPrintBgEyedropperActive(true)}
+              title="Pick background colour from canvas"
+              style={{
+                flex: 1, height: 30, fontSize: 10, fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.05em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                border: printBgEyedropperActive ? '1.5px solid var(--accent)' : '1px solid var(--border-2)',
+                borderRadius: 4, cursor: 'pointer',
+                background: printBgEyedropperActive
+                  ? 'color-mix(in srgb, var(--accent) 15%, var(--surface-2))'
+                  : 'var(--surface-2)',
+                color: printBgEyedropperActive ? 'var(--accent)' : 'var(--text-dim)',
+                transition: 'all 0.12s',
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m2 22 1-1h3l9-9"/>
+                <path d="M3 21v-3l9-9"/>
+                <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/>
+              </svg>
+              {printBgEyedropperActive ? 'Click canvas…' : 'Eyedropper'}
+            </button>
+            {bgColor && (
+              <div
+                title={`RGB(${bgColor[0]}, ${bgColor[1]}, ${bgColor[2]})`}
+                style={{
+                  width: 30, height: 30, borderRadius: 4, flexShrink: 0,
+                  background: `rgb(${bgColor[0]},${bgColor[1]},${bgColor[2]})`,
+                  border: '1px solid var(--border-2)',
+                }}
+              />
             )}
           </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <Slider
-                label={isGridPattern ? 'Frequency' : 'Scale'}
-                value={dtgFrequency}
-                min={10} max={85} step={1}
-                onChange={setDtgFrequency}
-                unit={isGridPattern ? ' LPI' : ''}
-              />
-              {isGridPattern && (
-                <Slider label="Angle" value={dtgAngle} min={0} max={180} step={0.5} onChange={setDtgAngle} unit="°" />
-              )}
-            </div>
-            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 10, marginBottom: 4 }}>
-              {isGridPattern
-                ? 'Photoshop default: 35 LPI · 22.5°. Lower = larger visible dots.'
-                : 'Lower values = finer pattern. Higher = larger/coarser.'}
-            </div>
-          </div>
-        )}
+        </div>
 
-        {/* 3. Greyscale Mask — shown when a pattern is selected */}
-        {isPatternMode && (
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Greyscale Mask</span>
-                {(dtgLevelsBlack !== 10 || dtgLevelsWhite !== 55 || dtgLevelsGamma !== 4.0) && (
-                  <button className="btn btn-ghost" style={{ fontSize: 9, padding: '2px 8px', height: 20 }} onClick={resetDtgMask}>Reset</button>
-                )}
-              </div>
-              <button
-                onClick={() => setDtgGreyscalePreview(!dtgGreyscalePreview)}
-                title="Preview the greyscale mask — white areas get dots, black areas become transparent"
-                style={{
-                  fontSize: 8, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em',
-                  textTransform: 'uppercase' as const, padding: '3px 7px',
-                  border: dtgGreyscalePreview ? '1.5px solid var(--accent)' : '1px solid var(--border-2)',
-                  borderRadius: 3, cursor: 'pointer',
-                  background: dtgGreyscalePreview ? 'color-mix(in srgb, var(--accent) 15%, var(--surface-2))' : 'var(--surface-2)',
-                  color: dtgGreyscalePreview ? 'var(--accent)' : 'var(--text-dim)',
-                  fontWeight: dtgGreyscalePreview ? 700 : 400,
-                  transition: 'all 0.12s',
-                }}
-              >
-                {dtgGreyscalePreview ? 'Preview On' : 'Preview'}
-              </button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <Slider label="Black Point" value={dtgLevelsBlack} min={0} max={200} step={1} onChange={setDtgLevelsBlack} />
-              <Slider label="White Point" value={dtgLevelsWhite} min={55} max={255} step={1} onChange={setDtgLevelsWhite} />
-              <Slider label="Midtones" value={dtgLevelsGamma} min={0.25} max={4.0} step={0.05} onChange={setDtgLevelsGamma} />
-            </div>
-            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 10, marginBottom: 4 }}>
-              {dtgGreyscalePreview
-                ? 'Mask preview: white = solid ink, black = transparent. Adjust, then toggle off to see halftone.'
-                : 'Dark areas drop out; bright areas hold ink. Lower White Point for more solid coverage.'}
-            </div>
+        {/* ── Ink Signal ── */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
+          <div style={subheadStyle}><span>Ink Signal</span></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Slider label="Shadow Cutoff" value={Math.round(printSettings.shadow * 100)} min={0} max={80} step={1}
+              onChange={v => updatePrintSettings({ shadow: v / 100 })} unit="%"
+              hint="Distance below this = no ink. Raise to remove faint edge fringing." />
+            <Slider label="Highlight" value={Math.round(printSettings.highlight * 100)} min={20} max={100} step={1}
+              onChange={v => updatePrintSettings({ highlight: v / 100 })} unit="%"
+              hint="Distance above this = full ink. Lower to boost coverage of midtones." />
+            <Slider label="Gamma" value={printSettings.gamma} min={0.25} max={4} step={0.05}
+              onChange={v => updatePrintSettings({ gamma: Math.round(v * 100) / 100 })}
+              hint="Midtone curve. >1 opens up shadows; <1 compresses them." />
           </div>
-        )}
+        </div>
 
-        {/* 4. Touch Up — refine mask with brush */}
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: isPatternMode ? 0 : 4 }}>
-          <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: 8 }}>Touch Up</div>
+        {/* ── Screen ── */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={labelStyle}>Screen</span>
+            {isChanged && (
+              <button className="btn btn-ghost" style={{ fontSize: 9, padding: '2px 8px', height: 20 }}
+                onClick={resetPrintSettings}>Reset All</button>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Slider label="Frequency" value={printSettings.lpi} min={10} max={85} step={1}
+              onChange={v => updatePrintSettings({ lpi: v })} unit=" LPI" />
+            <Slider label="Angle" value={printSettings.angle} min={0} max={180} step={0.5}
+              onChange={v => updatePrintSettings({ angle: v })} unit="°" />
+          </div>
+          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 8 }}>
+            Sine-wave screen. 45 LPI · 22.5° is a standard DTG target.
+          </div>
+        </div>
+
+        {/* ── Touch Up ── */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+          <div style={{ ...subheadStyle, marginBottom: 8 }}><span>Touch Up</span></div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             <button
               onClick={() => setDtgPaintMode(dtgPaintMode === 'erase' ? 'off' : 'erase')}
@@ -1061,20 +986,20 @@ function DtgSection() {
             <>
               <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginBottom: 8 }}>
                 {dtgPaintMode === 'erase'
-                  ? 'Paint on the canvas to erase areas from the halftone.'
-                  : 'Paint on the canvas to restore erased areas.'}
+                  ? 'Paint on the canvas to remove ink from that area.'
+                  : 'Paint on the canvas to restore ink to that area.'}
               </div>
               <Slider label="Brush Size" value={brushSize} min={4} max={120} step={2} onChange={setBrushSize} unit="px" />
             </>
           )}
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 12, paddingTop: 10 }}>
+          <div style={{ marginTop: 12 }}>
             <button
               onClick={() => setDtgPaintMask(null, null)}
               style={{
-                width: '100%', height: 32, fontSize: 10, fontFamily: 'var(--font-mono)',
+                width: '100%', height: 30, fontSize: 10, fontFamily: 'var(--font-mono)',
                 border: '1px solid var(--border-2)', borderRadius: 4, cursor: 'pointer',
                 background: 'var(--surface-2)', color: 'var(--text-dim)',
-                letterSpacing: '0.05em', textTransform: 'uppercase' as const,
+                letterSpacing: '0.05em', textTransform: 'uppercase',
                 transition: 'background 0.12s, color 0.12s',
               }}
             >
@@ -1082,6 +1007,7 @@ function DtgSection() {
             </button>
           </div>
         </div>
+
       </div>
     </Section>
   );
@@ -1594,8 +1520,7 @@ function CmykProSection() {
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | null }) {
-  const { layers, selectedLayerId, updateLayer, originalImage, separationMode, passthroughMode } = useStore();
-  const layer = layers.find((l) => l.id === selectedLayerId);
+  const { originalImage, separationMode, passthroughMode } = useStore();
 
   if (!originalImage) {
     return (
@@ -1612,17 +1537,10 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
           {separationMode === 'threshold' && (
             <>
               <div style={{ opacity: 0.4, pointerEvents: 'none' }}>
+                <DistressedTextureSection />
                 <GlobalPatternSection />
               </div>
               <ImageAdjustmentsSection />
-              <div style={{ padding: '20px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-dim)', opacity: 0.4 }}>
-                  <polyline points="15 18 9 12 15 6"/>
-                </svg>
-                <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-                  Select a layer on the left<br/>to adjust its threshold
-                </span>
-              </div>
             </>
           )}
         </div>
@@ -1676,66 +1594,12 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         ) : separationMode === 'dtg' ? (
           <DtgSection />
         ) : (
-          <GlobalPatternSection />
+          <>
+            {separationMode === 'threshold' && <DistressedTextureSection />}
+            <GlobalPatternSection />
+          </>
         )}
         {separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && separationMode !== 'dtg' && <ImageAdjustmentsSection />}
-
-        {/* Per-layer controls — threshold mode only */}
-        {separationMode === 'threshold' && layer ? (
-          <>
-            {/* Context strip — shows which layer you're editing so left/right feel connected */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '9px 14px', borderTop: '1px solid var(--border)',
-              background: 'var(--surface-2)',
-            }}>
-              <div style={{
-                width: 11, height: 11, borderRadius: '50%',
-                background: layer.color, flexShrink: 0,
-                border: '1px solid rgba(255,255,255,0.12)',
-                boxShadow: `0 0 0 2px color-mix(in srgb, ${layer.color} 25%, transparent)`,
-              }} />
-              <span style={{
-                fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono)',
-                color: 'var(--text)', letterSpacing: '0.04em',
-                flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {layer.name}
-              </span>
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>
-                {layer.thresholdMin}–{layer.thresholdMax}
-              </span>
-            </div>
-
-            <Section title="Threshold">
-              <div className="field">
-                <div className="field-row">
-                  <span className="field-label" style={{ flex: 1 }}>Range</span>
-                  <span className="field-value" style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>
-                    {layer.thresholdMin} – {layer.thresholdMax}
-                  </span>
-                </div>
-                <DualRangeSlider
-                  valueMin={layer.thresholdMin} valueMax={layer.thresholdMax}
-                  onChange={(mn, mx) => updateLayer(layer.id, { thresholdMin: mn, thresholdMax: mx })}
-                />
-              </div>
-              <Slider label="Exposure" value={layer.exposure} min={-100} max={100}
-                onChange={(v) => updateLayer(layer.id, { exposure: v })} />
-              <Slider label="Blur" value={layer.blur} min={0} max={20}
-                onChange={(v) => updateLayer(layer.id, { blur: v })} />
-            </Section>
-          </>
-        ) : separationMode === 'threshold' && !layer ? (
-          <div style={{ padding: '20px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-dim)', opacity: 0.4 }}>
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-              Select a layer on the left<br/>to adjust its threshold
-            </span>
-          </div>
-        ) : null}
 
       </div>
     </aside>

@@ -317,7 +317,6 @@ interface Props {
   onReset:        () => void;
   onBasic:        (key: string, v: number) => void;
   showSaturation?: boolean;
-  showBlur?: boolean;
 }
 
 function TabBtn({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -393,19 +392,21 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
   );
 }
 
-export function ImageAdjustPanel({ adj, onAdjMode, onLevels, onCurves, onReset, onBasic, showSaturation, showBlur = true }: Props) {
-  const mode    = adj.adjMode ?? 'basic';
-  const isDirty = mode !== 'basic'
-    ? true
-    : adj.exposure !== 0 || adj.contrast !== 0 || adj.shadows !== 0 || adj.highlights !== 0 || (adj.saturation ?? 0) !== 0 || adj.blur !== 0;
+export function ImageAdjustPanel({ adj, onAdjMode, onLevels, onCurves, onReset, onBasic, showSaturation }: Props) {
+  const mode    = adj.adjMode ?? 'levels';
+  const isDirty = mode === 'basic'
+    ? adj.exposure !== 0 || adj.contrast !== 0 || adj.shadows !== 0 || adj.highlights !== 0 || (adj.saturation ?? 0) !== 0
+    : mode === 'levels'
+    ? JSON.stringify(adj.levels) !== JSON.stringify({ inBlack: 0, inGamma: 1, inWhite: 255, outBlack: 0, outWhite: 255 })
+    : (adj.curves ?? []).length > 2 || JSON.stringify(adj.curves) !== JSON.stringify([[0,0],[255,255]]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Mode tabs */}
       <div style={{ display: 'flex', gap: 4 }}>
-        <TabBtn label="Basic"  active={mode === 'basic'}  onClick={() => onAdjMode('basic')}  />
         <TabBtn label="Levels" active={mode === 'levels'} onClick={() => onAdjMode('levels')} />
         <TabBtn label="Curves" active={mode === 'curves'} onClick={() => onAdjMode('curves')} />
+        <TabBtn label="Basic"  active={mode === 'basic'}  onClick={() => onAdjMode('basic')}  />
       </div>
 
       {/* Reset */}
@@ -437,7 +438,6 @@ export function ImageAdjustPanel({ adj, onAdjMode, onLevels, onCurves, onReset, 
         <CurvesEditor points={adj.curves ?? [[0, 0], [255, 255]]} onChange={onCurves} />
       )}
 
-      {showBlur && <Slider label="Pre-blur" value={adj.blur} min={0} max={15} onChange={v => onBasic('blur', v)} />}
     </div>
   );
 }

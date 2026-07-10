@@ -37,7 +37,7 @@ import {
 import type { LayerConfig, PatternConfig, ProcessedLayer, PatternType } from './engine/imageProcessor';
 import { generateTextureMask } from './engine/textureGenerator';
 import { applyFabricBlend } from './engine/fabricBlend';
-import { applyDtgHalftone } from './engine/dtgEngine';
+import { runV2Halftone } from './engine/dtgEngineV2';
 import { buildImportanceMap } from './engine/analysisPass';
 import { encodeTiff, encodeEps } from './engine/exportFormats';
 import { isShadowColor, nearestPantone } from './engine/pantoneMatch';
@@ -115,7 +115,14 @@ function isMobileDevice(): boolean {
   return phoneUA || tinyScreen;
 }
 
+const DtgV2TestPage = lazy(() => import('./pages/DtgV2TestPage'));
+
 function App() {
+  // Dev-only test page — bypasses auth entirely.
+  if (window.location.pathname === '/dtg-v2-test') {
+    return <Suspense fallback={null}><DtgV2TestPage /></Suspense>;
+  }
+
   useHistorySync();
   const updateAvailable = useVersionCheck();
   const { status, session, initiateLogin, switchAccount, logout, recheck } = useAuth();
@@ -171,7 +178,7 @@ function App() {
     underbaseIncludeShadows, underbaseEnabled, underbaseDensity, underbaseChoke: storeUnderbaseChoke,
     passthroughMode, bgSeedColors, bgPaintMask, bgPaintMaskDims,
     fabricTexture, fabricBlendStrength, fabricTextureDepth,
-    dtgMethod, dtgFrequency, dtgAngle, dtgLevelsBlack, dtgLevelsWhite, dtgLevelsGamma, dtgSoftness, dtgDespeckle, dtgDespeckleRadius,
+    printSettings,
     dtgPaintMask, dtgPaintMaskDims,
   } = useStore();
 
@@ -346,8 +353,8 @@ function App() {
       // Apply fabric texture blend on top of the combined result
       if (showFabricBg && fabricTexture !== 'none') {
         const fabricPath = fabricTexture === 'light'
-          ? '/textures/White_Fabric_ATW.png'
-          : '/textures/Black_Fabric_ATW.png';
+          ? '/textures/White_Fabric_ATW.jpg'
+          : '/textures/Black_Fabric_ATW.jpg';
         const fabData = await new Promise<ImageData | null>((resolve) => {
           const img = new Image();
           img.onload = () => {
@@ -485,22 +492,14 @@ function App() {
         }
       }
     } else if (separationMode === 'dtg') {
-      dtgExportImageData = applyDtgHalftone(
+      // Export uses actual document DPI for full-resolution dot sizing.
+      const exportCellSizePx = artScaleW / (printSettings.lpi * (375 / 45));
+      const v2ExportResult = runV2Halftone(
         applyAdjToImageData(artImageData),
-        {
-          method: dtgMethod,
-          frequency: dtgFrequency,
-          angle: dtgAngle,
-          levelsBlack: dtgLevelsBlack,
-          levelsWhite: dtgLevelsWhite,
-          levelsGamma: dtgLevelsGamma,
-          softness: dtgSoftness,
-          despeckle: dtgDespeckle,
-          despeckleRadius: dtgDespeckleRadius,
-        },
-        null,
-        documentDpi,
+        printSettings,
+        exportCellSizePx,
       );
+      dtgExportImageData = v2ExportResult.output;
       // Apply DTG paint mask (erase strokes only — restore lets halftone result stand)
       if (dtgPaintMask && dtgPaintMaskDims) {
         const { w: pmW, h: pmH } = dtgPaintMaskDims;
@@ -808,8 +807,8 @@ function App() {
           // Step 3: fabric blend over the composited result — same as applyFabricBlendToCanvas in preview
           if (withFabricView && fabricTexture !== 'none') {
             const fabricPath = fabricTexture === 'light'
-              ? '/textures/White_Fabric_ATW.png'
-              : '/textures/Black_Fabric_ATW.png';
+              ? '/textures/White_Fabric_ATW.jpg'
+              : '/textures/Black_Fabric_ATW.jpg';
             const fabData = await new Promise<ImageData | null>((resolve) => {
               const img = new Image();
               img.onload = () => {

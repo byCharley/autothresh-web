@@ -15,6 +15,24 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-09',
+    label: 'DTG/DTF Engine V2 — Sine-Wave Halftone',
+    added: [
+      'Completely new halftone engine for DTG/DTF mode — rebuilt from the ground up using a per-pixel sine-wave screen algorithm. Every pixel\'s colour distance from the background directly drives dot coverage, producing clean, natural halftone fades with no cell artifacts.',
+      'Auto background detection — the engine samples the four image corners to identify and suppress your background colour automatically. No manual removal step needed for most artwork.',
+      'Eyedropper tool — click any pixel on the canvas to lock in a custom background colour, overriding auto-detect.',
+      'Ink Signal controls: Shadow Cutoff (removes faint fringing), Highlight (boosts midtone coverage), and Gamma (opens up or compresses the tonal range).',
+    ],
+    improved: [
+      'Halftone dots are significantly finer and more accurate — cell size now scales with image width, matching professional RIP output quality at any document resolution.',
+      'LPI and Angle controls remain, giving full creative control over dot frequency and screen angle.',
+      'Eyedropper button now shows the correct pipette icon.',
+    ],
+    changed: [
+      'Shape picker and Stage Preview selector removed — the sine-wave screen produces superior results without needing shape selection. The output is always the final halftone-ready transparent PNG.',
+    ],
+  },
+  {
     date: '2026-07-08',
     label: 'DTG/DTF Halftone Engine Rewrite',
     added: [

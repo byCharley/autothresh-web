@@ -7,7 +7,7 @@
 export type TextureType = 'plastisol-crack' | 'plastisol-fade' | 'distressed' | 'halftone-worn';
 
 export const TEXTURE_FILES: Record<TextureType, string> = {
-  'plastisol-crack': '/textures/Plastisol_Texture_byCharleyPangus.png',
+  'plastisol-crack': '/textures/Plastisol_Texture_byCharleyPangus.jpg',
   'plastisol-fade':  '/textures/plastisol-fade.png',
   'distressed':      '/textures/distressed.png',
   'halftone-worn':   '/textures/halftone-worn.png',

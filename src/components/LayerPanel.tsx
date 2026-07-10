@@ -200,6 +200,58 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
   );
 }
 
+// ─── Threshold-layer primitives ───────────────────────────────────────────────
+
+import type { PatternType } from '../engine/imageProcessor';
+
+function DualRangeSlider({ valueMin, valueMax, onChange }: {
+  valueMin: number; valueMax: number;
+  onChange: (min: number, max: number) => void;
+}) {
+  const pctMin = (valueMin / 255) * 100;
+  const pctMax = (valueMax / 255) * 100;
+  return (
+    <div className="dual-range">
+      <div className="dual-range-track" />
+      <div className="dual-range-fill" style={{ left: `${pctMin}%`, width: `${pctMax - pctMin}%` }} />
+      <input type="range" min={0} max={255} value={valueMin}
+        onChange={(e) => onChange(Math.min(Number(e.target.value), valueMax - 1), valueMax)} />
+      <input type="range" min={0} max={255} value={valueMax}
+        onChange={(e) => onChange(valueMin, Math.max(Number(e.target.value), valueMin + 1))} />
+    </div>
+  );
+}
+
+function ThreshPatternSelect({ value, onChange }: { value: PatternType; onChange: (v: PatternType) => void }) {
+  return (
+    <select className="at-select" style={{ fontSize: 10 }} value={value} onChange={(e) => onChange(e.target.value as PatternType)}>
+      <option value="none">None (Solid)</option>
+      <optgroup label="─ Noise ─">
+        <option value="noise">Noise · Standard</option>
+        <option value="noise-coarse">Noise · Coarse</option>
+        <option value="noise-texture">Noise · Texture</option>
+      </optgroup>
+      <optgroup label="─ Halftone ─">
+        <option value="halftone-round">Halftone · Round</option>
+        <option value="halftone-diamond">Halftone · Diamond</option>
+        <option value="halftone-ellipse">Halftone · Ellipse</option>
+        <option value="halftone-square">Halftone · Square</option>
+        <option value="halftone-cross">Halftone · Cross</option>
+      </optgroup>
+      <optgroup label="─ Line Screen ─">
+        <option value="halftone-line">Line · AM</option>
+        <option value="halftone-line-am">Line · AM Smooth</option>
+        <option value="halftone-line-fm">Line · FM</option>
+        <option value="halftone-crosshatch">Line · Crosshatch</option>
+        <option value="halftone-wave">Line · Wave</option>
+      </optgroup>
+      <optgroup label="─ Texture ─">
+        <option value="reticulation">Reticulation</option>
+      </optgroup>
+    </select>
+  );
+}
+
 // ─── Brand fabric palettes ────────────────────────────────────────────────────
 
 const BRAND_PALETTES: { brand: string; colors: { hex: string; name: string }[] }[] = [
@@ -787,212 +839,30 @@ function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = 
       <SectionHeader title="Background" open={open} onToggle={() => setOpen(!open)} />
       {open && (
         <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* BG removal — hidden in DTG mode (greyscale levels handle bg dropout) */}
-          {!isDtg && <SwitchRow label="Remove BG" checked={bgRemovalEnabled} onChange={setBgRemovalEnabled} />}
-          {!isDtg && bgRemovalEnabled && (
-            <>
-              <Slider label="Tolerance" value={bgTolerance} min={1} max={100}
-                onChange={setBgTolerance} unit="%" />
-              <Slider label="Edge Softness" value={bgEdgeSoftness} min={0} max={20}
-                onChange={setBgEdgeSoftness} unit="px" />
 
-              {/* Eyedropper color picker */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-                <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Color Pick
-                </span>
-                <button
-                  onClick={() => setBgEyedropperActive(!bgEyedropperActive)}
-                  title="Click a color in the image to also remove that color globally"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    padding: '4px 8px', fontSize: 9,
-                    fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                    background: bgEyedropperActive ? 'var(--accent)' : 'var(--surface-2)',
-                    color: bgEyedropperActive ? '#000' : 'var(--text-dim)',
-                    border: `1px solid ${bgEyedropperActive ? 'var(--accent)' : 'var(--border)'}`,
-                    borderRadius: 3, cursor: 'pointer',
-                  }}
-                >
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M12 2a2 2 0 0 1 3 3L7 13l-4 1 1-4 8-8z"/>
-                    <line x1="15" y1="5" x2="19" y2="9"/>
-                  </svg>
-                  {bgEyedropperActive ? 'Click image…' : '+ Sample'}
-                </button>
-              </div>
-
-              {/* Picked color swatches */}
-              {bgSeedColors.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                  {bgSeedColors.map((hex, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setBgSeedColors(bgSeedColors.filter((_, j) => j !== i))}
-                      title={`Remove ${hex}`}
-                      style={{
-                        width: 20, height: 20, background: hex, cursor: 'pointer',
-                        border: '1px solid var(--border-2)', borderRadius: 2, position: 'relative',
-                        flexShrink: 0,
-                      }}
-                    >
-                      <span style={{
-                        position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', fontSize: 9, color: '#fff',
-                        textShadow: '0 0 3px #000', opacity: 0, transition: 'opacity 0.15s',
-                      }}
-                        className="swatch-x"
-                      >×</span>
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setBgSeedColors([])}
-                    style={{
-                      fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
-                      background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px',
-                      textDecoration: 'underline',
-                    }}
-                  >clear</button>
-                </div>
-              )}
-
-              {/* Paint-fix brush (non-DTG) */}
-              {!isDtg && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-                    <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      Paint Fix
-                    </span>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button
-                        onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
-                        title="Paint to restore areas incorrectly removed"
-                        style={{
-                          padding: '4px 8px', fontSize: 9,
-                          fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                          background: bgPaintMode === 'restore' ? '#2866cc' : 'var(--surface-2)',
-                          color: bgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
-                          border: `1px solid ${bgPaintMode === 'restore' ? '#2866cc' : 'var(--border)'}`,
-                          borderRadius: 3, cursor: 'pointer',
-                        }}
-                      >Restore</button>
-                      <button
-                        onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
-                        title="Paint to remove additional pixels"
-                        style={{
-                          padding: '4px 8px', fontSize: 9,
-                          fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                          background: bgPaintMode === 'remove' ? '#cc6600' : 'var(--surface-2)',
-                          color: bgPaintMode === 'remove' ? '#fff' : 'var(--text-dim)',
-                          border: `1px solid ${bgPaintMode === 'remove' ? '#cc6600' : 'var(--border)'}`,
-                          borderRadius: 3, cursor: 'pointer',
-                        }}
-                      >Remove</button>
-                    </div>
-                  </div>
-                  {bgPaintMode !== 'off' && (
-                    <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 1 }}>
-                      Drag on image to {bgPaintMode} · [ ] to resize brush
-                    </div>
-                  )}
-                  {bgPaintMask && (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button
-                        onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
-                        style={{
-                          fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
-                          background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: '0 2px',
-                        }}
-                      >clear paint fixes</button>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
-          )}
-
-          <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
-
-          <SwitchRow label="Show Background" checked={showFabricBg} onChange={setShowFabricBg} />
-
-          {/* Realistic fabric view */}
-          <SwitchRow
-            label="Realistic View"
-            checked={realisticOn}
-            onChange={(v) => {
-              if (!v) { setFabricTexture('none'); return; }
-              // When toggling on in DTG mode, auto-pick light/dark from artwork bg
-              if (separationMode === 'dtg' && originalImage) {
-                const [r, g, b] = detectDtgBgColor(originalImage);
-                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-                setFabricTexture(lum < 128 ? 'dark' : 'light');
-              } else {
-                setFabricTexture('light');
-              }
-              // Realistic view requires Show Background to be on
-              if (!showFabricBg) setShowFabricBg(true);
-            }}
-          />
-          {realisticOn && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                {(['light', 'dark'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setFabricTexture(t)}
-                    style={{
-                      padding: '5px 4px', fontSize: 9, fontFamily: 'var(--font-mono)',
-                      textTransform: 'uppercase', letterSpacing: '0.06em',
-                      background: fabricTexture === t ? 'var(--accent)' : 'var(--surface-2)',
-                      color: fabricTexture === t ? '#000' : 'var(--text-dim)',
-                      border: `1px solid ${fabricTexture === t ? 'var(--accent)' : 'var(--border)'}`,
-                      borderRadius: 3, cursor: 'pointer', fontWeight: fabricTexture === t ? 700 : 400,
-                    }}
-                  >
-                    {t === 'light' ? 'Light Shirt' : 'Dark Shirt'}
-                  </button>
-                ))}
-              </div>
-              <Slider
-                label="Blend Strength"
-                value={Math.round(fabricBlendStrength * 100)}
-                min={0} max={100} step={1} unit="%"
-                onChange={(v) => setFabricBlendStrength(v / 100)}
-              />
-              <Slider
-                label="Texture Depth"
-                value={Math.round(fabricTextureDepth * 100)}
-                min={0} max={100} step={1} unit="%"
-                onChange={(v) => setFabricTextureDepth(v / 100)}
-              />
-            </div>
-          )}
-
-          <div style={{ opacity: showFabricBg ? 1 : 0.45, pointerEvents: showFabricBg ? 'auto' : 'none', transition: 'opacity 0.2s', display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-            {/* Active garment color — big swatch + name + custom hex */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* ── Garment color ── */}
+          <div style={{
+            opacity: showFabricBg ? 1 : 0.45,
+            pointerEvents: showFabricBg ? 'auto' : 'none',
+            transition: 'opacity 0.2s',
+            display: 'flex', flexDirection: 'column', gap: 8,
+          }}>
+            {/* Color row: swatch + hex + name stacked */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div className="color-swatch-btn" style={{
-                background: canvasColor, width: 44, height: 44, flexShrink: 0,
-                borderRadius: 6, border: '2px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
+                background: canvasColor, width: 36, height: 36, flexShrink: 0,
+                borderRadius: 5, border: '2px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
                 boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
               }}>
                 <input type="color" value={canvasColor} onChange={(e) => setCanvasColor(e.target.value)} />
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)', letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {matchedColor ? matchedColor.name : 'Custom'}
                 </div>
-                <input
-                  className="color-hex"
-                  type="text"
-                  value={canvasColor}
-                  maxLength={7}
-                  style={{ width: '100%', minWidth: 0 }}
-                  onChange={(e) => {
-                    if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) setCanvasColor(e.target.value);
-                  }}
-                />
+                <input className="color-hex" type="text" value={canvasColor} maxLength={7}
+                  style={{ width: '100%' }}
+                  onChange={(e) => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) setCanvasColor(e.target.value); }} />
               </div>
             </div>
 
@@ -1003,28 +873,148 @@ function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = 
               ))}
             </select>
 
-            {/* Palette swatch grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 5 }}>
+            {/* Swatch grid — 7 columns, tighter */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
               {palette.map(({ hex, name }) => {
                 const active = canvasColor.toLowerCase() === hex.toLowerCase();
                 return (
-                  <button
-                    key={hex + name}
-                    onClick={() => setCanvasColor(hex)}
-                    title={name}
+                  <button key={hex + name} onClick={() => setCanvasColor(hex)} title={name}
                     style={{
-                      aspectRatio: '1', background: hex, cursor: 'pointer',
-                      borderRadius: 5,
+                      aspectRatio: '1', background: hex, cursor: 'pointer', borderRadius: 4,
                       border: active ? '2px solid var(--accent)' : '1.5px solid color-mix(in srgb, var(--border-2) 60%, transparent)',
                       boxShadow: active ? '0 0 0 1.5px var(--accent)' : 'inset 0 1px 2px rgba(0,0,0,0.15)',
-                      transition: 'border 0.1s, box-shadow 0.1s, transform 0.1s',
-                      transform: active ? 'scale(1.12)' : 'scale(1)',
+                      transform: active ? 'scale(1.1)' : 'scale(1)',
+                      transition: 'transform 0.1s, border 0.1s',
                     }}
                   />
                 );
               })}
             </div>
           </div>
+
+          <div style={{ height: 1, background: 'var(--border)' }} />
+
+          {/* ── View options ── */}
+          <SwitchRow label="Show Background" checked={showFabricBg} onChange={setShowFabricBg} />
+          <SwitchRow
+            label="Realistic View"
+            checked={realisticOn}
+            onChange={(v) => {
+              if (!v) { setFabricTexture('none'); return; }
+              if (separationMode === 'dtg' && originalImage) {
+                const [r, g, b] = detectDtgBgColor(originalImage);
+                setFabricTexture(0.299 * r + 0.587 * g + 0.114 * b < 128 ? 'dark' : 'light');
+              } else { setFabricTexture('light'); }
+              if (!showFabricBg) setShowFabricBg(true);
+            }}
+          />
+          {realisticOn && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                {(['light', 'dark'] as const).map((t) => (
+                  <button key={t} onClick={() => setFabricTexture(t)} style={{
+                    padding: '4px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    background: fabricTexture === t ? 'var(--accent)' : 'var(--surface-2)',
+                    color: fabricTexture === t ? '#000' : 'var(--text-dim)',
+                    border: `1px solid ${fabricTexture === t ? 'var(--accent)' : 'var(--border)'}`,
+                    cursor: 'pointer', fontWeight: fabricTexture === t ? 700 : 400,
+                  }}>
+                    {t === 'light' ? 'Light Shirt' : 'Dark Shirt'}
+                  </button>
+                ))}
+              </div>
+              <Slider label="Blend Strength" value={Math.round(fabricBlendStrength * 100)} min={0} max={100} step={1} unit="%" onChange={(v) => setFabricBlendStrength(v / 100)} />
+              <Slider label="Texture Depth"  value={Math.round(fabricTextureDepth  * 100)} min={0} max={100} step={1} unit="%" onChange={(v) => setFabricTextureDepth(v / 100)} />
+            </div>
+          )}
+
+          <div style={{ height: 1, background: 'var(--border)' }} />
+
+          {/* ── BG Removal ── */}
+          {!isDtg && <SwitchRow label="Remove BG" checked={bgRemovalEnabled} onChange={setBgRemovalEnabled} />}
+          {!isDtg && bgRemovalEnabled && (
+            <>
+              <Slider label="Tolerance"    value={bgTolerance}    min={1}  max={100} onChange={setBgTolerance}    unit="%" />
+              <Slider label="Edge Softness" value={bgEdgeSoftness} min={0}  max={20}  onChange={setBgEdgeSoftness} unit="px" />
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Color Sample
+                </span>
+                <button onClick={() => setBgEyedropperActive(!bgEyedropperActive)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', fontSize: 9,
+                    fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                    background: bgEyedropperActive ? 'var(--accent)' : 'var(--surface-2)',
+                    color: bgEyedropperActive ? '#000' : 'var(--text-dim)',
+                    border: `1px solid ${bgEyedropperActive ? 'var(--accent)' : 'var(--border)'}`,
+                    cursor: 'pointer',
+                  }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M12 2a2 2 0 0 1 3 3L7 13l-4 1 1-4 8-8z"/><line x1="15" y1="5" x2="19" y2="9"/>
+                  </svg>
+                  {bgEyedropperActive ? 'Click image…' : '+ Sample'}
+                </button>
+              </div>
+
+              {bgSeedColors.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                  {bgSeedColors.map((hex, i) => (
+                    <button key={i} onClick={() => setBgSeedColors(bgSeedColors.filter((_, j) => j !== i))}
+                      title={`Remove ${hex}`}
+                      style={{ width: 20, height: 20, background: hex, border: '1px solid var(--border-2)', cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+                      <span className="swatch-x" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', textShadow: '0 0 3px #000', opacity: 0, transition: 'opacity 0.15s' }}>×</span>
+                    </button>
+                  ))}
+                  <button onClick={() => setBgSeedColors([])}
+                    style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', textDecoration: 'underline' }}>
+                    clear
+                  </button>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Paint Fix
+                </span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
+                    style={{
+                      padding: '4px 8px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: bgPaintMode === 'restore' ? '#2866cc' : 'var(--surface-2)',
+                      color: bgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
+                      border: `1px solid ${bgPaintMode === 'restore' ? '#2866cc' : 'var(--border)'}`,
+                      cursor: 'pointer',
+                    }}>Restore</button>
+                  <button onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
+                    style={{
+                      padding: '4px 8px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: bgPaintMode === 'remove' ? '#cc6600' : 'var(--surface-2)',
+                      color: bgPaintMode === 'remove' ? '#fff' : 'var(--text-dim)',
+                      border: `1px solid ${bgPaintMode === 'remove' ? '#cc6600' : 'var(--border)'}`,
+                      cursor: 'pointer',
+                    }}>Remove</button>
+                </div>
+              </div>
+
+              {bgPaintMode !== 'off' && (
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                  Drag on image to {bgPaintMode} · [ ] to resize brush
+                </div>
+              )}
+              {bgPaintMask && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
+                    style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: '0 2px' }}>
+                    clear paint fixes
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </>
@@ -2159,7 +2149,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
     passthroughMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
     removeLayer, duplicateLayer, paintMasks, paintMode,
-    globalPattern, soloLayerId, setSoloLayerId,
+    globalPattern, updateGlobalPattern, soloLayerId, setSoloLayerId,
     colorSepNumColors, setColorSepNumColors,
     colorSepColorPriority, setColorSepColorPriority,
     colorSepColors, colorSepVisibility, setColorSepVisibility,
@@ -2478,7 +2468,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
         ) : separationMode === 'dtg' ? (
           <>
             <DtgImageAdjustSection />
-            <BackgroundSection defaultOpen={true} />
+            <BackgroundSection />
             <TextureSection />
           </>
         ) : separationMode === 'cmyk' ? (
@@ -2535,55 +2525,103 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
           </>
         ) : (
           <>
-            {/* Knockout */}
-            <div style={{ padding: '8px 12px 8px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Knockout
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e' }} />
-                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#22c55e', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Auto</span>
-                </div>
+            {/* Knockout / Solo strip */}
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 5px #22c55e' }} />
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#22c55e', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Knockout Auto</span>
               </div>
-              {soloLayerId ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              {soloLayerId && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
                     Solo: {layers.find(l => l.id === soloLayerId)?.name ?? soloLayerId}
                   </span>
-                  <button
-                    className="btn btn-ghost"
-                    style={{ fontSize: 9, height: 18, padding: '0 6px' }}
-                    onClick={() => setSoloLayerId(null)}
-                  >
-                    Clear
-                  </button>
-                </div>
-              ) : (
-                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
-                  Solo a layer to verify knockout
-                  <span style={{ display: 'block', fontSize: 9, color: 'var(--text-muted)', marginTop: 1 }}>
-                    Double-click a name to rename a layer
-                  </span>
+                  <button className="btn btn-ghost" style={{ fontSize: 9, height: 18, padding: '0 6px' }} onClick={() => setSoloLayerId(null)}>Clear</button>
                 </div>
               )}
             </div>
 
-            {/* Layer cards */}
-            <div style={{ padding: '8px 8px 4px' }}>
+            {/* Layer cards — expandable */}
+            <div style={{ padding: '6px 8px 4px' }}>
+              {/* Underbase card — appears at top (bottom of stack, renders first in reverse order) */}
+              {(() => {
+                const isUndExpanded = underbaseEnabled;
+                return (
+                  <div
+                    className={`layer-card ${underbaseEnabled ? 'selected' : ''}`}
+                    style={{ marginBottom: 4, flexDirection: 'column', alignItems: 'stretch', gap: 0, cursor: 'default' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'default', padding: '1px 0' }}>
+                      <div className="layer-swatch" style={{ flexShrink: 0, cursor: 'default' }}>
+                        <div className="layer-swatch-inner" style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.15)' }} />
+                      </div>
+                      <div className="layer-card-info" style={{ flex: 1, minWidth: 0 }}>
+                        <div className="layer-card-name">Underbase</div>
+                        <div className="layer-card-sub">White · Bottom layer</div>
+                      </div>
+                      <div className="layer-card-actions">
+                        {underbaseEnabled && (
+                          <button className="vis-btn" onClick={(e) => { e.stopPropagation(); setSoloLayerId(soloLayerId === '__underbase__' ? null : '__underbase__'); }}
+                            title={soloLayerId === '__underbase__' ? 'Exit solo' : 'Solo underbase'}
+                            style={{ color: soloLayerId === '__underbase__' ? 'var(--accent)' : 'var(--text-dim)', opacity: soloLayerId && soloLayerId !== '__underbase__' ? 0.35 : 0.7 }}
+                            onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
+                            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = soloLayerId === '__underbase__' ? '0.9' : soloLayerId ? '0.35' : '0.7')}>
+                            <SoloIcon active={soloLayerId === '__underbase__'} />
+                          </button>
+                        )}
+                        <button
+                          className="vis-btn"
+                          onClick={(e) => { e.stopPropagation(); setUnderbaseEnabled(!underbaseEnabled); if (underbaseEnabled && soloLayerId === '__underbase__') setSoloLayerId(null); }}
+                          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: underbaseEnabled ? 'var(--accent)' : 'var(--text-dim)', opacity: underbaseEnabled ? 1 : 0.55, letterSpacing: '0.04em', fontWeight: underbaseEnabled ? 700 : 400 }}
+                          title={underbaseEnabled ? 'Disable underbase' : 'Enable underbase'}
+                        >
+                          {underbaseEnabled ? 'ON' : 'OFF'}
+                        </button>
+                      </div>
+                    </div>
+                    {isUndExpanded && (
+                      <div style={{ padding: '8px 4px 4px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginBottom: 2, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Choke</div>
+                        <div style={{ display: 'flex', gap: 3 }}>
+                          {[0, 1, 2, 3, 4].map((n) => (
+                            <button key={n} onClick={() => setUnderbaseChoke(n)} style={{ flex: 1, padding: '4px 2px', border: `1px solid ${underbaseChoke === n ? 'var(--accent)' : 'var(--border)'}`, background: underbaseChoke === n ? 'var(--accent-dim)' : 'var(--surface-2)', cursor: 'pointer', textAlign: 'center' }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: underbaseChoke === n ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>{n === 0 ? 'Off' : `${n}px`}</div>
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>Density</span>
+                          <input type="range" min={0} max={100} step={5} value={underbaseDensity}
+                            onChange={e => setUnderbaseDensity(Number(e.target.value))}
+                            style={{ flex: 1, accentColor: 'var(--accent)' }} />
+                          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text)', minWidth: 28, textAlign: 'right' }}>{underbaseDensity}%</span>
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={underbaseIncludeShadows} onChange={e => setUnderbaseIncludeShadows(e.target.checked)}
+                            style={{ accentColor: 'var(--accent)', width: 12, height: 12, cursor: 'pointer', flexShrink: 0 }} />
+                          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Include shadows</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {[...layers].reverse().map((layer) => {
+                const isExpanded = selectedLayerId === layer.id;
                 const appliedPattern = layer.useGlobalPattern ? globalPattern.pattern : layer.pattern;
-                const patternLabel = appliedPattern === 'none' ? '' : appliedPattern.startsWith('halftone') ? 'halftone' : appliedPattern;
+                const patternLabel = appliedPattern === 'none' ? '' : appliedPattern.startsWith('halftone') ? 'HT' : 'Noise';
                 return (
                 <div
                   key={layer.id}
-                  className={`layer-card ${selectedLayerId === layer.id ? 'selected' : ''}`}
-                  style={{ marginBottom: 4, flexDirection: 'column', alignItems: 'stretch', gap: 0 }}
-                  onClick={() => selectLayer(layer.id)}
+                  className={`layer-card ${isExpanded ? 'selected' : ''}`}
+                  style={{ marginBottom: 4, flexDirection: 'column', alignItems: 'stretch', gap: 0, cursor: 'default' }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {/* Primary color swatch */}
-                    <div className="layer-swatch" title="Click to change color" style={{ flexShrink: 0 }}>
+                  {/* Header row — click to expand/collapse */}
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '1px 0' }}
+                    onClick={() => selectLayer(isExpanded ? null : layer.id)}
+                  >
+                    <div className="layer-swatch" title="Click to change color" style={{ flexShrink: 0 }} onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
                       <div className="layer-swatch-inner" style={{ background: layer.color }} />
                       <input
                         type="color"
@@ -2599,41 +2637,23 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
                           <input
                             autoFocus
                             value={editValue}
-                            style={{
-                              background: 'none', border: 'none',
-                              outline: '1px solid var(--accent)',
-                              color: 'inherit', fontSize: 'inherit',
-                              fontFamily: 'inherit', fontWeight: 'inherit',
-                              padding: '0 2px', width: '100%', borderRadius: 2,
-                            }}
+                            style={{ background: 'none', border: 'none', outline: '1px solid var(--accent)', color: 'inherit', fontSize: 'inherit', fontFamily: 'inherit', fontWeight: 'inherit', padding: '0 2px', width: '100%', borderRadius: 2 }}
                             onChange={(e) => setEditValue(e.target.value)}
                             onBlur={() => commitLayerName(layer.id)}
-                            onKeyDown={(e) => {
-                              e.stopPropagation();
-                              if (e.key === 'Enter') commitLayerName(layer.id);
-                              if (e.key === 'Escape') { setEditingLayerId(null); setEditValue(''); }
-                            }}
+                            onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') commitLayerName(layer.id); if (e.key === 'Escape') { setEditingLayerId(null); setEditValue(''); } }}
                             onClick={(e) => e.stopPropagation()}
                           />
                         ) : (
                           <>
                             <span
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                setEditingLayerId(layer.id);
-                                setEditValue(layer.name);
-                              }}
+                              onDoubleClick={(e) => { e.stopPropagation(); setEditingLayerId(layer.id); setEditValue(layer.name); }}
                               title={layer.name}
                               style={{ cursor: 'text', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
                             >
                               {layer.name}
                             </span>
                             {paintMasks[layer.id] && (
-                              <div title="Has paint mask" style={{
-                                width: 6, height: 6, borderRadius: '50%',
-                                background: paintMode !== 'off' ? '#50c878' : 'var(--text-dim)',
-                                flexShrink: 0,
-                              }} />
+                              <div title="Has paint mask" style={{ width: 6, height: 6, borderRadius: '50%', background: paintMode !== 'off' ? '#50c878' : 'var(--text-dim)', flexShrink: 0 }} />
                             )}
                           </>
                         )}
@@ -2645,52 +2665,84 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
                     </div>
                     <div className="layer-card-actions">
                       {!layers.some((l) => l.originalId === layer.id) && (
-                        <button
-                          className="vis-btn"
-                          title="Duplicate layer — copy range, then paint or erase what you need"
-                          onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }}
+                        <button className="vis-btn" title="Duplicate layer" onClick={(e) => { e.stopPropagation(); duplicateLayer(layer.id); }}
                           style={{ color: 'var(--text-dim)', opacity: 0.5 }}
                           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.5')}
-                        >
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.5')}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <rect x="9" y="9" width="13" height="13" rx="1"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
                           </svg>
                         </button>
                       )}
                       {layers.length > 1 && (
-                        <button
-                          className="vis-btn"
-                          title="Remove layer"
-                          onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }}
+                        <button className="vis-btn" title="Remove layer" onClick={(e) => { e.stopPropagation(); removeLayer(layer.id); }}
                           style={{ color: 'var(--text-dim)', opacity: 0.5 }}
                           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.5')}
-                        >
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.5')}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                           </svg>
                         </button>
                       )}
-                      <button
-                        className="vis-btn"
-                        title={soloLayerId === layer.id ? 'Exit solo — show all layers' : 'Solo: view this layer\'s knocked-out mask'}
+                      <button className="vis-btn"
+                        title={soloLayerId === layer.id ? 'Exit solo' : 'Solo layer'}
                         onClick={(e) => { e.stopPropagation(); setSoloLayerId(soloLayerId === layer.id ? null : layer.id); }}
                         style={{ color: soloLayerId === layer.id ? 'var(--accent)' : 'var(--text-dim)', opacity: soloLayerId && soloLayerId !== layer.id ? 0.35 : 0.7 }}
                         onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-                        onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = soloLayerId === layer.id ? '0.9' : soloLayerId ? '0.35' : '0.7')}
-                      >
+                        onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = soloLayerId === layer.id ? '0.9' : soloLayerId ? '0.35' : '0.7')}>
                         <SoloIcon active={soloLayerId === layer.id} />
                       </button>
-                      <button
-                        className={`vis-btn ${!layer.visible ? 'hidden-layer' : ''}`}
+                      <button className={`vis-btn ${!layer.visible ? 'hidden-layer' : ''}`}
                         onClick={(e) => { e.stopPropagation(); updateLayer(layer.id, { visible: !layer.visible }); }}
-                        title={layer.visible ? 'Hide layer' : 'Show layer'}
-                      >
+                        title={layer.visible ? 'Hide layer' : 'Show layer'}>
                         <EyeIcon visible={layer.visible} />
                       </button>
+                      <ChevronIcon open={isExpanded} />
                     </div>
                   </div>
+
+                  {/* Expanded controls */}
+                  {isExpanded && (
+                    <div style={{ padding: '8px 4px 4px', display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid var(--border)' }}>
+                      {/* Threshold range */}
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Range</span>
+                          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{layer.thresholdMin} – {layer.thresholdMax}</span>
+                        </div>
+                        <DualRangeSlider
+                          valueMin={layer.thresholdMin} valueMax={layer.thresholdMax}
+                          onChange={(mn, mx) => updateLayer(layer.id, { thresholdMin: mn, thresholdMax: mx })}
+                        />
+                      </div>
+                      {/* Exposure + Blur */}
+                      <Slider label="Exposure" value={layer.exposure} min={-100} max={100}
+                        onChange={(v) => updateLayer(layer.id, { exposure: v })} />
+                      <Slider label="Blur" value={layer.blur} min={0} max={20}
+                        onChange={(v) => updateLayer(layer.id, { blur: v })} />
+                      {/* Per-layer pattern override */}
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Pattern</span>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Custom</span>
+                            <input type="checkbox" checked={!layer.useGlobalPattern}
+                              onChange={(e) => updateLayer(layer.id, { useGlobalPattern: !e.target.checked })}
+                              style={{ accentColor: 'var(--accent)', width: 12, height: 12, cursor: 'pointer' }} />
+                          </label>
+                        </div>
+                        {!layer.useGlobalPattern && (
+                          <>
+                            <ThreshPatternSelect value={layer.pattern} onChange={(v) => updateLayer(layer.id, { pattern: v })} />
+                            <Slider label="Scale" value={layer.patternScale} min={1} max={6} step={0.5}
+                              onChange={(v) => updateLayer(layer.id, { patternScale: v })} />
+                            <Slider label="Density" value={layer.patternDensity} min={5} max={100}
+                              onChange={(v) => updateLayer(layer.id, { patternDensity: v })} unit="%" />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 );
               })}
@@ -2788,11 +2840,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
               </div>
             )}
 
-            <UnderbaseSection />
             <PantonePreviewSection />
-
-            {/* Texture overlay */}
-            <TextureSection />
 
             <BackgroundSection />
           </>

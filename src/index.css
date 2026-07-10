@@ -300,8 +300,8 @@ html, body, #root {
 }
 .layer-card:hover { border-color: var(--border-2); }
 .layer-card.selected {
-  border-color: var(--accent);
-  background: var(--accent-dim);
+  border-color: var(--border);
+  background: var(--surface-2);
 }
 .layer-card.selected::before {
   content: '';
