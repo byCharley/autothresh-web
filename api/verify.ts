@@ -120,6 +120,35 @@ const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-
 
 const SEAL_TOKEN   = process.env.SEAL_API_TOKEN!;
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
+const LDT_ACCESS   = process.env.LDT_ACCESS ?? '';
+const LDT_API_URL  = 'https://digital.ldtsoft.work/api/integrate';
+
+async function checkLdtLicense(email: string): Promise<boolean> {
+  if (!LDT_ACCESS) return false;
+  try {
+    const url = `${LDT_API_URL}/order/search?email=${encodeURIComponent(email)}&page=1&pageSize=20`;
+    console.log('LDT request:', url);
+    const r = await fetch(url, { headers: { 'Authorization': `Bearer ${LDT_ACCESS}` } });
+    const rawText = await r.text();
+    console.log('LDT HTTP status:', r.status, 'body:', rawText.slice(0, 300));
+    if (!r.ok) return false;
+    const raw = JSON.parse(rawText) as unknown;
+    let orders: unknown[] = [];
+    if (Array.isArray(raw)) {
+      orders = raw;
+    } else if (raw && typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      for (const key of ['data', 'orders', 'items', 'result', 'list']) {
+        if (Array.isArray(obj[key])) { orders = obj[key] as unknown[]; break; }
+      }
+    }
+    console.log('LDT orders found:', orders.length);
+    return orders.length > 0;
+  } catch (e) {
+    console.error('LDT check error:', e);
+    return false;
+  }
+}
 
 async function checkLifetimeOrder(token: string): Promise<boolean> {
   try {
@@ -281,16 +310,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = CREATOR_EMAILS.has(emailLower);
 
   // ── Run all async checks in parallel ─────────────────────────────────────
-  const [sealResult, lifetimeResult, testerStatus, securityResult, userPrefs] = await Promise.all([
+  const [sealResult, lifetimeResult, ldtResult, testerStatus, securityResult, userPrefs] = await Promise.all([
     sealCheckSubscription(email),
     (!isCreator) ? checkLifetimeOrder(token) : Promise.resolve(false),
+    (!isCreator) ? checkLdtLicense(emailLower) : Promise.resolve(false),
     (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve<'active' | 'paused' | null>(null),
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
     getUserPrefs(emailLower),
   ]);
 
   const { hasSub, activeSubs, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
-  const hasLifetime = lifetimeResult;
+  const hasLifetime = lifetimeResult || ldtResult;
   const isSecurityExpired = securityResult;
 
   // Testers: env var OR active DB record. Paused DB record → no access.
