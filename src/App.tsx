@@ -1333,7 +1333,7 @@ function App() {
     }
   };
 
-  const subStatus = session?.subscriptionStatus;
+  const subStatus = import.meta.env.DEV ? 'creator' : session?.subscriptionStatus;
   const isCreator = subStatus === 'creator';
 
   if (isMobile) {

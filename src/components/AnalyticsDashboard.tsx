@@ -1255,272 +1255,262 @@ function SecurityPanel({ session, onDataLoad }: { session: Session; onDataLoad?:
     (CONF_ORDER[a.confidence] ?? 3) - (CONF_ORDER[b.confidence] ?? 3)
   );
 
+  const STAT_ITEMS = data ? [
+    { label: 'Flagged',       value: data.summary.total,          dot: data.summary.unreviewed > 0 ? '#faad14' : null },
+    { label: 'Needs Review',  value: data.summary.unreviewed,     dot: data.summary.unreviewed > 0 ? '#faad14' : null },
+    { label: 'High Conf.',    value: data.summary.highConfidence,  dot: data.summary.highConfidence > 0 ? '#f87171' : null },
+    { label: 'Blocked',       value: data.summary.expired,         dot: null },
+    { label: 'Shared IPs',    value: data.summary.sharedIpsLast7d, dot: data.summary.sharedIpsLast7d > 0 ? '#faad14' : null },
+  ] : [];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid var(--border)', overflow: 'hidden' }}>
+
+      {/* ── Top stat bar ───────────────────────────────────────────────── */}
+      <div style={{
+        display: 'flex', borderBottom: '1px solid var(--border)',
+        background: 'var(--surface)',
+      }}>
+        {STAT_ITEMS.map(({ label, value, dot }, i) => (
+          <div key={label} style={{
+            flex: 1, padding: '10px 14px',
+            borderRight: i < STAT_ITEMS.length - 1 ? '1px solid var(--border)' : 'none',
+            display: 'flex', flexDirection: 'column', gap: 3,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              {dot && <div style={{ width: 5, height: 5, borderRadius: '50%', background: dot, flexShrink: 0 }} />}
+              <span style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                {loading ? '—' : value}
+              </span>
+            </div>
+            <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+              {label}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Manual block bar ────────────────────────────────────────────── */}
+      <div style={{
+        padding: '10px 14px', borderBottom: '1px solid var(--border)',
+        background: 'var(--surface)', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', flexShrink: 0, marginRight: 2 }}>
+          Manual
+        </span>
+        <input
+          type="email"
+          placeholder="user@email.com"
+          value={manualEmail}
+          onChange={e => { setManualEmail(e.target.value); setManualError(null); }}
+          style={{
+            height: 26, padding: '0 10px', fontSize: 11, fontFamily: 'var(--font-mono)',
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            color: 'var(--text)', flex: '1 1 180px', minWidth: 160,
+          }}
+        />
+        <input
+          type="text"
+          placeholder="Reason (optional)"
+          value={manualNote}
+          onChange={e => setManualNote(e.target.value)}
+          style={{
+            height: 26, padding: '0 10px', fontSize: 11, fontFamily: 'var(--font-mono)',
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            color: 'var(--text)', flex: '2 1 180px', minWidth: 140,
+          }}
+        />
+        <button
+          onClick={() => manualBlock('expire')}
+          disabled={manualActing || manualBlocked || !manualEmail.trim()}
+          style={{
+            height: 26, padding: '0 14px', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            background: manualBlocked ? '#4ade80' : '#f87171', border: 'none', color: '#000',
+            cursor: !manualEmail.trim() || manualActing || manualBlocked ? 'not-allowed' : 'pointer',
+            opacity: !manualEmail.trim() || manualActing ? 0.45 : 1, transition: 'background 0.15s', flexShrink: 0,
+          }}
+        >{manualBlocked ? '✓ Blocked' : manualActing ? '…' : 'Block'}</button>
+        <button
+          onClick={() => manualBlock('flag')}
+          disabled={manualActing || !manualEmail.trim()}
+          style={{
+            height: 26, padding: '0 12px', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
+            background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)',
+            cursor: !manualEmail.trim() || manualActing ? 'not-allowed' : 'pointer',
+            opacity: !manualEmail.trim() || manualActing ? 0.45 : 1, flexShrink: 0,
+          }}
+        >Flag Only</button>
+        {manualError && <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#f87171', flex: '1 0 100%' }}>{manualError}</span>}
+      </div>
+
       {loading && (
-        <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-          Loading security data…
+        <div style={{ padding: '48px 0', textAlign: 'center', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+          Loading…
         </div>
       )}
       {error && (
-        <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: '#f87171' }}>
+        <div style={{ padding: '48px 0', textAlign: 'center', fontSize: 11, fontFamily: 'var(--font-mono)', color: '#f87171' }}>
           {error}
         </div>
       )}
+
       {data && !loading && (
         <>
-          {/* Manual user management */}
-          <div style={{
-            padding: '12px 14px', border: '1px solid var(--border)',
-            background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8,
-          }}>
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>
-              Manual User Management
-            </span>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <input
-                type="email"
-                placeholder="user@email.com"
-                value={manualEmail}
-                onChange={e => { setManualEmail(e.target.value); setManualError(null); }}
-                style={{
-                  height: 28, padding: '0 10px', fontSize: 11,
-                  fontFamily: 'var(--font-mono)',
-                  background: 'var(--surface-2)', border: '1px solid var(--border)',
-                  color: 'var(--text)', flex: '1 1 200px', minWidth: 180,
-                }}
-              />
-              <input
-                type="text"
-                placeholder="Reason / notes (optional)"
-                value={manualNote}
-                onChange={e => setManualNote(e.target.value)}
-                style={{
-                  height: 28, padding: '0 10px', fontSize: 11,
-                  fontFamily: 'var(--font-mono)',
-                  background: 'var(--surface-2)', border: '1px solid var(--border)',
-                  color: 'var(--text)', flex: '2 1 220px', minWidth: 160,
-                }}
-              />
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                <button
-                  onClick={() => manualBlock('expire')}
-                  disabled={manualActing || manualBlocked || !manualEmail.trim()}
-                  title="Block immediately — flags and expires access"
-                  style={{
-                    height: 28, padding: '0 14px', fontSize: 10,
-                    fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                    background: manualBlocked ? '#4ade80' : '#f87171',
-                    border: 'none', color: '#000',
-                    cursor: manualActing || manualBlocked || !manualEmail.trim() ? 'not-allowed' : 'pointer',
-                    opacity: manualActing || (!manualBlocked && !manualEmail.trim()) ? 0.5 : 1,
-                    transition: 'background 0.2s',
-                  }}
-                >
-                  {manualBlocked ? '✓ Blocked' : manualActing ? 'Blocking…' : 'Block'}
-                </button>
-                <button
-                  onClick={() => manualBlock('flag')}
-                  disabled={manualActing || !manualEmail.trim()}
-                  title="Flag for review without blocking access yet"
-                  style={{
-                    height: 28, padding: '0 14px', fontSize: 10,
-                    fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                    background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)',
-                    cursor: manualActing || !manualEmail.trim() ? 'not-allowed' : 'pointer',
-                    opacity: manualActing || !manualEmail.trim() ? 0.5 : 1,
-                  }}
-                >
-                  Flag Only
-                </button>
-              </div>
-            </div>
-            {manualError && (
-              <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: '#f87171' }}>{manualError}</span>
-            )}
-          </div>
-
-          {/* Summary */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <StatCard label="Flagged Accounts" value={data.summary.total} accent={data.summary.unreviewed > 0} />
-            <StatCard label="Needs Review" value={data.summary.unreviewed} sub="Not yet actioned" accent={data.summary.unreviewed > 0} />
-            <StatCard label="High Confidence" value={data.summary.highConfidence} sub="IP + name match" />
-            <StatCard label="Expired" value={data.summary.expired} sub="Access blocked" />
-            <StatCard label="Shared IPs (7d)" value={data.summary.sharedIpsLast7d} sub="IPs with 2+ accounts" accent={data.summary.sharedIpsLast7d > 0} />
-          </div>
-
-          {/* Shared IPs breakdown */}
+          {/* ── Shared IPs ──────────────────────────────────────────────── */}
           {data.sharedIps.length > 0 && (() => {
             const blockedEmails = new Set(data.flags.filter(f => f.expired).map(f => f.email.toLowerCase()));
             return (
-              <div style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
+              <div style={{ borderBottom: '1px solid var(--border)' }}>
+                {/* Section header */}
                 <div style={{
-                  padding: '8px 14px', borderBottom: '1px solid var(--border)',
+                  padding: '7px 14px', background: 'rgba(250,173,20,0.06)',
+                  borderBottom: '1px solid var(--border)',
                   display: 'flex', alignItems: 'center', gap: 8,
                 }}>
-                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#faad14' }}>
-                    ⚠ Shared IPs — Last 7 Days
+                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#faad14', flexShrink: 0 }} />
+                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#faad14' }}>
+                    Shared IPs · Last 7 Days
                   </span>
                   <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-                    Multiple accounts logging in from the same IP
+                    Multiple accounts from same IP
                   </span>
                 </div>
-                {data.sharedIps.map(({ ip, emails }) => (
-                  <div key={ip} style={{
-                    padding: '10px 14px', borderBottom: '1px solid var(--border)',
-                    display: 'flex', flexDirection: 'column', gap: 6,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
-                        color: 'var(--text)', background: 'var(--surface-2)',
-                        border: '1px solid var(--border)', padding: '2px 8px',
-                      }}>{ip}</span>
-                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-                        {emails.length} accounts
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 8 }}>
-                      {emails.map(({ email, firstSeen }, idx) => {
-                        const isBlocked = blockedEmails.has(email.toLowerCase());
-                        const isDuplicate = idx > 0;
-                        const signedUpAt = firstSeen
-                          ? new Date(firstSeen).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
-                          : null;
-                        return (
-                          <div key={email} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 200px', minWidth: 0 }}>
-                              {isDuplicate && !isBlocked && (
-                                <span style={{
-                                  fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
-                                  letterSpacing: '0.06em', color: '#faad14',
-                                  background: 'rgba(250,173,20,0.1)', border: '1px solid rgba(250,173,20,0.3)',
-                                  padding: '1px 5px', flexShrink: 0,
-                                }}>#{idx + 1}</span>
+                <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+                  {data.sharedIps.map(({ ip, emails }) => (
+                    <div key={ip} style={{ padding: '8px 14px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: 'var(--text)', background: 'var(--surface-2)', border: '1px solid var(--border)', padding: '1px 7px' }}>{ip}</span>
+                        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{emails.length} accounts</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, paddingLeft: 4 }}>
+                        {emails.map(({ email, firstSeen }, idx) => {
+                          const isBlocked = blockedEmails.has(email.toLowerCase());
+                          const signedUpAt = firstSeen
+                            ? new Date(firstSeen).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                            : null;
+                          return (
+                            <div key={email} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {idx > 0 && !isBlocked && (
+                                <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#faad14', background: 'rgba(250,173,20,0.1)', border: '1px solid rgba(250,173,20,0.3)', padding: '1px 4px', flexShrink: 0 }}>#{idx + 1}</span>
                               )}
-                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: isBlocked ? '#f87171' : 'var(--text-muted)', textDecoration: isBlocked ? 'line-through' : 'none', opacity: isBlocked ? 0.7 : 1 }}>
-                                {email}
-                              </span>
-                              {signedUpAt && (
-                                <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', opacity: 0.6, flexShrink: 0 }}>
-                                  {signedUpAt}
-                                </span>
-                              )}
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: isBlocked ? '#f87171' : 'var(--text-muted)', textDecoration: isBlocked ? 'line-through' : 'none', opacity: isBlocked ? 0.65 : 1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email}</span>
+                              {signedUpAt && <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>{signedUpAt}</span>}
+                              {isBlocked
+                                ? <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: '#f87171', flexShrink: 0 }}>Blocked</span>
+                                : (
+                                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                    <button onClick={() => act('flag', email)} disabled={acting === email + 'flag'} style={{ height: 20, padding: '0 8px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>Flag</button>
+                                    <button onClick={() => act('expire', email)} disabled={acting === email + 'expire'} style={{ height: 20, padding: '0 8px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#f87171', cursor: 'pointer' }}>Block</button>
+                                  </div>
+                                )
+                              }
                             </div>
-                            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                              {isBlocked ? (
-                                <span style={{
-                                  height: 22, padding: '0 10px', fontSize: 9,
-                                  fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                                  background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)',
-                                  color: '#f87171', display: 'inline-flex', alignItems: 'center', gap: 4,
-                                }}>
-                                  ✓ Blocked
-                                </span>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => act('flag', email)}
-                                    disabled={acting === email + 'flag'}
-                                    style={{
-                                      height: 22, padding: '0 10px', fontSize: 9,
-                                      fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                                      background: 'transparent', border: '1px solid var(--border)',
-                                      color: 'var(--text-muted)', cursor: 'pointer',
-                                    }}
-                                  >Flag</button>
-                                  <button
-                                    onClick={() => act('expire', email)}
-                                    disabled={acting === email + 'expire'}
-                                    style={{
-                                      height: 22, padding: '0 10px', fontSize: 9,
-                                      fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                                      background: '#f8717122', border: '1px solid #f8717166',
-                                      color: '#f87171', cursor: 'pointer',
-                                    }}
-                                  >Block</button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             );
           })()}
 
-          {/* Filter tabs */}
-          <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)' }}>
+          {/* ── Filter tabs ─────────────────────────────────────────────── */}
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--surface)' }}>
             {(['unreviewed', 'all', 'expired'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
                 style={{
-                  padding: '7px 14px', border: 'none',
+                  padding: '8px 16px', border: 'none',
                   borderBottom: filter === f ? '2px solid var(--accent)' : '2px solid transparent',
                   background: 'transparent',
                   color: filter === f ? 'var(--accent)' : 'var(--text-dim)',
-                  fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
-                  letterSpacing: '0.07em', textTransform: 'uppercase', cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 700,
+                  letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
                 }}
               >
-                {f === 'unreviewed' ? `Needs Review (${data.summary.unreviewed})` : f === 'expired' ? `Blocked (${data.summary.expired})` : `All (${data.summary.total})`}
+                {f === 'unreviewed' ? `Review (${data.summary.unreviewed})` : f === 'expired' ? `Blocked (${data.summary.expired})` : `All (${data.summary.total})`}
               </button>
             ))}
           </div>
 
-          {/* Flag list */}
+          {/* ── Flag list ───────────────────────────────────────────────── */}
           {sorted.length === 0 ? (
-            <div style={{
-              padding: '40px 20px', textAlign: 'center',
-              fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
-              border: '1px solid var(--border)',
-            }}>
+            <div style={{ padding: '48px 20px', textAlign: 'center', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
               {filter === 'unreviewed' ? 'No accounts need review — all clear.' : 'No flagged accounts.'}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {sorted.map(flag => (
+            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+              {sorted.map((flag, i) => (
                 <div key={flag.id} style={{
-                  background: flag.expired ? 'rgba(248,113,113,0.04)' : 'var(--surface)',
-                  border: `1px solid ${flag.expired ? 'rgba(248,113,113,0.25)' : flag.confidence === 'high' ? 'rgba(248,113,113,0.2)' : 'var(--border)'}`,
-                  padding: '14px 16px',
+                  padding: '11px 14px',
+                  borderBottom: i < sorted.length - 1 ? '1px solid var(--border)' : 'none',
+                  background: flag.expired
+                    ? 'rgba(248,113,113,0.03)'
+                    : flag.confidence === 'high' && !flag.reviewed
+                      ? 'rgba(248,113,113,0.02)'
+                      : 'transparent',
+                  display: 'flex', flexDirection: 'column', gap: 6,
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-                    {/* Left: identity */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: flag.expired ? '#f87171' : 'var(--text)' }}>
-                          {flag.email}
-                        </span>
-                        <ConfidenceBadge level={flag.confidence} />
-                        {flag.expired && (
-                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(248,113,113,0.15)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}>
-                            BLOCKED
-                          </span>
-                        )}
-                        {!flag.expired && !flag.reviewed && (
-                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(250,173,20,0.15)', color: '#faad14', border: '1px solid rgba(250,173,20,0.3)' }}>
-                            NEEDS REVIEW
-                          </span>
-                        )}
-                        {!flag.expired && flag.reviewed && (
-                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.2)' }}>
-                            REVIEWED
-                          </span>
-                        )}
-                        {!flag.auto_flagged && (
-                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(168,85,247,0.12)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.25)' }}>
-                            MANUAL
-                          </span>
-                        )}
+                  {/* Row 1: email + badges + date + actions */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    {/* Status dot */}
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: flag.expired ? '#f87171' : !flag.reviewed ? '#faad14' : '#4ade80' }} />
+
+                    {/* Email */}
+                    <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', color: flag.expired ? '#f87171' : 'var(--text)', flex: '1 1 200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {flag.email}
+                    </span>
+
+                    {/* Confidence + type badges */}
+                    <ConfidenceBadge level={flag.confidence} />
+                    {!flag.auto_flagged && (
+                      <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.07em', padding: '2px 5px', background: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.2)', flexShrink: 0 }}>MANUAL</span>
+                    )}
+
+                    {/* Date */}
+                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0, marginLeft: 'auto' }}>
+                      {new Date(flag.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+
+                    {/* Actions */}
+                    {flag.expired ? (
+                      <button
+                        onClick={() => act('unblock', flag.email)}
+                        disabled={acting === flag.email + 'unblock'}
+                        style={{ height: 22, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', cursor: 'pointer', flexShrink: 0 }}
+                      >Unblock</button>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button
+                          onClick={() => act('expire', flag.email)}
+                          disabled={acting === flag.email + 'expire'}
+                          style={{ height: 22, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'rgba(248,113,113,0.15)', border: '1px solid rgba(248,113,113,0.35)', color: '#f87171', cursor: 'pointer' }}
+                        >{acting === flag.email + 'expire' ? '…' : 'Block'}</button>
+                        <button
+                          onClick={() => act('review', flag.email)}
+                          disabled={acting === flag.email + 'review'}
+                          style={{ height: 22, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                        >{acting === flag.email + 'review' ? '…' : 'Dismiss'}</button>
+                        <button
+                          onClick={() => act('unflag', flag.email)}
+                          disabled={acting === flag.email + 'unflag'}
+                          title="Remove flag entirely"
+                          style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer' }}
+                        >
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
                       </div>
-                      {flag.first_name && (
-                        <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
-                          {flag.first_name} · IP: {flag.ip ?? 'unknown'}
+                    )}
+                  </div>
+
+                  {/* Row 2: identity + reason */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, paddingLeft: 14 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                      {(flag.first_name || flag.ip) && (
+                        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+                          {[flag.first_name, flag.ip ? `IP ${flag.ip}` : null].filter(Boolean).join(' · ')}
                         </span>
                       )}
                       <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.5 }}>
@@ -1529,98 +1519,29 @@ function SecurityPanel({ session, onDataLoad }: { session: Session; onDataLoad?:
                       {flag.related_emails?.length > 0 && (
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
                           {flag.related_emails.map(e => (
-                            <span key={e} style={{ fontSize: 9, fontFamily: 'var(--font-mono)', padding: '1px 6px', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                              {e}
-                            </span>
+                            <span key={e} style={{ fontSize: 9, fontFamily: 'var(--font-mono)', padding: '1px 6px', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}>{e}</span>
                           ))}
                         </div>
                       )}
-                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 2 }}>
-                        Flagged {new Date(flag.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
+                      {flag.notes && (
+                        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', fontStyle: 'italic', marginTop: 1 }}>Note: {flag.notes}</span>
+                      )}
                     </div>
-
-                    {/* Right: actions */}
+                    {/* Inline notes input for unresolved flags */}
                     {!flag.expired && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-                        <input
-                          type="text"
-                          placeholder="Notes (optional)"
-                          value={notes[flag.email] ?? ''}
-                          onChange={e => setNotes(n => ({ ...n, [flag.email]: e.target.value }))}
-                          style={{
-                            height: 24, padding: '0 8px', fontSize: 10,
-                            fontFamily: 'var(--font-mono)',
-                            background: 'var(--surface-2)', border: '1px solid var(--border)',
-                            color: 'var(--text)', width: 180,
-                          }}
-                        />
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button
-                            onClick={() => act('expire', flag.email)}
-                            disabled={acting === flag.email + 'expire'}
-                            style={{
-                              flex: 1, height: 24, padding: '0 8px', fontSize: 10,
-                              fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                              background: '#f87171', border: 'none', color: '#000',
-                              cursor: 'pointer', opacity: acting === flag.email + 'expire' ? 0.5 : 1,
-                            }}
-                          >
-                            Block
-                          </button>
-                          <button
-                            onClick={() => act('review', flag.email)}
-                            disabled={acting === flag.email + 'review'}
-                            style={{
-                              flex: 1, height: 24, padding: '0 8px', fontSize: 10,
-                              fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                              background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)',
-                              cursor: 'pointer', opacity: acting === flag.email + 'review' ? 0.5 : 1,
-                            }}
-                          >
-                            Dismiss
-                          </button>
-                          <button
-                            onClick={() => act('unflag', flag.email)}
-                            disabled={acting === flag.email + 'unflag'}
-                            title="Remove flag entirely"
-                            style={{
-                              width: 24, height: 24, padding: 0, fontSize: 10,
-                              fontFamily: 'var(--font-mono)',
-                              background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)',
-                              cursor: 'pointer', opacity: acting === flag.email + 'unflag' ? 0.5 : 1,
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}
-                          >
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {flag.expired && (
-                      <div style={{ flexShrink: 0 }}>
-                        <button
-                          onClick={() => act('unblock', flag.email)}
-                          disabled={acting === flag.email + 'unblock'}
-                          style={{
-                            height: 24, padding: '0 12px', fontSize: 10,
-                            fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
-                            background: '#4ade80', border: 'none', color: '#000',
-                            cursor: 'pointer', opacity: acting === flag.email + 'unblock' ? 0.5 : 1,
-                          }}
-                        >
-                          Unblock
-                        </button>
-                      </div>
+                      <input
+                        type="text"
+                        placeholder="Add note…"
+                        value={notes[flag.email] ?? ''}
+                        onChange={e => setNotes(n => ({ ...n, [flag.email]: e.target.value }))}
+                        style={{
+                          height: 22, padding: '0 8px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                          background: 'var(--surface-2)', border: '1px solid var(--border)',
+                          color: 'var(--text)', width: 140, flexShrink: 0,
+                        }}
+                      />
                     )}
                   </div>
-                  {flag.notes && (
-                    <div style={{ marginTop: 8, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', fontStyle: 'italic' }}>
-                      Note: {flag.notes}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
