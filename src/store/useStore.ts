@@ -28,6 +28,9 @@ import type { RGB } from '../engine/colorSeparation';
 import { defaultPaletteColors } from '../engine/colorSeparation';
 export type { CmykParams };
 import type { TextureType } from '../engine/textureGenerator';
+import type { XeroxSettings } from '../engine/xeroxEngine';
+import { DEFAULT_XEROX_HYBRID } from '../engine/xeroxEngine';
+export type { XeroxSettings };
 import type { ProCmykSettings, CmykProPlates } from '../engine/cmykProEngine';
 import { DEFAULT_PRO_CMYK_SETTINGS } from '../engine/cmykProEngine';
 export type { ProCmykSettings, CmykProPlates };
@@ -385,6 +388,9 @@ interface AppState {
   grainPatternAngle:  number;
   grainOverlays:      GrainOverlay[];
 
+  // Xerox effect (texture mode post-process)
+  xeroxEnabled:  boolean;
+  xeroxSettings: XeroxSettings;
 
   processedLayers: ProcessedLayer[];
   processedLayerDims: { w: number; h: number } | null;
@@ -516,6 +522,8 @@ interface AppState {
   setGrainPatternAngle:  (v: number) => void;
   setGrainOverlays:      (v: GrainOverlay[]) => void;
 
+  setXeroxEnabled:  (v: boolean) => void;
+  setXeroxSettings: (v: XeroxSettings) => void;
 
   setProcessedLayers: (layers: ProcessedLayer[]) => void;
   setProcessedLayerDims: (dims: { w: number; h: number } | null) => void;
@@ -635,6 +643,8 @@ export const useStore = create<AppState>((set, get) => ({
   grainPatternAngle:  45,
   grainOverlays:      [],
 
+  xeroxEnabled:  false,
+  xeroxSettings: { ...DEFAULT_XEROX_HYBRID },
 
   processedLayers: [],
   processedLayerDims: null,
@@ -938,6 +948,8 @@ export const useStore = create<AppState>((set, get) => ({
   setGrainPatternAngle:  (grainPatternAngle)  => set({ grainPatternAngle }),
   setGrainOverlays:      (grainOverlays)      => set({ grainOverlays }),
 
+  setXeroxEnabled:  (xeroxEnabled)  => set({ xeroxEnabled }),
+  setXeroxSettings: (xeroxSettings) => set({ xeroxSettings }),
 
   setProcessedLayers: (processedLayers) => set({ processedLayers }),
   setProcessedLayerDims: (processedLayerDims) => set({ processedLayerDims }),

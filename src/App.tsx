@@ -116,12 +116,20 @@ function isMobileDevice(): boolean {
   return phoneUA || tinyScreen;
 }
 
-const DtgV2TestPage = lazy(() => import('./pages/DtgV2TestPage'));
+const DtgV2TestPage    = lazy(() => import('./pages/DtgV2TestPage'));
+const DitherV2TestPage = lazy(() => import('./pages/DitherV2TestPage'));
+const XeroxTestPage    = lazy(() => import('./pages/XeroxTestPage'));
 
 function App() {
-  // Dev-only test page — bypasses auth entirely.
+  // Dev-only test pages — bypass auth entirely.
   if (window.location.pathname === '/dtg-v2-test') {
     return <Suspense fallback={null}><DtgV2TestPage /></Suspense>;
+  }
+  if (window.location.pathname === '/dither-v2-test') {
+    return <Suspense fallback={null}><DitherV2TestPage /></Suspense>;
+  }
+  if (window.location.pathname === '/xerox-test') {
+    return <Suspense fallback={null}><XeroxTestPage /></Suspense>;
   }
 
   useHistorySync();

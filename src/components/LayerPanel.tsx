@@ -1286,6 +1286,25 @@ function GrainOverlaysSection() {
   );
 }
 
+// ─── Texture Background (color wheel only) ────────────────────────────────────
+
+function TextureBgSection() {
+  const { canvasColor, setCanvasColor } = useStore();
+  return (
+    <>
+      <SectionHeader title="Background" open={true} onToggle={() => {}} />
+      <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input type="color" value={canvasColor} onChange={e => setCanvasColor(e.target.value)}
+          style={{ width: 32, height: 32, border: 'none', padding: 0, cursor: 'pointer',
+            borderRadius: 6, background: 'none', flexShrink: 0 }} />
+        <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+          {canvasColor.toUpperCase()}
+        </span>
+      </div>
+    </>
+  );
+}
+
 // ─── Texture Section ──────────────────────────────────────────────────────────
 
 function TextureSection() {
@@ -2462,7 +2481,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
           <>
             <GrainOverlaysSection />
             <TextureSection />
-            <BackgroundSection />
+            <TextureBgSection />
           </>
         ) : separationMode === 'dtg' ? (
           <>

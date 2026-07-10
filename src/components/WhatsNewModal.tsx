@@ -15,6 +15,18 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-10',
+    label: 'Xerox Effect — Texture Mode',
+    added: [
+      'Xerox effect added to Texture mode — apply a photocopy look as a final pass on any texture composite. Choose between Fax (high-contrast black & white) or Hybrid (color-preserving with posterized tones and a color boost). Controls include grain strength, threshold, and color boost.',
+      'Texture mode background simplified to a single color wheel — pick any canvas color instantly.',
+    ],
+    improved: [
+      'Texture mode right panel reorganized — Color Blend, Color Zone Pattern, Xerox Effect, and Image Adjustments in a clean top-to-bottom order.',
+      'Texture mode controls stay visible and greyed out before an image is loaded, so you can configure the look before uploading.',
+    ],
+  },
+  {
     date: '2026-07-09',
     label: 'DTG/DTF Engine V2 — Sine-Wave Halftone',
     added: [

@@ -23,6 +23,7 @@ import {
 import { generateCmykProUnderbase, chokeWhitePlate } from '../engine/underbaseEngine';
 import { applyFabricBlend } from '../engine/fabricBlend';
 import { runV2Halftone, sampleV2Color } from '../engine/dtgEngineV2';
+import { runXerox } from '../engine/xeroxEngine';
 
 
 // ── CMYK Inspect Grid ─────────────────────────────────────────────────────────
@@ -257,6 +258,7 @@ export function CanvasView() {
     printSettings, updatePrintSettings, printBgEyedropperActive, setPrintBgEyedropperActive,
     dtgPaintMask, dtgPaintMaskDims, dtgPaintMode, setDtgPaintMask, pushHistory,
     thresholdPreBlur,
+    xeroxEnabled, xeroxSettings,
   } = useStore();
 
   // Raw ICC planes cache — keyed by image+profile+adjustments only.
@@ -1290,6 +1292,11 @@ export function CanvasView() {
             }
           }
 
+          // Xerox effect — final post-process on the composite
+          if (xeroxEnabled) {
+            artComposite = runXerox(artComposite, xeroxSettings);
+          }
+
           setProcessedLayers([]);
           setProcessedLayerDims({ w: artPrevW, h: artPrevH });
 
@@ -1562,6 +1569,7 @@ export function CanvasView() {
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, colorSepLockedColors,
     grainColorBlend, grainColorCount, grainBlur, grainOverlays, grainOverlayVersion,
     grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
+    xeroxEnabled, xeroxSettings,
     bgEdgeSoftness,
     printSettings,
     dtgPaintMask, dtgPaintMaskDims,

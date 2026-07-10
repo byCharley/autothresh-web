@@ -3,6 +3,8 @@ import { useStore } from '../store/useStore';
 import type { PatternType } from '../engine/imageProcessor';
 import { getBayer } from '../engine/colorSeparation';
 import { DEFAULT_V2_SETTINGS } from '../engine/dtgEngineV2';
+import { DEFAULT_XEROX_FAX, DEFAULT_XEROX_HYBRID } from '../engine/xeroxEngine';
+import type { XeroxMode } from '../engine/xeroxEngine';
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -701,14 +703,13 @@ function PaletteSection() {
   );
 }
 
-// ─── Grain Section (right panel: color blend + pattern + blur) ────────────────
+// ─── Grain Section (right panel: color blend + zone pattern) ─────────────────
 
 function GrainSection() {
   const {
     separationMode,
     grainColorBlend, setGrainColorBlend,
     grainColorCount, setGrainColorCount,
-    grainBlur, setGrainBlur,
     grainPattern, setGrainPattern,
     grainPatternScale, setGrainPatternScale,
     grainPatternDensity, setGrainPatternDensity,
@@ -724,9 +725,6 @@ function GrainSection() {
           onChange={setGrainColorBlend} unit="%" />
         <Slider label="Color Count" value={grainColorCount} min={2} max={64} step={1}
           onChange={setGrainColorCount} />
-        <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 4 }}>
-          0 = B/W · 100 = full color. Color count controls k-means zones.
-        </div>
       </Section>
 
       <Section title="Color Zone Pattern">
@@ -735,25 +733,77 @@ function GrainSection() {
           scale={grainPatternScale}
           density={grainPatternDensity}
           angle={grainPatternAngle}
-          onPattern={(v) => setGrainPattern(v)}
-          onScale={(v) => setGrainPatternScale(v)}
-          onDensity={(v) => setGrainPatternDensity(v)}
-          onAngle={(v) => setGrainPatternAngle(v)}
+          onPattern={setGrainPattern}
+          onScale={setGrainPatternScale}
+          onDensity={setGrainPatternDensity}
+          onAngle={setGrainPatternAngle}
           scaleMaxOverride={40}
         />
-        <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 6 }}>
-          Roughens the edges between color zones with organic noise or halftone patterns. Scale sets grain size, Density sets how much bleeding occurs.
-        </div>
-      </Section>
-
-      <Section title="Pre-Grain Blur">
-        <Slider label="Blur" value={grainBlur} min={0} max={40} step={1}
-          onChange={setGrainBlur} unit="px" />
-        <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6, marginTop: 4 }}>
-          Blurs before color analysis — softer, more painterly color zones.
-        </div>
       </Section>
     </>
+  );
+}
+
+// ─── Xerox Section ────────────────────────────────────────────────────────────
+
+function XeroxSection() {
+  const {
+    separationMode,
+    xeroxEnabled, setXeroxEnabled,
+    xeroxSettings, setXeroxSettings,
+  } = useStore();
+
+  if (separationMode !== 'texture') return null;
+
+  const mode = xeroxSettings.mode as XeroxMode;
+  const set = (patch: Partial<typeof xeroxSettings>) =>
+    setXeroxSettings({ ...xeroxSettings, ...patch });
+
+  const switchMode = (m: XeroxMode) =>
+    setXeroxSettings(m === 'fax' ? { ...DEFAULT_XEROX_FAX } : { ...DEFAULT_XEROX_HYBRID });
+
+  return (
+    <Section title="Xerox Effect" defaultOpen={false}>
+      <SwitchRow label="Enable" checked={xeroxEnabled} onChange={setXeroxEnabled} />
+
+      {xeroxEnabled && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 6 }}>
+          {/* Mode toggle */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['fax', 'hybrid'] as XeroxMode[]).map(m => (
+              <button key={m} onClick={() => switchMode(m)} style={{
+                flex: 1, padding: '5px 0', borderRadius: 6, border: 'none', cursor: 'pointer',
+                fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono)', textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                background: mode === m ? 'var(--accent)' : 'var(--surface-3)',
+                color: mode === m ? '#fff' : 'var(--text-dim)',
+                transition: 'background 0.12s',
+              }}>
+                {m}
+              </button>
+            ))}
+          </div>
+
+          <Slider label="Threshold" value={Math.round(xeroxSettings.threshold * 100)} min={5} max={75} step={1}
+            onChange={v => set({ threshold: v / 100 })} unit="%" />
+          <Slider label="Grain" value={xeroxSettings.fineStrength} min={0} max={4} step={0.05}
+            onChange={v => set({ fineStrength: v })} />
+
+          {mode === 'hybrid' && (
+            <Slider label="Color boost" value={xeroxSettings.colorBoost} min={0} max={1} step={0.01}
+              onChange={v => set({ colorBoost: v })} />
+          )}
+
+          <button onClick={() => set({ seed: Math.floor(Math.random() * 9999) })} style={{
+            padding: '5px 0', background: 'var(--surface-3)', border: '1px solid var(--border)',
+            borderRadius: 6, color: 'var(--text-dim)', fontSize: 10, cursor: 'pointer',
+            fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
+          }}>
+            ⟳  Randomize Grain
+          </button>
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -1521,6 +1571,13 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
               <ImageAdjustmentsSection />
             </>
           )}
+          {separationMode === 'texture' && (
+            <div style={{ opacity: 0.4, pointerEvents: 'none' }}>
+              <GrainSection />
+              <XeroxSection />
+              <ImageAdjustmentsSection />
+            </div>
+          )}
         </div>
       </aside>
     );
@@ -1568,7 +1625,10 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         ) : separationMode === 'color-sep' ? (
           <ColorSepSection />
         ) : separationMode === 'texture' ? (
-          <GrainSection />
+          <>
+            <GrainSection />
+            <XeroxSection />
+          </>
         ) : separationMode === 'dtg' ? (
           <DtgSection />
         ) : (
