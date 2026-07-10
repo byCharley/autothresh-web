@@ -801,7 +801,6 @@ function DtgSection() {
     dtgPaintMode, setDtgPaintMode,
     setDtgPaintMask,
     brushSize, setBrushSize,
-    setDtgSheetModalOpen,
   } = useStore();
 
   const disabled = !originalImage;
@@ -991,23 +990,6 @@ function DtgSection() {
           </div>
         </div>
 
-        {/* ── Build Sheet ── */}
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 2 }}>
-          <button
-            onClick={() => setDtgSheetModalOpen(true)}
-            disabled={disabled}
-            style={{
-              width: '100%', height: 34, fontSize: 10, fontFamily: 'var(--font-mono)',
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-              border: '1px solid var(--accent)', borderRadius: 4, cursor: disabled ? 'not-allowed' : 'pointer',
-              background: 'color-mix(in srgb, var(--accent) 12%, var(--surface-2))',
-              color: 'var(--accent)', fontWeight: 700,
-              transition: 'all 0.12s',
-            }}
-          >
-            Build Sheet
-          </button>
-        </div>
 
       </div>
     </Section>
@@ -1529,12 +1511,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         <div className="control-scroll">
           <DocumentSection />
           <RegistrationSection />
-          {separationMode === 'dtg' && (
-            <>
-              <DtgSection />
-              <ImageAdjustmentsSection />
-            </>
-          )}
+          {separationMode === 'dtg' && <DtgSection />}
           {separationMode === 'threshold' && (
             <>
               <div style={{ opacity: 0.4, pointerEvents: 'none' }}>

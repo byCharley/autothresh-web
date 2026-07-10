@@ -14,7 +14,6 @@ import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components
 import { LoginSplash } from './components/LoginSplash';
 
 const ExportModal     = lazy(() => import('./components/ExportModal').then(m => ({ default: m.ExportModal })));
-const DtgSheetModal   = lazy(() => import('./components/DtgSheetModal').then(m => ({ default: m.DtgSheetModal })));
 const MockupPreview   = lazy(() => import('./components/MockupPreview').then(m => ({ default: m.MockupPreview })));
 const PresetsModal    = lazy(() => import('./components/PresetsModal').then(m => ({ default: m.PresetsModal })));
 const EulaModal       = lazy(() => import('./components/EulaModal').then(m => ({ default: m.EulaModal })));
@@ -39,7 +38,7 @@ import type { LayerConfig, PatternConfig, ProcessedLayer, PatternType } from './
 import { generateTextureMask } from './engine/textureGenerator';
 import { applyFabricBlend } from './engine/fabricBlend';
 import { runV2Halftone } from './engine/dtgEngineV2';
-import { packSheet } from './engine/sheetEngine';
+import { packSheet, calcLayout as calcSheetLayout } from './engine/sheetEngine';
 import { buildImportanceMap } from './engine/analysisPass';
 import { encodeTiff, encodeEps } from './engine/exportFormats';
 import { isShadowColor, nearestPantone } from './engine/pantoneMatch';
@@ -183,7 +182,7 @@ function App() {
     fabricTexture, fabricBlendStrength, fabricTextureDepth,
     printSettings,
     dtgPaintMask, dtgPaintMaskDims,
-    sheetSettings, dtgSheetModalOpen, setDtgSheetModalOpen,
+    sheetSettings,
   } = useStore();
 
   useEffect(() => {
@@ -269,10 +268,12 @@ function App() {
     if (!originalImage) return;
     setSheetGenerating(true);
     try {
-      const { dpi, designWidthIn } = sheetSettings;
+      const { dpi } = sheetSettings;
       const aspect = originalImage.height / originalImage.width;
-      const designWidthPx = Math.round(designWidthIn * dpi);
-      const designHeightPx = Math.round(designWidthPx * aspect);
+      // Auto-fill: compute design size from sheet layout (same as preview)
+      const layout = calcSheetLayout(sheetSettings, aspect);
+      const designWidthPx = Math.round(layout.designWidthIn * dpi);
+      const designHeightPx = Math.round(layout.designHeightIn * dpi);
 
       // Scale originalImage to design print size
       const srcCanvas = canvasFromImageData(originalImage);
@@ -331,8 +332,8 @@ function App() {
         }
       }
 
-      // Run halftone at sheet DPI
-      const cellSizePx = designWidthPx / (printSettings.lpi * (375 / 45));
+      // Run halftone at sheet DPI — cell size is physically correct: dpi / lpi
+      const cellSizePx = dpi / printSettings.lpi;
       const { output } = runV2Halftone(artData, printSettings, cellSizePx);
 
       // Build design canvas
@@ -341,7 +342,7 @@ function App() {
       designCanvas.height = designHeightPx;
       designCanvas.getContext('2d')!.putImageData(output, 0, 0);
 
-      // Pack onto sheet
+      // Pack onto sheet (packSheet recomputes the same layout internally)
       const { canvas } = packSheet(designCanvas, sheetSettings, aspect);
 
       // Download
@@ -349,13 +350,12 @@ function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const wLabel = designWidthIn.toFixed(1).replace('.', 'p');
       const shW = sheetSettings.sheetWidthIn.toFixed(1).replace('.', 'p');
       const shH = sheetSettings.sheetHeightIn.toFixed(1).replace('.', 'p');
-      a.download = `dtf-sheet-${shW}x${shH}in-${dpi}dpi-design${wLabel}in.png`;
+      a.download = `dtf-sheet-${shW}x${shH}in-${dpi}dpi-x${sheetSettings.quantity}.png`;
       a.click();
       URL.revokeObjectURL(url);
-      setDtgSheetModalOpen(false);
+      setShowExport(false);
     } finally {
       setSheetGenerating(false);
     }
@@ -1346,7 +1346,7 @@ function App() {
         onAnalytics={() => setShowAnalytics(true)}
         session={session}
       >
-        {showExport && <ExportModal onClose={() => setShowExport(false)} onExport={handleExport} defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'autothresh'} separationMode={separationMode} />}
+        {showExport && <ExportModal onClose={() => setShowExport(false)} onExport={handleExport} onGenerateSheet={handleGenerateDtgSheet} generatingSheet={sheetGenerating} defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'autothresh'} separationMode={separationMode} />}
         {mockupOpen && <MockupPreview onClose={() => setMockupOpen(false)} />}
         {presetsOpen && session?.token && <PresetsModal token={session.token} onClose={() => setPresetsOpen(false)} />}
         {showFaq      && <FaqModal      onClose={() => setShowFaq(false)} />}
@@ -1403,21 +1403,14 @@ function App() {
         <ExportModal
           onClose={() => setShowExport(false)}
           onExport={handleExport}
+          onGenerateSheet={handleGenerateDtgSheet}
+          generatingSheet={sheetGenerating}
           defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'autothresh'}
           separationMode={separationMode}
         />
       )}
       {mockupOpen && (
         <MockupPreview onClose={() => setMockupOpen(false)} />
-      )}
-      {dtgSheetModalOpen && (
-        <Suspense fallback={null}>
-          <DtgSheetModal
-            onClose={() => setDtgSheetModalOpen(false)}
-            onGenerate={handleGenerateDtgSheet}
-            generating={sheetGenerating}
-          />
-        </Suspense>
       )}
       {presetsOpen && session?.token && (
         <PresetsModal token={session.token} onClose={() => setPresetsOpen(false)} />

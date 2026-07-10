@@ -374,7 +374,6 @@ interface AppState {
   printSettings:         V2Settings;
   printBgEyedropperActive: boolean;
   sheetSettings:         SheetSettings;
-  dtgSheetModalOpen:     boolean;
 
   // Grain mode
   grainColorBlend:    number;  // 0 = B/W, 100 = full color
@@ -507,7 +506,6 @@ interface AppState {
   resetPrintSettings:       () => void;
   setPrintBgEyedropperActive: (v: boolean) => void;
   updateSheetSettings:      (partial: Partial<SheetSettings>) => void;
-  setDtgSheetModalOpen:     (v: boolean) => void;
 
   setGrainColorBlend:    (v: number) => void;
   setGrainColorCount:    (v: number) => void;
@@ -627,7 +625,6 @@ export const useStore = create<AppState>((set, get) => ({
   printSettings:           DEFAULT_V2_SETTINGS,
   printBgEyedropperActive: false,
   sheetSettings:           { ...DEFAULT_SHEET_SETTINGS },
-  dtgSheetModalOpen:       false,
 
   grainColorBlend:    50,
   grainColorCount:    8,
@@ -931,7 +928,6 @@ export const useStore = create<AppState>((set, get) => ({
   resetPrintSettings:  () => set({ printSettings: DEFAULT_V2_SETTINGS }),
   setPrintBgEyedropperActive: (printBgEyedropperActive) => set({ printBgEyedropperActive }),
   updateSheetSettings: (partial) => set((s) => ({ sheetSettings: { ...s.sheetSettings, ...partial } })),
-  setDtgSheetModalOpen: (dtgSheetModalOpen) => set({ dtgSheetModalOpen }),
 
   setGrainColorBlend:    (grainColorBlend)    => set({ grainColorBlend }),
   setGrainColorCount:    (grainColorCount)    => set({ grainColorCount }),
