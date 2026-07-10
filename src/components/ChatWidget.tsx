@@ -46,6 +46,9 @@ export function ChatWidget({ session }: { session: Session }) {
   const [sending, setSending]         = useState(false);
   const [unread, setUnread]           = useState(0);
   const [view, setView]               = useState<'chat' | 'new'>('chat');
+  const [hoverMsgId, setHoverMsgId]   = useState<number | null>(null);
+  const [editingId, setEditingId]     = useState<number | null>(null);
+  const [editText, setEditText]       = useState('');
   const bottomRef                     = useRef<HTMLDivElement>(null);
   const replyRef                      = useRef<HTMLTextAreaElement>(null);
 
@@ -145,6 +148,21 @@ export function ChatWidget({ session }: { session: Session }) {
     });
     loadMessages(activeTicket.id);
     setSending(false);
+  }
+
+  async function editMessage(id: number, newText: string) {
+    if (!newText.trim()) return;
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, message: newText.trim() } : m));
+    setEditingId(null);
+    await fetch('/api/chat', {
+      method: 'PATCH', headers: authH(),
+      body: JSON.stringify({ resource: 'message', id, message: newText.trim() }),
+    });
+  }
+
+  async function deleteMessage(id: number) {
+    setMessages(prev => prev.filter(m => m.id !== id));
+    await fetch(`/api/chat?resource=message&id=${id}`, { method: 'DELETE', headers: authH() });
   }
 
   const hasOpenTicket = tickets.some(t => t.status !== 'solved');
@@ -284,34 +302,91 @@ export function ChatWidget({ session }: { session: Session }) {
               const showDate = idx === 0 || fmtDate(messages[idx - 1].created_at) !== fmtDate(msg.created_at);
               const isLast = idx === messages.length - 1;
               const isRead = isUser && isLast && msg.read_at !== null;
+              const isEditing = editingId === msg.id;
+              const isHovered = hoverMsgId === msg.id;
               return (
-                <div key={msg.id}>
+                <div key={msg.id}
+                  onMouseEnter={() => isUser && setHoverMsgId(msg.id)}
+                  onMouseLeave={() => setHoverMsgId(null)}
+                >
                   {showDate && (
                     <div style={{ textAlign: 'center', fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', margin: '4px 0 8px' }}>{fmtDate(msg.created_at)}</div>
                   )}
-                  <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start' }}>
+                  <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 4 }}>
+                    {/* Action buttons — appear to the left of user bubbles on hover */}
+                    {isUser && isHovered && !isEditing && activeTicket?.status !== 'solved' && (
+                      <div style={{ display: 'flex', gap: 3, flexShrink: 0, marginBottom: 18 }}>
+                        <button
+                          onClick={() => { setEditingId(msg.id); setEditText(msg.message); setHoverMsgId(null); }}
+                          title="Edit"
+                          style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-dim)' }}
+                        >
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => deleteMessage(msg.id)}
+                          title="Delete"
+                          style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface-2)', border: '1px solid var(--border)', cursor: 'pointer', color: '#f87171' }}
+                        >
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                            <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+
                     <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column', gap: 2, alignItems: isUser ? 'flex-end' : 'flex-start' }}>
                       {!isUser && (
                         <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginLeft: 2 }}>Support</span>
                       )}
-                      <div style={{
-                        padding: '8px 11px', fontSize: 12, lineHeight: 1.55,
-                        fontFamily: 'var(--font-sans)',
-                        background: isUser ? 'var(--accent)' : 'var(--surface)',
-                        color: isUser ? '#111' : 'var(--text)',
-                        border: isUser ? 'none' : '1px solid var(--border)',
-                        wordBreak: 'break-word',
-                      }}>
-                        {msg.message}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{fmtTime(msg.created_at)}</span>
-                        {isUser && isLast && (
-                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: isRead ? 'var(--accent)' : 'var(--text-dim)' }}>
-                            {isRead ? '✓✓ Read' : '✓ Sent'}
-                          </span>
-                        )}
-                      </div>
+
+                      {/* Inline edit mode */}
+                      {isEditing ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: 220 }}>
+                          <textarea
+                            autoFocus
+                            value={editText}
+                            onChange={e => setEditText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); editMessage(msg.id, editText); }
+                              if (e.key === 'Escape') { setEditingId(null); }
+                            }}
+                            rows={3}
+                            style={{ width: '100%', padding: '7px 10px', fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: '1px solid var(--accent)', color: 'var(--text)', resize: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
+                          />
+                          <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                            <button onClick={() => setEditingId(null)} style={{ height: 24, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text-dim)', cursor: 'pointer' }}>Cancel</button>
+                            <button onClick={() => editMessage(msg.id, editText)} disabled={!editText.trim()} style={{ height: 24, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'var(--accent)', border: 'none', color: '#111', cursor: 'pointer' }}>Save</button>
+                          </div>
+                          <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', textAlign: 'right' }}>⌘↵ save · Esc cancel</div>
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: '8px 11px', fontSize: 12, lineHeight: 1.55,
+                          fontFamily: 'var(--font-sans)',
+                          background: isUser ? 'var(--accent)' : 'var(--surface)',
+                          color: isUser ? '#111' : 'var(--text)',
+                          border: isUser ? 'none' : '1px solid var(--border)',
+                          wordBreak: 'break-word',
+                        }}>
+                          {msg.message}
+                        </div>
+                      )}
+
+                      {!isEditing && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{fmtTime(msg.created_at)}</span>
+                          {isUser && isLast && (
+                            <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: isRead ? 'var(--accent)' : 'var(--text-dim)' }}>
+                              {isRead ? '✓✓ Read' : '✓ Sent'}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

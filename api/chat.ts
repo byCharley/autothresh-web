@@ -39,7 +39,7 @@ async function identify(token: string): Promise<{ email: string; name: string; i
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -181,6 +181,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ ok: true });
     }
 
+    if (resource === 'message') {
+      const { id, message } = body as { id?: number; message?: string };
+      if (!id || !message?.trim()) return res.status(400).json({ error: 'id and message required' });
+
+      // Verify ownership: fetch message + ticket, ensure user owns it
+      const mr = await sb(`support_messages?id=eq.${id}&select=id,ticket_id,sender`);
+      const msgRows = await mr.json() as Array<{ ticket_id: string; sender: string }>;
+      if (!msgRows.length) return res.status(404).json({ error: 'Not found' });
+      const msgRow = msgRows[0];
+      if (!user.isCreator) {
+        if (msgRow.sender !== 'user') return res.status(403).json({ error: 'Forbidden' });
+        const tr = await sb(`support_tickets?id=eq.${msgRow.ticket_id}&user_email=eq.${encodeURIComponent(user.email)}&select=id`);
+        if (!(await tr.json() as unknown[]).length) return res.status(403).json({ error: 'Forbidden' });
+      }
+
+      await sb(`support_messages?id=eq.${id}`, 'PATCH', { message: message.trim() });
+      return res.status(200).json({ ok: true });
+    }
+
     if (resource === 'presence') {
       if (!user.isCreator) return res.status(403).json({ error: 'Forbidden' });
       const update: Record<string, unknown> = { last_seen: new Date().toISOString() };
@@ -190,6 +209,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(400).json({ error: 'Unknown resource' });
+  }
+
+  // ── DELETE ────────────────────────────────────────────────────────────────
+  if (req.method === 'DELETE') {
+    const id = Number(req.query.id);
+    if (!id) return res.status(400).json({ error: 'id required' });
+
+    // Verify ownership
+    const mr = await sb(`support_messages?id=eq.${id}&select=id,ticket_id,sender`);
+    const msgRows = await mr.json() as Array<{ ticket_id: string; sender: string }>;
+    if (!msgRows.length) return res.status(404).json({ error: 'Not found' });
+    const msgRow = msgRows[0];
+    if (!user.isCreator) {
+      if (msgRow.sender !== 'user') return res.status(403).json({ error: 'Forbidden' });
+      const tr = await sb(`support_tickets?id=eq.${msgRow.ticket_id}&user_email=eq.${encodeURIComponent(user.email)}&select=id`);
+      if (!(await tr.json() as unknown[]).length) return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    await sb(`support_messages?id=eq.${id}`, 'DELETE');
+    return res.status(200).json({ ok: true });
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
