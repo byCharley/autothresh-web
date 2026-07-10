@@ -344,6 +344,9 @@ function ChatPanel({ session }: { session: Session }) {
   const [isOnline, setIsOnline]       = useState(false);
   const [toggling, setToggling]       = useState(false);
   const [showAll, setShowAll]         = useState(false);
+  const [hoverMsgId, setHoverMsgId]   = useState<number | null>(null);
+  const [editingId, setEditingId]     = useState<number | null>(null);
+  const [editText, setEditText]       = useState('');
   const bottomRef                     = useRef<HTMLDivElement>(null);
 
   const H = useCallback(() => ({ Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json' }), [session.token]);
@@ -404,6 +407,17 @@ function ChatPanel({ session }: { session: Session }) {
     await fetch('/api/chat', { method: 'PATCH', headers: H(), body: JSON.stringify({ resource: 'ticket', id, status }) });
     setTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t));
     if (active?.id === id) setActive(prev => prev ? { ...prev, status } : prev);
+  }
+
+  async function editMessage(id: number, newText: string) {
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, message: newText.trim() } : m));
+    setEditingId(null);
+    await fetch('/api/chat', { method: 'PATCH', headers: H(), body: JSON.stringify({ resource: 'message', id, message: newText.trim() }) });
+  }
+
+  async function deleteMessage(id: number) {
+    setMessages(prev => prev.filter(m => m.id !== id));
+    await fetch(`/api/chat?resource=message&id=${id}`, { method: 'DELETE', headers: H() });
   }
 
   const totalUnread = tickets.reduce((s, t) => s + (t.unread_by_creator || 0), 0);
@@ -511,21 +525,62 @@ function ChatPanel({ session }: { session: Session }) {
               const showDate = idx === 0 || fmtMsgDate(messages[idx - 1].created_at) !== fmtMsgDate(msg.created_at);
               const isLast = idx === messages.length - 1;
               const isRead = isCreator && isLast && active.unread_by_user === 0;
+              const isHovered = hoverMsgId === msg.id;
+              const isEditing = editingId === msg.id;
               return (
                 <div key={msg.id}>
                   {showDate && <div style={{ textAlign: 'center', fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', margin: '4px 0 8px' }}>{fmtMsgDate(msg.created_at)}</div>}
-                  <div style={{ display: 'flex', justifyContent: isCreator ? 'flex-end' : 'flex-start' }}>
+                  <div
+                    style={{ display: 'flex', justifyContent: isCreator ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 4 }}
+                    onMouseEnter={() => setHoverMsgId(msg.id)}
+                    onMouseLeave={() => setHoverMsgId(null)}
+                  >
+                    {/* Action buttons for creator messages */}
+                    {isCreator && isHovered && !isEditing && (
+                      <div style={{ display: 'flex', gap: 2, marginBottom: 4 }}>
+                        <button
+                          onClick={() => { setEditingId(msg.id); setEditText(msg.message); }}
+                          title="Edit"
+                          style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 11 }}
+                        >✏️</button>
+                        <button
+                          onClick={() => deleteMessage(msg.id)}
+                          title="Delete"
+                          style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer', color: '#f87171', fontSize: 11 }}
+                        >🗑</button>
+                      </div>
+                    )}
                     <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', gap: 2, alignItems: isCreator ? 'flex-end' : 'flex-start' }}>
                       {!isCreator && <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginLeft: 2 }}>{active.user_name || active.user_email}</span>}
-                      <div style={{
-                        padding: '8px 11px', fontSize: 12, lineHeight: 1.55, fontFamily: 'var(--font-sans)',
-                        background: isCreator ? 'var(--accent)' : 'var(--surface)',
-                        color: isCreator ? '#111' : 'var(--text)',
-                        border: isCreator ? 'none' : '1px solid var(--border)',
-                        wordBreak: 'break-word',
-                      }}>
-                        {msg.message}
-                      </div>
+                      {isEditing ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: 260 }}>
+                          <textarea
+                            autoFocus
+                            value={editText}
+                            onChange={e => setEditText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); editMessage(msg.id, editText); }
+                              if (e.key === 'Escape') setEditingId(null);
+                            }}
+                            rows={3}
+                            style={{ width: '100%', padding: '7px 10px', fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: '1px solid var(--accent)', color: 'var(--text)', resize: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
+                          />
+                          <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                            <button onClick={() => setEditingId(null)} style={{ height: 22, padding: '0 8px', fontSize: 9, fontFamily: 'var(--font-mono)', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancel</button>
+                            <button onClick={() => editMessage(msg.id, editText)} disabled={!editText.trim()} style={{ height: 22, padding: '0 8px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: 'var(--accent)', border: 'none', color: '#111', cursor: 'pointer' }}>Save</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{
+                          padding: '8px 11px', fontSize: 12, lineHeight: 1.55, fontFamily: 'var(--font-sans)',
+                          background: isCreator ? 'var(--accent)' : 'var(--surface)',
+                          color: isCreator ? '#111' : 'var(--text)',
+                          border: isCreator ? 'none' : '1px solid var(--border)',
+                          wordBreak: 'break-word',
+                        }}>
+                          {msg.message}
+                        </div>
+                      )}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{fmtMsgTime(msg.created_at)}</span>
                         {isCreator && isLast && (
