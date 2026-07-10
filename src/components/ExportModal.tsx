@@ -148,7 +148,7 @@ export function ExportModal({ onClose, onExport, onGenerateSheet, generatingShee
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Sheet preview drawing
-  const { unit, sheetWidthIn, sheetHeightIn, quantity, spacingIn, cutLines, dpi, rotateDesign } = sheetSettings;
+  const { unit, sheetWidthIn, sheetHeightIn, quantity, spacingIn, dpi, rotateDesign } = sheetSettings;
   const artAspect = originalImage ? originalImage.height / originalImage.width : 1;
   const sheetLayout = calcLayout(sheetSettings, artAspect);
 
