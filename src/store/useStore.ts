@@ -3,6 +3,9 @@ import type { LayerConfig, PatternConfig, ProcessedLayer, ImageAdjustments, Sepa
 import type { V2Settings } from '../engine/dtgEngineV2';
 import { DEFAULT_V2_SETTINGS } from '../engine/dtgEngineV2';
 export type { V2Settings };
+import type { SheetSettings } from '../engine/sheetEngine';
+import { DEFAULT_SHEET_SETTINGS } from '../engine/sheetEngine';
+export type { SheetSettings };
 
 export type GrainBlendMode = 'multiply' | 'screen' | 'overlay' | 'soft-light' | 'hard-light' | 'color-burn' | 'color-dodge' | 'luminosity';
 
@@ -370,6 +373,8 @@ interface AppState {
   // DTG/DTF mode (V2 engine)
   printSettings:         V2Settings;
   printBgEyedropperActive: boolean;
+  sheetSettings:         SheetSettings;
+  dtgSheetModalOpen:     boolean;
 
   // Grain mode
   grainColorBlend:    number;  // 0 = B/W, 100 = full color
@@ -501,6 +506,8 @@ interface AppState {
   updatePrintSettings:      (partial: Partial<V2Settings>) => void;
   resetPrintSettings:       () => void;
   setPrintBgEyedropperActive: (v: boolean) => void;
+  updateSheetSettings:      (partial: Partial<SheetSettings>) => void;
+  setDtgSheetModalOpen:     (v: boolean) => void;
 
   setGrainColorBlend:    (v: number) => void;
   setGrainColorCount:    (v: number) => void;
@@ -619,6 +626,8 @@ export const useStore = create<AppState>((set, get) => ({
 
   printSettings:           DEFAULT_V2_SETTINGS,
   printBgEyedropperActive: false,
+  sheetSettings:           { ...DEFAULT_SHEET_SETTINGS },
+  dtgSheetModalOpen:       false,
 
   grainColorBlend:    50,
   grainColorCount:    8,
@@ -921,6 +930,8 @@ export const useStore = create<AppState>((set, get) => ({
   updatePrintSettings: (partial) => set((s) => ({ printSettings: { ...s.printSettings, ...partial } })),
   resetPrintSettings:  () => set({ printSettings: DEFAULT_V2_SETTINGS }),
   setPrintBgEyedropperActive: (printBgEyedropperActive) => set({ printBgEyedropperActive }),
+  updateSheetSettings: (partial) => set((s) => ({ sheetSettings: { ...s.sheetSettings, ...partial } })),
+  setDtgSheetModalOpen: (dtgSheetModalOpen) => set({ dtgSheetModalOpen }),
 
   setGrainColorBlend:    (grainColorBlend)    => set({ grainColorBlend }),
   setGrainColorCount:    (grainColorCount)    => set({ grainColorCount }),

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import type { PatternType } from '../engine/imageProcessor';
 import { getBayer } from '../engine/colorSeparation';
@@ -85,24 +85,6 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '', hint }:
           onChange={(e) => onChange(Number(e.target.value))} />
       </div>
       {hint && <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 2, lineHeight: 1.4 }}>{hint}</div>}
-    </div>
-  );
-}
-
-function DualRangeSlider({ valueMin, valueMax, onChange }: {
-  valueMin: number; valueMax: number;
-  onChange: (min: number, max: number) => void;
-}) {
-  const pctMin = (valueMin / 255) * 100;
-  const pctMax = (valueMax / 255) * 100;
-  return (
-    <div className="dual-range">
-      <div className="dual-range-track" />
-      <div className="dual-range-fill" style={{ left: `${pctMin}%`, width: `${pctMax - pctMin}%` }} />
-      <input type="range" min={0} max={255} value={valueMin}
-        onChange={(e) => onChange(Math.min(Number(e.target.value), valueMax - 1), valueMax)} />
-      <input type="range" min={0} max={255} value={valueMax}
-        onChange={(e) => onChange(valueMin, Math.max(Number(e.target.value), valueMin + 1))} />
     </div>
   );
 }
@@ -819,6 +801,7 @@ function DtgSection() {
     dtgPaintMode, setDtgPaintMode,
     setDtgPaintMask,
     brushSize, setBrushSize,
+    setDtgSheetModalOpen,
   } = useStore();
 
   const disabled = !originalImage;
@@ -1006,6 +989,24 @@ function DtgSection() {
               Clear Touch Up
             </button>
           </div>
+        </div>
+
+        {/* ── Build Sheet ── */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginTop: 2 }}>
+          <button
+            onClick={() => setDtgSheetModalOpen(true)}
+            disabled={disabled}
+            style={{
+              width: '100%', height: 34, fontSize: 10, fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              border: '1px solid var(--accent)', borderRadius: 4, cursor: disabled ? 'not-allowed' : 'pointer',
+              background: 'color-mix(in srgb, var(--accent) 12%, var(--surface-2))',
+              color: 'var(--accent)', fontWeight: 700,
+              transition: 'all 0.12s',
+            }}
+          >
+            Build Sheet
+          </button>
         </div>
 
       </div>

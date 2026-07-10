@@ -805,7 +805,6 @@ function DtgImageAdjustSection() {
             onReset={resetImageAdjustments}
             onBasic={(key, v) => setImageAdjustment(key as keyof typeof imageAdjustments, v)}
             showSaturation={true}
-            showBlur={false}
           />
         </div>
       )}
@@ -2149,7 +2148,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
     passthroughMode,
     cmykVisibility, setCmykLayerVisible, cmykAngles,
     removeLayer, duplicateLayer, paintMasks, paintMode,
-    globalPattern, updateGlobalPattern, soloLayerId, setSoloLayerId,
+    globalPattern, soloLayerId, setSoloLayerId,
     colorSepNumColors, setColorSepNumColors,
     colorSepColorPriority, setColorSepColorPriority,
     colorSepColors, colorSepVisibility, setColorSepVisibility,

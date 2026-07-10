@@ -14,6 +14,7 @@ import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components
 import { LoginSplash } from './components/LoginSplash';
 
 const ExportModal     = lazy(() => import('./components/ExportModal').then(m => ({ default: m.ExportModal })));
+const DtgSheetModal   = lazy(() => import('./components/DtgSheetModal').then(m => ({ default: m.DtgSheetModal })));
 const MockupPreview   = lazy(() => import('./components/MockupPreview').then(m => ({ default: m.MockupPreview })));
 const PresetsModal    = lazy(() => import('./components/PresetsModal').then(m => ({ default: m.PresetsModal })));
 const EulaModal       = lazy(() => import('./components/EulaModal').then(m => ({ default: m.EulaModal })));
@@ -38,6 +39,7 @@ import type { LayerConfig, PatternConfig, ProcessedLayer, PatternType } from './
 import { generateTextureMask } from './engine/textureGenerator';
 import { applyFabricBlend } from './engine/fabricBlend';
 import { runV2Halftone } from './engine/dtgEngineV2';
+import { packSheet } from './engine/sheetEngine';
 import { buildImportanceMap } from './engine/analysisPass';
 import { encodeTiff, encodeEps } from './engine/exportFormats';
 import { isShadowColor, nearestPantone } from './engine/pantoneMatch';
@@ -127,6 +129,7 @@ function App() {
   const updateAvailable = useVersionCheck();
   const { status, session, initiateLogin, switchAccount, logout, recheck } = useAuth();
   const [showExport, setShowExport] = useState(false);
+  const [sheetGenerating, setSheetGenerating] = useState(false);
   const [showEula, setShowEula]         = useState(false);
   const [showFaq, setShowFaq]           = useState(false);
   const [showBetaNotice, setShowBetaNotice] = useState(() => shouldShowBetaNotice());
@@ -180,6 +183,7 @@ function App() {
     fabricTexture, fabricBlendStrength, fabricTextureDepth,
     printSettings,
     dtgPaintMask, dtgPaintMaskDims,
+    sheetSettings, dtgSheetModalOpen, setDtgSheetModalOpen,
   } = useStore();
 
   useEffect(() => {
@@ -260,6 +264,102 @@ function App() {
     });
     return c;
   }
+
+  const handleGenerateDtgSheet = async () => {
+    if (!originalImage) return;
+    setSheetGenerating(true);
+    try {
+      const { dpi, designWidthIn } = sheetSettings;
+      const aspect = originalImage.height / originalImage.width;
+      const designWidthPx = Math.round(designWidthIn * dpi);
+      const designHeightPx = Math.round(designWidthPx * aspect);
+
+      // Scale originalImage to design print size
+      const srcCanvas = canvasFromImageData(originalImage);
+      const scaledCanvas = document.createElement('canvas');
+      scaledCanvas.width = designWidthPx;
+      scaledCanvas.height = designHeightPx;
+      const scaledCtx = scaledCanvas.getContext('2d')!;
+      scaledCtx.imageSmoothingEnabled = true;
+      scaledCtx.imageSmoothingQuality = 'high';
+      scaledCtx.drawImage(srcCanvas, 0, 0, designWidthPx, designHeightPx);
+      let artData = scaledCtx.getImageData(0, 0, designWidthPx, designHeightPx);
+
+      // Apply image adjustments
+      const adj = imageAdjustments;
+      const sat = adj.saturation ?? 0;
+      const isNoop = adj.adjMode === 'basic' &&
+        adj.exposure === 0 && adj.contrast === 0 &&
+        adj.shadows === 0 && adj.highlights === 0 && adj.blur === 0 && sat === 0;
+      if (!isNoop) {
+        const rd = artData.data;
+        const n = designWidthPx * designHeightPx;
+        const satFactor = 1 + sat / 100;
+        for (let i = 0; i < n; i++) {
+          if (rd[i * 4 + 3] < 128) continue;
+          let r = rd[i * 4], g = rd[i * 4 + 1], b = rd[i * 4 + 2];
+          const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+          const adjLum = applyGlobalAdjustments(lum, adj);
+          if (lum < 1) { r = g = b = adjLum | 0; } else {
+            const scale = adjLum / lum;
+            r = Math.min(255, (r * scale + 0.5)) | 0;
+            g = Math.min(255, (g * scale + 0.5)) | 0;
+            b = Math.min(255, (b * scale + 0.5)) | 0;
+          }
+          if (sat !== 0) {
+            const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+            r = Math.min(255, Math.max(0, (gray + satFactor * (r - gray) + 0.5))) | 0;
+            g = Math.min(255, Math.max(0, (gray + satFactor * (g - gray) + 0.5))) | 0;
+            b = Math.min(255, Math.max(0, (gray + satFactor * (b - gray) + 0.5))) | 0;
+          }
+          rd[i * 4] = r; rd[i * 4 + 1] = g; rd[i * 4 + 2] = b;
+        }
+      }
+
+      // Apply bg paint mask (scale from preview coords — uses same approach as regular export)
+      if (bgPaintMask && bgPaintMaskDims) {
+        const { w: pmW, h: pmH } = bgPaintMaskDims;
+        const scaleX = designWidthPx / pmW;
+        const scaleY = designHeightPx / pmH;
+        for (let y = 0; y < designHeightPx; y++) {
+          for (let x = 0; x < designWidthPx; x++) {
+            const sx = Math.min(pmW - 1, Math.floor(x / scaleX));
+            const sy = Math.min(pmH - 1, Math.floor(y / scaleY));
+            const pv = bgPaintMask[sy * pmW + sx];
+            if (pv === 2) artData.data[(y * designWidthPx + x) * 4 + 3] = 0;
+          }
+        }
+      }
+
+      // Run halftone at sheet DPI
+      const cellSizePx = designWidthPx / (printSettings.lpi * (375 / 45));
+      const { output } = runV2Halftone(artData, printSettings, cellSizePx);
+
+      // Build design canvas
+      const designCanvas = document.createElement('canvas');
+      designCanvas.width = designWidthPx;
+      designCanvas.height = designHeightPx;
+      designCanvas.getContext('2d')!.putImageData(output, 0, 0);
+
+      // Pack onto sheet
+      const { canvas } = packSheet(designCanvas, sheetSettings, aspect);
+
+      // Download
+      const blob = await new Promise<Blob>((res) => canvas.toBlob(b => res(b!), 'image/png'));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const wLabel = designWidthIn.toFixed(1).replace('.', 'p');
+      const shW = sheetSettings.sheetWidthIn.toFixed(1).replace('.', 'p');
+      const shH = sheetSettings.sheetHeightIn.toFixed(1).replace('.', 'p');
+      a.download = `dtf-sheet-${shW}x${shH}in-${dpi}dpi-design${wLabel}in.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setDtgSheetModalOpen(false);
+    } finally {
+      setSheetGenerating(false);
+    }
+  };
 
   const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke, cropToArtwork, withFabricView }: ExportConfig) => {
     if (!originalImage) return;
@@ -1309,6 +1409,15 @@ function App() {
       )}
       {mockupOpen && (
         <MockupPreview onClose={() => setMockupOpen(false)} />
+      )}
+      {dtgSheetModalOpen && (
+        <Suspense fallback={null}>
+          <DtgSheetModal
+            onClose={() => setDtgSheetModalOpen(false)}
+            onGenerate={handleGenerateDtgSheet}
+            generating={sheetGenerating}
+          />
+        </Suspense>
       )}
       {presetsOpen && session?.token && (
         <PresetsModal token={session.token} onClose={() => setPresetsOpen(false)} />
