@@ -362,7 +362,17 @@ function ChatPanel({ session }: { session: Session }) {
     const q = showAll ? '/api/chat?resource=tickets&all=1' : '/api/chat?resource=tickets';
     fetch(q, { headers: H() })
       .then(r => r.ok ? r.json() as Promise<SupportTicket[]> : Promise.resolve([] as SupportTicket[]))
-      .then(ts => { setTickets(ts); setLoading(false); })
+      .then(ts => {
+        setTickets(ts);
+        setLoading(false);
+        // Auto-select: first unread ticket, or first open ticket if none unread
+        setActive(prev => {
+          if (prev) return prev;
+          const firstUnread = ts.find(t => t.unread_by_creator > 0);
+          const firstOpen   = ts.find(t => t.status !== 'solved');
+          return firstUnread ?? firstOpen ?? null;
+        });
+      })
       .catch(() => setLoading(false));
   }, [session.token, showAll]);
 

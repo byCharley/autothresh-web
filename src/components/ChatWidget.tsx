@@ -43,6 +43,7 @@ export function ChatWidget({ session }: { session: Session }) {
   const [subject, setSubject]         = useState('');
   const [firstMsg, setFirstMsg]       = useState('');
   const [reply, setReply]             = useState('');
+  const [sendError, setSendError]     = useState('');
   const [sending, setSending]         = useState(false);
   const [unread, setUnread]           = useState(0);
   const [view, setView]               = useState<'chat' | 'new'>('chat');
@@ -51,6 +52,14 @@ export function ChatWidget({ session }: { session: Session }) {
   const [editText, setEditText]       = useState('');
   const bottomRef                     = useRef<HTMLDivElement>(null);
   const replyRef                      = useRef<HTMLTextAreaElement>(null);
+  const isMobile                      = useRef(window.innerWidth < 640);
+
+  // Keep isMobile in sync with resize
+  useEffect(() => {
+    const update = () => { isMobile.current = window.innerWidth < 640; };
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   const authH = useCallback(() => ({ Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json' }), [session.token]);
 
@@ -80,8 +89,11 @@ export function ChatWidget({ session }: { session: Session }) {
       .then(r => r.ok ? r.json() as Promise<Message[]> : Promise.resolve([] as Message[]))
       .then(msgs => {
         setMessages(msgs);
-        setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, unread_by_user: 0 } : t));
-        setUnread(prev => Math.max(0, prev));
+        setTickets(prev => {
+          const updated = prev.map(t => t.id === ticketId ? { ...t, unread_by_user: 0 } : t);
+          setUnread(updated.reduce((s, t) => s + (t.unread_by_user || 0), 0));
+          return updated;
+        });
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 60);
       })
       .catch(() => {});
@@ -141,12 +153,23 @@ export function ChatWidget({ session }: { session: Session }) {
     if (!reply.trim() || !activeTicket || sending) return;
     const text = reply.trim();
     setSending(true);
+    setSendError('');
     setReply('');
-    await fetch('/api/chat', {
-      method: 'POST', headers: authH(),
-      body: JSON.stringify({ resource: 'message', ticket_id: activeTicket.id, message: text }),
-    });
-    loadMessages(activeTicket.id);
+    try {
+      const r = await fetch('/api/chat', {
+        method: 'POST', headers: authH(),
+        body: JSON.stringify({ resource: 'message', ticket_id: activeTicket.id, message: text }),
+      });
+      if (!r.ok) {
+        setReply(text);
+        setSendError('Message failed to send — please try again.');
+      } else {
+        loadMessages(activeTicket.id);
+      }
+    } catch {
+      setReply(text);
+      setSendError('Message failed to send — check your connection.');
+    }
     setSending(false);
   }
 
@@ -166,21 +189,23 @@ export function ChatWidget({ session }: { session: Session }) {
   }
 
   const hasOpenTicket = tickets.some(t => t.status !== 'solved');
-  const isMobile = window.innerWidth < 640;
+  const mobile = isMobile.current;
 
   // ── Panel ──────────────────────────────────────────────────────────────────
   const panel = (
     <div style={{
       position: 'fixed',
-      ...(isMobile
-        ? { inset: 0 }
-        : { bottom: 80, right: 24, width: 340, height: 530, borderRadius: 0 }),
+      ...(mobile
+        ? { top: 0, left: 0, right: 0, bottom: 0 }
+        : { bottom: 80, right: 24, width: 340, height: 530 }),
       background: 'var(--bg, #111)',
-      border: isMobile ? 'none' : '1px solid var(--border)',
+      border: mobile ? 'none' : '1px solid var(--border)',
       boxShadow: '0 12px 48px rgba(0,0,0,0.7)',
       display: 'flex', flexDirection: 'column',
       zIndex: 920,
       overflow: 'hidden',
+      // Safe-area for notch/home-indicator on mobile
+      paddingTop: mobile ? 'env(safe-area-inset-top, 0px)' : undefined,
     }}>
 
       {/* Header */}
@@ -293,7 +318,7 @@ export function ChatWidget({ session }: { session: Session }) {
           </div>
 
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
             {messages.length === 0 && (
               <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>No messages yet</div>
             )}
@@ -436,18 +461,28 @@ export function ChatWidget({ session }: { session: Session }) {
               </button>
             </div>
           ) : (
-            <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+            <div style={{
+              padding: '10px 14px',
+              paddingBottom: mobile ? 'max(10px, env(safe-area-inset-bottom, 10px))' : '10px',
+              borderTop: '1px solid var(--border)',
+              flexShrink: 0,
+            }}>
+              {sendError && (
+                <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#f87171', marginBottom: 6 }}>
+                  ⚠ {sendError}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 6 }}>
                 <textarea
                   ref={replyRef}
                   placeholder="Type a message…"
                   value={reply}
-                  onChange={e => setReply(e.target.value)}
+                  onChange={e => { setReply(e.target.value); if (sendError) setSendError(''); }}
                   onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendReply(); } }}
                   rows={2}
                   style={{
                     flex: 1, padding: '7px 10px', fontSize: 12, fontFamily: 'var(--font-mono)',
-                    background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)',
+                    background: 'var(--surface-2)', border: `1px solid ${sendError ? '#f87171' : 'var(--border)'}`, color: 'var(--text)',
                     resize: 'none', lineHeight: 1.5,
                   }}
                 />
@@ -493,8 +528,8 @@ export function ChatWidget({ session }: { session: Session }) {
         onClick={() => setOpen(v => !v)}
         style={{
           position: 'fixed',
-          bottom: isMobile ? 'calc(64px + env(safe-area-inset-bottom, 0px) + 12px)' : 24,
-          right: isMobile ? 16 : 24,
+          bottom: mobile ? 'calc(64px + env(safe-area-inset-bottom, 0px) + 12px)' : 24,
+          right: mobile ? 16 : 24,
           zIndex: 921,
           width: 52, height: 52,
           background: open ? 'var(--surface-2)' : 'var(--accent)',
