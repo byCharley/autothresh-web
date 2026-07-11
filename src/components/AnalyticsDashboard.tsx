@@ -339,6 +339,7 @@ function ChatPanel({ session }: { session: Session }) {
   const [active, setActive]           = useState<SupportTicket | null>(null);
   const [messages, setMessages]       = useState<SupportMessage[]>([]);
   const [reply, setReply]             = useState('');
+  const [sendError, setSendError]     = useState('');
   const [sending, setSending]         = useState(false);
   const [loading, setLoading]         = useState(true);
   const [isOnline, setIsOnline]       = useState(false);
@@ -407,9 +408,19 @@ function ChatPanel({ session }: { session: Session }) {
   async function sendReply() {
     if (!reply.trim() || !active || sending) return;
     const text = reply.trim();
-    setSending(true); setReply('');
-    await fetch('/api/chat', { method: 'POST', headers: H(), body: JSON.stringify({ resource: 'message', ticket_id: active.id, message: text }) });
-    loadMessages(active.id);
+    setSending(true); setSendError(''); setReply('');
+    try {
+      const r = await fetch('/api/chat', { method: 'POST', headers: H(), body: JSON.stringify({ resource: 'message', ticket_id: active.id, message: text }) });
+      if (!r.ok) {
+        setReply(text);
+        setSendError('Failed to send — please try again.');
+      } else {
+        loadMessages(active.id);
+      }
+    } catch {
+      setReply(text);
+      setSendError('Failed to send — check your connection.');
+    }
     setSending(false);
   }
 
@@ -615,23 +626,28 @@ function ChatPanel({ session }: { session: Session }) {
             {active.status === 'solved' ? (
               <div style={{ textAlign: 'center', fontSize: 10, fontFamily: 'var(--font-mono)', color: '#4ade80', padding: '4px 0' }}>✓ Ticket resolved — click Reopen to continue</div>
             ) : (
-              <div style={{ display: 'flex', gap: 6 }}>
-                <textarea
-                  placeholder="Reply to customer…"
-                  value={reply}
-                  onChange={e => setReply(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendReply(); } }}
-                  rows={2}
-                  style={{ flex: 1, padding: '7px 10px', fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)', resize: 'none', lineHeight: 1.5 }}
-                />
-                <button
-                  onClick={sendReply}
-                  disabled={sending || !reply.trim()}
-                  style={{ width: 40, background: 'var(--accent)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (!reply.trim() || sending) ? 0.4 : 1 }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
-              </div>
+              <>
+                {sendError && (
+                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#f87171', marginBottom: 6 }}>⚠ {sendError}</div>
+                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <textarea
+                    placeholder="Reply to customer…"
+                    value={reply}
+                    onChange={e => { setReply(e.target.value); if (sendError) setSendError(''); }}
+                    onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendReply(); } }}
+                    rows={2}
+                    style={{ flex: 1, padding: '7px 10px', fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: `1px solid ${sendError ? '#f87171' : 'var(--border)'}`, color: 'var(--text)', resize: 'none', lineHeight: 1.5 }}
+                  />
+                  <button
+                    onClick={sendReply}
+                    disabled={sending || !reply.trim()}
+                    style={{ width: 40, background: 'var(--accent)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (!reply.trim() || sending) ? 0.4 : 1 }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>
