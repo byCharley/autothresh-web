@@ -86,10 +86,10 @@ function PricingModal({ onClose }: { onClose: () => void }) {
             color: 'var(--accent)', marginBottom: 8,
           }}>Choose a Plan</div>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>
-            Start your 3-day free trial
+            Choose a Plan
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-mono)' }}>
-            Cancel anytime · No charge until trial ends
+            Annual plan includes a 3-day free trial · Cancel anytime
           </div>
         </div>
 
@@ -109,7 +109,7 @@ function PricingModal({ onClose }: { onClose: () => void }) {
               </div>
               <PlanFeatures features={PLAN_FEATURES.monthly} accent="var(--accent)" />
               <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', border: '1px solid var(--accent)', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
-                Start Free Trial →
+                Subscribe Monthly →
               </div>
             </div>
           </a>
@@ -153,7 +153,7 @@ function PricingModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-          Credit card required for trial · You won't be charged until it ends
+          Annual trial requires a credit card · No charge until the 3 days end
         </div>
       </div>
     </div>
