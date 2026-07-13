@@ -210,7 +210,8 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
         ? new Date(new Date(orderPlaced).getTime() + TRIAL_DAYS * 86_400_000).toISOString()
         : undefined;
       const trialEndRaw = trialEndExplicit ?? trialEndInferred;
-      const trialStillActive = !!trialEndRaw && new Date(trialEndRaw) > new Date();
+      // trialStillActive: true if no end date known (give benefit of the doubt), or end date is in the future
+      const trialStillActive = !trialEndRaw || new Date(trialEndRaw) > new Date();
 
       // TRIAL is only valid if the trial window hasn't closed yet (failsafe if Seal is slow to update status)
       const valid = st === 'ACTIVE' || (st === 'TRIAL' && trialStillActive);
