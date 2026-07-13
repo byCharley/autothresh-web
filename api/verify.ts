@@ -201,7 +201,6 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
 
     for (const s of subs) {
       const st = String(s.status ?? '').toUpperCase();
-      const valid = st === 'ACTIVE' || st === 'TRIAL';
 
       // Seal uses subscription_type=2 for trials; infer end date from order_placed + TRIAL_DAYS
       const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
@@ -211,7 +210,11 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
         ? new Date(new Date(orderPlaced).getTime() + TRIAL_DAYS * 86_400_000).toISOString()
         : undefined;
       const trialEndRaw = trialEndExplicit ?? trialEndInferred;
-      const isInTrial = st === 'TRIAL' || (!!trialEndRaw && new Date(trialEndRaw) > new Date());
+      const trialStillActive = !!trialEndRaw && new Date(trialEndRaw) > new Date();
+
+      // TRIAL is only valid if the trial window hasn't closed yet (failsafe if Seal is slow to update status)
+      const valid = st === 'ACTIVE' || (st === 'TRIAL' && trialStillActive);
+      const isInTrial = st === 'TRIAL' || (st === 'ACTIVE' && trialStillActive);
 
       // Seal nests plan name inside items array
       const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
