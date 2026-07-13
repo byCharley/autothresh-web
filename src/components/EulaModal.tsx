@@ -67,8 +67,8 @@ export function EulaModal({ onClose }: Props) {
           <Section title="Cancellation">
             You are solely responsible for canceling your subscription before your
             next billing cycle renews. To request a cancellation, email us at{' '}
-            <a href="mailto:info@charleypangus.com" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-              info@charleypangus.com
+            <a href="mailto:autothreshweb@gmail.com" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
+              autothreshweb@gmail.com
             </a>{' '}
             prior to your renewal date. We recommend canceling at least 48 hours in
             advance to ensure processing time.
