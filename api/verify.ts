@@ -164,8 +164,8 @@ async function checkLifetimeOrder(token: string): Promise<boolean> {
     const data = await r.json() as OData;
     const orders = data.data?.customer?.orders?.nodes ?? [];
     return orders.some(o => o.lineItems.nodes.some(item => {
-      const t = item.title.toLowerCase();
-      return t.includes('autothresh') || t.includes('lifetime');
+      const t = item.title.toLowerCase().replace(/™/g, '').trim();
+      return t === 'autothresh web' || t.includes('lifetime');
     }));
   } catch { return false; }
 }
