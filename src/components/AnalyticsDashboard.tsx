@@ -349,7 +349,9 @@ function ChatPanel({ session }: { session: Session }) {
   const [hoverMsgId, setHoverMsgId]   = useState<number | null>(null);
   const [editingId, setEditingId]     = useState<number | null>(null);
   const [editText, setEditText]       = useState('');
+  const [userTyping, setUserTyping]   = useState(false);
   const bottomRef                     = useRef<HTMLDivElement>(null);
+  const lastTypingSentRef             = useRef(0);
 
   const H = useCallback(() => ({ Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json' }), [session.token]);
 
@@ -389,6 +391,27 @@ function ChatPanel({ session }: { session: Session }) {
       .catch(() => {});
   }, [session.token]);
 
+  const loadTyping = useCallback((ticketId: string) => {
+    fetch(`/api/chat?resource=typing&ticket=${ticketId}`, { headers: H() })
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { userTypingAt?: string | null } | null) => {
+        if (!d) return;
+        const isTyping = !!d.userTypingAt && (Date.now() - new Date(d.userTypingAt).getTime() < 5000);
+        setUserTyping(isTyping);
+      })
+      .catch(() => {});
+  }, [H]);
+
+  const sendTypingSignal = useCallback((ticketId: string) => {
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 2000) return;
+    lastTypingSentRef.current = now;
+    fetch('/api/chat', {
+      method: 'PATCH', headers: H(),
+      body: JSON.stringify({ resource: 'typing', ticket_id: ticketId }),
+    }).catch(() => {});
+  }, [H]);
+
   useEffect(() => { loadPresence(); loadTickets(); }, [loadPresence, loadTickets]);
   useEffect(() => { const id = setInterval(loadTickets, 8_000); return () => clearInterval(id); }, [loadTickets]);
   useEffect(() => {
@@ -397,6 +420,12 @@ function ChatPanel({ session }: { session: Session }) {
     const id = setInterval(() => loadMessages(active.id), 5_000);
     return () => clearInterval(id);
   }, [active?.id, loadMessages]);
+  useEffect(() => {
+    if (!active || active.status === 'solved') { setUserTyping(false); return; }
+    loadTyping(active.id);
+    const id = setInterval(() => loadTyping(active.id), 2500);
+    return () => clearInterval(id);
+  }, [active?.id, active?.status, loadTyping]);
 
   async function toggleOnline() {
     setToggling(true);
@@ -626,6 +655,20 @@ function ChatPanel({ session }: { session: Session }) {
                 </div>
               );
             })}
+            {/* User typing indicator */}
+            {userTyping && (
+              <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', gap: 4, marginTop: 4 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginLeft: 2 }}>Customer</span>
+                  <div style={{ padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', gap: 5, alignItems: 'center' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-dim)', display: 'inline-block', animation: 'chat-typing 1.2s ease-in-out infinite' }} />
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-dim)', display: 'inline-block', animation: 'chat-typing 1.2s ease-in-out 0.4s infinite' }} />
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-dim)', display: 'inline-block', animation: 'chat-typing 1.2s ease-in-out 0.8s infinite' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            <style>{`@keyframes chat-typing { 0%,60%,100%{opacity:.25;transform:translateY(0)} 30%{opacity:1;transform:translateY(-3px)} }`}</style>
             <div ref={bottomRef} />
           </div>
 
@@ -642,7 +685,7 @@ function ChatPanel({ session }: { session: Session }) {
                   <textarea
                     placeholder="Reply to customer…"
                     value={reply}
-                    onChange={e => { setReply(e.target.value); if (sendError) setSendError(''); }}
+                    onChange={e => { setReply(e.target.value); if (sendError) setSendError(''); if (active && e.target.value) sendTypingSignal(active.id); }}
                     onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendReply(); } }}
                     rows={2}
                     style={{ flex: 1, padding: '7px 10px', fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: `1px solid ${sendError ? '#f87171' : 'var(--border)'}`, color: 'var(--text)', resize: 'none', lineHeight: 1.5 }}

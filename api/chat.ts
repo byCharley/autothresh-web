@@ -84,6 +84,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(await r.json());
     }
 
+    if (resource === 'typing') {
+      const ticketId = String(req.query.ticket ?? '');
+      if (!ticketId) return res.status(400).json({ error: 'ticket required' });
+      if (!user.isCreator) {
+        const tr = await sb(`support_tickets?id=eq.${ticketId}&user_email=eq.${encodeURIComponent(user.email)}&select=id`);
+        if (!(await tr.json() as unknown[]).length) return res.status(403).json({ error: 'Forbidden' });
+      }
+      try {
+        const r = await sb(`support_tickets?id=eq.${ticketId}&select=user_typing_at,creator_typing_at`);
+        const rows = await r.json() as Array<{ user_typing_at: string | null; creator_typing_at: string | null }>;
+        const row = rows[0];
+        return res.status(200).json({ userTypingAt: row?.user_typing_at ?? null, creatorTypingAt: row?.creator_typing_at ?? null });
+      } catch { return res.status(200).json({ userTypingAt: null, creatorTypingAt: null }); }
+    }
+
     if (resource === 'messages') {
       const ticketId = String(req.query.ticket ?? '');
       if (!ticketId) return res.status(400).json({ error: 'ticket required' });
@@ -197,6 +212,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       await sb(`support_messages?id=eq.${id}`, 'PATCH', { message: message.trim() });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (resource === 'typing') {
+      const { ticket_id } = body as { ticket_id?: string };
+      if (!ticket_id) return res.status(400).json({ error: 'ticket_id required' });
+      if (!user.isCreator) {
+        const tr = await sb(`support_tickets?id=eq.${ticket_id}&user_email=eq.${encodeURIComponent(user.email)}&select=id`);
+        if (!(await tr.json() as unknown[]).length) return res.status(403).json({ error: 'Forbidden' });
+      }
+      const field = user.isCreator ? 'creator_typing_at' : 'user_typing_at';
+      try {
+        await sb(`support_tickets?id=eq.${ticket_id}`, 'PATCH', { [field]: new Date().toISOString() });
+      } catch { /* column may not exist yet — fail silently */ }
       return res.status(200).json({ ok: true });
     }
 

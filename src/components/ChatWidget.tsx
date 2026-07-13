@@ -50,9 +50,11 @@ export function ChatWidget({ session }: { session: Session }) {
   const [hoverMsgId, setHoverMsgId]   = useState<number | null>(null);
   const [editingId, setEditingId]     = useState<number | null>(null);
   const [editText, setEditText]       = useState('');
+  const [creatorTyping, setCreatorTyping] = useState(false);
   const bottomRef                     = useRef<HTMLDivElement>(null);
   const replyRef                      = useRef<HTMLTextAreaElement>(null);
   const isMobile                      = useRef(window.innerWidth < 640);
+  const lastTypingSentRef             = useRef(0);
 
   // Keep isMobile in sync with resize
   useEffect(() => {
@@ -76,13 +78,15 @@ export function ChatWidget({ session }: { session: Session }) {
       .then(ts => {
         setTickets(ts);
         setUnread(ts.reduce((s, t) => s + (t.unread_by_user || 0), 0));
-        if (!activeTicket) {
-          const first = ts.find(t => t.status !== 'solved');
-          if (first) setActiveTicket(first);
-        }
+        // Always keep activeTicket in sync with server state (catches status changes like solved)
+        setActiveTicket(prev => {
+          if (!prev) return ts.find(t => t.status !== 'solved') ?? null;
+          const updated = ts.find(t => t.id === prev.id);
+          return updated ?? prev;
+        });
       })
       .catch(() => {});
-  }, [session.token, activeTicket]);
+  }, [session.token]);
 
   const loadMessages = useCallback((ticketId: string) => {
     fetch(`/api/chat?resource=messages&ticket=${ticketId}`, { headers: authH() })
@@ -98,6 +102,27 @@ export function ChatWidget({ session }: { session: Session }) {
       })
       .catch(() => {});
   }, [session.token]);
+
+  const loadTyping = useCallback((ticketId: string) => {
+    fetch(`/api/chat?resource=typing&ticket=${ticketId}`, { headers: authH() })
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { creatorTypingAt?: string | null } | null) => {
+        if (!d) return;
+        const isTyping = !!d.creatorTypingAt && (Date.now() - new Date(d.creatorTypingAt).getTime() < 5000);
+        setCreatorTyping(isTyping);
+      })
+      .catch(() => {});
+  }, [authH]);
+
+  const sendTypingSignal = useCallback((ticketId: string) => {
+    const now = Date.now();
+    if (now - lastTypingSentRef.current < 2000) return;
+    lastTypingSentRef.current = now;
+    fetch('/api/chat', {
+      method: 'PATCH', headers: authH(),
+      body: JSON.stringify({ resource: 'typing', ticket_id: ticketId }),
+    }).catch(() => {});
+  }, [authH]);
 
   useEffect(() => {
     loadStatus();
@@ -117,6 +142,13 @@ export function ChatWidget({ session }: { session: Session }) {
     const id = setInterval(() => loadMessages(activeTicket.id), 5_000);
     return () => clearInterval(id);
   }, [open, activeTicket?.id, loadMessages]);
+
+  useEffect(() => {
+    if (!open || !activeTicket || activeTicket.status === 'solved') { setCreatorTyping(false); return; }
+    loadTyping(activeTicket.id);
+    const id = setInterval(() => loadTyping(activeTicket.id), 2500);
+    return () => clearInterval(id);
+  }, [open, activeTicket?.id, activeTicket?.status, loadTyping]);
 
   // auto-open new ticket form if no open ticket when widget opens
   useEffect(() => {
@@ -161,8 +193,16 @@ export function ChatWidget({ session }: { session: Session }) {
         body: JSON.stringify({ resource: 'message', ticket_id: activeTicket.id, message: text }),
       });
       if (!r.ok) {
-        setReply(text);
-        setSendError('Message failed to send — please try again.');
+        const errData = await r.json() as { error?: string };
+        if (errData.error === 'Ticket is closed') {
+          // Ticket was solved while user had it open — flip to closed state
+          const id = activeTicket.id;
+          setActiveTicket(prev => prev ? { ...prev, status: 'solved' } : prev);
+          setTickets(prev => prev.map(t => t.id === id ? { ...t, status: 'solved' } : t));
+        } else {
+          setReply(text);
+          setSendError('Message failed to send — please try again.');
+        }
       } else {
         loadMessages(activeTicket.id);
       }
@@ -436,6 +476,21 @@ export function ChatWidget({ session }: { session: Session }) {
               </div>
             )}
 
+            {/* Typing indicator */}
+            {creatorTyping && (
+              <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-end', gap: 4 }}>
+                <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginLeft: 2 }}>Support</span>
+                  <div style={{ padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', gap: 5, alignItems: 'center' }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-dim)', display: 'inline-block', animation: 'chat-typing 1.2s ease-in-out infinite' }} />
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-dim)', display: 'inline-block', animation: 'chat-typing 1.2s ease-in-out 0.4s infinite' }} />
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-dim)', display: 'inline-block', animation: 'chat-typing 1.2s ease-in-out 0.8s infinite' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            <style>{`@keyframes chat-typing { 0%,60%,100%{opacity:.25;transform:translateY(0)} 30%{opacity:1;transform:translateY(-3px)} }`}</style>
+
             <div ref={bottomRef} />
           </div>
 
@@ -477,7 +532,7 @@ export function ChatWidget({ session }: { session: Session }) {
                   ref={replyRef}
                   placeholder="Type a message…"
                   value={reply}
-                  onChange={e => { setReply(e.target.value); if (sendError) setSendError(''); }}
+                  onChange={e => { setReply(e.target.value); if (sendError) setSendError(''); if (activeTicket && e.target.value) sendTypingSignal(activeTicket.id); }}
                   onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendReply(); } }}
                   rows={2}
                   style={{
