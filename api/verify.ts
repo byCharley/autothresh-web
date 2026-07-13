@@ -118,7 +118,7 @@ function runFraudCheck(email: string, ip: string, firstName: string, subscriptio
 
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
-const SEAL_TOKEN   = process.env.SEAL_API_TOKEN!;
+const SEAL_TOKEN   = process.env.SEAL_API_TOKEN ?? process.env.SEAL_TOKEN ?? '';
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
 const LDT_ACCESS   = process.env.LDT_ACCESS ?? '';
 const LDT_API_URL  = 'https://digital.ldtsoft.work/api/integrate';
