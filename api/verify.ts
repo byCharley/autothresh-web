@@ -324,7 +324,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const finalHasSub = hasSub || isCreator || isTester || hasLifetime;
 
   const finalStatus   = isCreator ? 'creator' : isTester ? 'tester' : hasLifetime ? 'lifetime' : subscriptionStatus;
-  const finalPlan     = isCreator ? 'Creator' : isTester ? 'Tester Access' : hasLifetime ? 'Lifetime' : planTitle;
+  const finalPlan     = isCreator ? 'Creator' : isTester ? 'Tester Access' : hasLifetime ? 'Lifetime Access' : planTitle;
   const finalExpiry   = (isCreator || isTester || hasLifetime) ? undefined : nextBillingDate;
 
   console.log('Verify result:', { email, hasSub, isCreator, isTester, testerStatus, finalHasSub, finalStatus, nextBillingDate, planTitle });
