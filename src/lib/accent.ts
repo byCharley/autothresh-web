@@ -7,8 +7,6 @@ export const ACCENTS = [
   { name: 'Grey',    accent: '#9CA3AF', h: '#6B7280', dim: 'rgba(156,163,175,0.12)'},
 ] as const;
 
-export const ACCENT_KEY = 'at-accent';
-
 export function applyAccentByHex(hex: string) {
   const found = ACCENTS.find(a => a.accent === hex);
   if (!found) return;
@@ -16,12 +14,4 @@ export function applyAccentByHex(hex: string) {
   root.style.setProperty('--accent',     found.accent);
   root.style.setProperty('--accent-h',   found.h);
   root.style.setProperty('--accent-dim', found.dim);
-  try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* */ }
-}
-
-export function loadSavedAccent() {
-  try {
-    const saved = localStorage.getItem(ACCENT_KEY);
-    if (saved) applyAccentByHex(saved);
-  } catch { /* */ }
 }

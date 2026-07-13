@@ -4,7 +4,7 @@ import { AppIcon } from './AppIcon';
 
 // Bell uses the same CHANGELOG as WhatsNewModal — one source, always in sync.
 import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewModal';
-import { ACCENTS, ACCENT_KEY, applyAccentByHex, loadSavedAccent } from '../lib/accent';
+import { ACCENTS, applyAccentByHex } from '../lib/accent';
 
 function bellDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -36,10 +36,11 @@ interface TopBarProps {
   planTitle?: string;
   subscriptionStatus?: string;
   sessionToken?: string;
+  accentColor?: string;
   chatUnread?: number;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, chatUnread = 0 }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0 }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -51,9 +52,9 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
   const unreadCount = CHANGELOG.filter(e => e.date > seenDate).length;
   const [gearOpen, setGearOpen] = useState(false);
   const gearRef = useRef<HTMLDivElement>(null);
-  const [activeAccent, setActiveAccent] = useState(() => localStorage.getItem(ACCENT_KEY) ?? '#FF6B1A');
+  const [activeAccent, setActiveAccent] = useState(accentColor ?? '#FF6B1A');
 
-  useEffect(() => { loadSavedAccent(); }, []);
+  useEffect(() => { if (accentColor) { applyAccentByHex(accentColor); setActiveAccent(accentColor); } }, [accentColor]);
 
   const daysRemaining = subscriptionExpiresAt
     ? Math.ceil((new Date(subscriptionExpiresAt).getTime() - Date.now()) / 86_400_000)

@@ -12,6 +12,7 @@ export interface Session {
   subscriptionStatus?:     string;
   subscriptionExpiresAt?:  string;
   planTitle?:              string;
+  accentColor?:            string;
 }
 
 const SESSION_KEY          = 'at_session';
@@ -169,7 +170,7 @@ export function useAuth() {
           return;
         }
         if (data.accentColor) applyAccentByHex(data.accentColor);
-        const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle };
+        const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor };
         saveSession(updated);
         setSession(updated);
         if (!data.hasSubscription) { setStatus('no-subscription'); return; }
@@ -197,7 +198,7 @@ export function useAuth() {
       if (!data.valid || !data.hasSubscription) return false;
       if (isInactiveStatus(data.subscriptionStatus)) return false;
       if (data.accentColor) applyAccentByHex(data.accentColor);
-      const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle };
+      const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor };
       saveSession(updated);
       setSession(updated);
       setStatus('authenticated');
@@ -256,6 +257,7 @@ export function useAuth() {
   const logout = useCallback(() => {
     clearSession();
     localStorage.removeItem('at-mode');
+    localStorage.removeItem('at-accent');
     setSession(null);
     setStatus('unauthenticated');
   }, []);

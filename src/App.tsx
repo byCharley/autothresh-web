@@ -1373,7 +1373,7 @@ function App() {
   return (
     <Suspense fallback={null}>
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => { setShowAnalytics(true); setCreatorChatUnread(0); }} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} chatUnread={creatorChatUnread} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => { setShowAnalytics(true); setCreatorChatUnread(0); }} onLogout={logout} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} accentColor={session?.accentColor} chatUnread={creatorChatUnread} />
 
 
       <div className="workspace">
