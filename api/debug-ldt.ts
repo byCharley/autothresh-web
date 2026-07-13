@@ -32,17 +32,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     httpStatus: r.status,
     totalOrders: orders.length,
     matchedWebOrders: orders.filter(isWebOrder).length,
-    allOrders: orders.map((o: unknown) => {
-      const obj = o as Record<string, unknown>;
-      const items = Array.isArray(obj.items) ? obj.items as Array<Record<string,unknown>> : [];
-      return {
-        id: obj.id,
-        name: obj.name,
-        isPaid: obj.isPaid,
-        isCancelled: obj.isCancelled,
-        items: items.map(i => ({ title: i.title, productName: i.productName, variantName: i.variantName })),
-        matchesWebFilter: isWebOrder(o),
-      };
-    }),
+    rawOrders: orders,
   });
 }
