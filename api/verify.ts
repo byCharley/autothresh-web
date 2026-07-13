@@ -159,6 +159,36 @@ async function checkLdtLicense(email: string): Promise<boolean> {
 }
 
 
+async function checkShopifyLifetimeOrder(token: string): Promise<boolean> {
+  try {
+    const r = await fetch(CUST_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': token },
+      body: JSON.stringify({
+        query: `query { customer { orders(first: 100) { nodes { totalPrice { amount } lineItems(first: 10) { nodes { title } } } } } }`,
+      }),
+    });
+    if (!r.ok) return false;
+    type OData = { data?: { customer?: { orders?: { nodes: Array<{ totalPrice: { amount: string }; lineItems: { nodes: Array<{ title: string }> } }> } } } };
+    const data = await r.json() as OData;
+    const orders = data.data?.customer?.orders?.nodes ?? [];
+    console.log('Shopify lifetime check: orders found:', orders.length);
+    return orders.some(o => {
+      const total = parseFloat(o.totalPrice?.amount ?? '0');
+      const isLifetimePrice = total >= 240; // $249.99 lifetime price
+      const hasWebProduct = o.lineItems.nodes.some(item => {
+        const t = item.title.toLowerCase().replace(/™/g, '');
+        return t.includes('autothresh web') && !t.includes('autothresh pro') && !t.includes('autothresh lite');
+      });
+      console.log('Shopify order total:', total, 'hasWebProduct:', hasWebProduct, 'isLifetimePrice:', isLifetimePrice);
+      return isLifetimePrice && hasWebProduct;
+    });
+  } catch (e) {
+    console.error('Shopify lifetime check error:', e);
+    return false;
+  }
+}
+
 async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; activeSubs: number; subscriptionStatus?: string; nextBillingDate?: string; planTitle?: string }> {
   try {
     const url = `${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`;
@@ -305,16 +335,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = CREATOR_EMAILS.has(emailLower);
 
   // ── Run all async checks in parallel ─────────────────────────────────────
-  const [sealResult, ldtResult, testerStatus, securityResult, userPrefs] = await Promise.all([
+  const [sealResult, ldtResult, shopifyLifetimeResult, testerStatus, securityResult, userPrefs] = await Promise.all([
     sealCheckSubscription(email),
     (!isCreator) ? checkLdtLicense(emailLower) : Promise.resolve(false),
+    (!isCreator) ? checkShopifyLifetimeOrder(token) : Promise.resolve(false),
     (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve<'active' | 'paused' | null>(null),
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
     getUserPrefs(emailLower),
   ]);
 
   const { hasSub, activeSubs, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
-  const hasLifetime = ldtResult;
+  // Lifetime = no active subscription + LDT confirms AutoThresh Web order + Shopify confirms $249.99 price
+  const hasLifetime = !hasSub && ldtResult && shopifyLifetimeResult;
   const isSecurityExpired = securityResult;
 
   // Testers: env var OR active DB record. Paused DB record → no access.
