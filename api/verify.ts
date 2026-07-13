@@ -128,7 +128,7 @@ async function checkLdtLicense(email: string): Promise<boolean> {
   try {
     const url = `${LDT_API_URL}/order/search?email=${encodeURIComponent(email)}&page=1&pageSize=20`;
     console.log('LDT request:', url);
-    const r = await fetch(url, { headers: { 'Authorization': `Bearer ${LDT_ACCESS}` } });
+    const r = await fetch(url, { headers: { 'LDT-X-Access-Token': LDT_ACCESS } });
     const rawText = await r.text();
     console.log('LDT HTTP status:', r.status, 'body:', rawText.slice(0, 300));
     if (!r.ok) return false;
