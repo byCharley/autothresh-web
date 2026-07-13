@@ -202,16 +202,19 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
     for (const s of subs) {
       const st = String(s.status ?? '').toUpperCase();
 
-      // Seal uses subscription_type=2 for trials; infer end date from order_placed + TRIAL_DAYS
+      // Trial only applies to annual plans — monthly subscribers pay immediately, no trial
+      const billingInterval = String(s.billing_interval ?? '').toLowerCase();
+      const isAnnualPlan = billingInterval.includes('year') || billingInterval.includes('annual');
       const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
-      const isTrialType = Number(s.subscription_type) === 2;
+      const isTrialType = Number(s.subscription_type) === 2 && isAnnualPlan;
       const orderPlaced = s.order_placed as string | undefined;
       const trialEndInferred = isTrialType && orderPlaced
         ? new Date(new Date(orderPlaced).getTime() + TRIAL_DAYS * 86_400_000).toISOString()
         : undefined;
       const trialEndRaw = trialEndExplicit ?? trialEndInferred;
+      const trialStillActive = !!trialEndRaw && new Date(trialEndRaw) > new Date();
       const valid = st === 'ACTIVE' || st === 'TRIAL';
-      const isInTrial = st === 'TRIAL' || (st === 'ACTIVE' && trialStillActive);
+      const isInTrial = (st === 'TRIAL' || (st === 'ACTIVE' && trialStillActive)) && isAnnualPlan;
 
       // Seal nests plan name inside items array
       const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
