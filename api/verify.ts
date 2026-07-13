@@ -143,7 +143,15 @@ async function checkLdtLicense(email: string): Promise<boolean> {
       }
     }
     console.log('LDT orders found:', orders.length);
-    return orders.length > 0;
+    // Only count orders specifically for AutoThresh Web (not Pro, Lite, etc.)
+    const isWebOrder = (o: unknown) => {
+      const json = JSON.stringify(o).toLowerCase().replace(/™/g, '');
+      // Must contain 'autothresh web' but NOT be a different product
+      return json.includes('autothresh web') && !json.includes('autothresh pro') && !json.includes('autothresh lite');
+    };
+    const matched = orders.filter(isWebOrder);
+    console.log('LDT AutoThresh Web orders:', matched.length);
+    return matched.length > 0;
   } catch (e) {
     console.error('LDT check error:', e);
     return false;
@@ -163,10 +171,9 @@ async function checkLifetimeOrder(token: string): Promise<boolean> {
     type OData = { data?: { customer?: { orders?: { nodes: Array<{ lineItems: { nodes: Array<{ title: string }> } }> } } } };
     const data = await r.json() as OData;
     const orders = data.data?.customer?.orders?.nodes ?? [];
-    return orders.some(o => o.lineItems.nodes.some(item => {
-      const t = item.title.toLowerCase().replace(/™/g, '').trim();
-      return t === 'autothresh web' || t.includes('lifetime');
-    }));
+    return orders.some(o => o.lineItems.nodes.some(item =>
+      item.title.toLowerCase().includes('lifetime')
+    ));
   } catch { return false; }
 }
 
