@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AppIcon } from './AppIcon';
+import { ContactModal } from './ContactModal';
 import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
@@ -11,6 +12,7 @@ interface Props {
 
 export function LoginPage({ onLogin, onSwitchAccount }: Props) {
   const [loading, setLoading]               = useState(false);
+  const [showContact, setShowContact]       = useState(false);
   const [showEula, setShowEula]             = useState(false);
   const [showFaq, setShowFaq]               = useState(false);
   const [showInfo, setShowInfo]             = useState(false);
@@ -444,7 +446,8 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
 
       </div>{/* end centering wrapper */}
 
-      <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} />
+      <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} onContact={() => setShowContact(true)} />
+      {showContact && <ContactModal onClose={() => setShowContact(false)} />}
       {showEula && <EulaModal onClose={() => setShowEula(false)} />}
       {showFaq && <FaqModal onClose={() => setShowFaq(false)} />}
 
