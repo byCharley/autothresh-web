@@ -280,7 +280,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                 Choose a Plan
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', lineHeight: 1.55, marginBottom: 24 }}>
-                Unlimited separations. Start free for 3 days — no charge until your trial ends.
+                Unlimited separations. Annual plan includes a 3-day free trial.
               </div>
 
               {/* Side-by-side plan cards */}
@@ -310,10 +310,10 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                     <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>/mo</span>
                   </div>
                   <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
-                    3-day free trial<br />Cancel anytime
+                    Cancel anytime
                   </div>
                   <div style={{ marginTop: 8, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', opacity: 0.6, lineHeight: 1.5 }}>
-                    $8.99 charged after trial
+                    $8.99 billed monthly
                   </div>
                 </div>
 
@@ -379,14 +379,14 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                 onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.85')}
                 onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
               >
-                Try It Free — 3 Days
+                {selectedPlan === 'yearly' ? 'Try It Free — 3 Days' : 'Get Started — Monthly'}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
                 </svg>
               </button>
 
               <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', lineHeight: 1.5, opacity: 0.7 }}>
-                No charge until your trial ends. Cancel anytime.
+                {selectedPlan === 'yearly' ? 'No charge until your trial ends. Cancel anytime.' : 'Cancel anytime.'}
               </div>
 
               {/* Lifetime divider */}
