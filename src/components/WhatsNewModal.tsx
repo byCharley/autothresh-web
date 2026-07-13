@@ -15,6 +15,16 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-13',
+    label: 'Access & Subscription Fix',
+    fixed: [
+      'Resolved an issue where some monthly subscribers were incorrectly shown a "Free Trial" badge on first login.',
+      'Resolved an issue where lifetime license holders were unable to log in.',
+      'Resolved an issue where monthly subscribers were incorrectly identified as lifetime customers.',
+      'Apologies for any inconvenience — all access checks are now working correctly. If you are still having trouble logging in, please contact us.',
+    ],
+  },
+  {
     date: '2026-07-10',
     label: 'Xerox Effect — Texture Mode',
     added: [
