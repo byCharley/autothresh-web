@@ -2,21 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { AppIcon } from './AppIcon';
 
-// Bell uses the same CHANGELOG as WhatsNewModal — one source, always in sync.
 import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewModal';
 import { ACCENTS, applyAccentByHex } from '../lib/accent';
-
-function bellDate(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function bellBody(entry: typeof CHANGELOG[number]): string {
-  const items = [...(entry.added ?? []), ...(entry.improved ?? [])];
-  if (!items.length) return '';
-  const joined = items.slice(0, 2).join(' · ');
-  return joined.length > 300 ? joined.slice(0, 297) + '…' : joined;
-}
 
 function getSeenDate(): string {
   return localStorage.getItem('at-changelog-seen') ?? '';
@@ -29,6 +16,7 @@ interface TopBarProps {
   onTutorial: () => void;
   onVideo: () => void;
   onAnalytics?: () => void;
+  onWhatsNew?: () => void;
   onLogout?: () => void;
   userEmail?: string;
   firstName?: string;
@@ -40,14 +28,10 @@ interface TopBarProps {
   chatUnread?: number;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0 }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onWhatsNew, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0 }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const notifRef = useRef<HTMLDivElement>(null);
-  const [notifAtBottom, setNotifAtBottom] = useState(false);
-  const notifScrollRef = useRef<HTMLDivElement>(null);
   const [seenDate, setSeenDate] = useState(getSeenDate);
   const unreadCount = CHANGELOG.filter(e => e.date > seenDate).length;
   const [gearOpen, setGearOpen] = useState(false);
@@ -81,15 +65,6 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
-
-  useEffect(() => {
-    if (!notifOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [notifOpen]);
 
   useEffect(() => {
     if (!gearOpen) return;
@@ -453,104 +428,25 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
       </div>
 
       {/* Changelog bell */}
-      <div ref={notifRef} style={{ position: 'relative' }}>
-        <button
-          className="btn btn-ghost btn-icon"
-          title="What's new"
-          onClick={() => {
-            const opening = !notifOpen;
-            setNotifOpen(opening);
-            if (opening) { markChangelogSeen(); setSeenDate(CHANGELOG_LATEST_DATE); setNotifAtBottom(false); }
-          }}
-          style={{ position: 'relative', height: 26, width: 30 }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-          {unreadCount > 0 && (
-            <span style={{
-              position: 'absolute', top: 3, right: 3,
-              width: 7, height: 7, borderRadius: '50%',
-              background: 'var(--accent)',
-              boxShadow: '0 0 5px var(--accent)',
-            }} />
-          )}
-        </button>
-
-        {notifOpen && (
-          <div style={{
-            position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-            width: 320,
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
-            zIndex: 200,
-          }}>
-            <div style={{
-              padding: '11px 14px 10px',
-              borderBottom: '1px solid var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text)' }}>
-                What's New
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                AutoThresh
-              </span>
-            </div>
-            <div style={{ position: 'relative' }}>
-              <div
-                ref={notifScrollRef}
-                style={{ maxHeight: 420, overflowY: 'auto' }}
-                onScroll={() => {
-                  const el = notifScrollRef.current;
-                  if (!el) return;
-                  setNotifAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 8);
-                }}
-              >
-                {CHANGELOG.map((entry, i) => {
-                  const unseen = entry.date > seenDate;
-                  return (
-                    <div key={entry.date + entry.label} style={{
-                      padding: '12px 14px',
-                      borderBottom: i < CHANGELOG.length - 1 ? '1px solid var(--border)' : 'none',
-                      display: 'flex', gap: 10,
-                      opacity: i >= 4 ? Math.max(0.35, 0.65 - (i - 4) * 0.1) : 1,
-                      animation: `notif-row-in 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) ${i * 55}ms both`,
-                    }}>
-                      <div style={{
-                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 5,
-                        background: unseen ? 'var(--accent)' : 'var(--border)',
-                        boxShadow: unseen ? '0 0 5px var(--accent)' : 'none',
-                      }} />
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
-                            {entry.label}
-                          </span>
-                          <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
-                            {bellDate(entry.date)}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, margin: 0, fontFamily: 'var(--font-mono)' }}>
-                          {bellBody(entry)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, height: 64,
-                background: 'linear-gradient(to bottom, transparent, var(--surface))',
-                pointerEvents: 'none',
-                opacity: notifAtBottom ? 0 : 1,
-                transition: 'opacity 0.25s ease',
-              }} />
-            </div>
-          </div>
+      <button
+        className="btn btn-ghost btn-icon"
+        title="What's new"
+        onClick={() => { markChangelogSeen(); setSeenDate(CHANGELOG_LATEST_DATE); onWhatsNew?.(); }}
+        style={{ position: 'relative', height: 26, width: 30 }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        {unreadCount > 0 && (
+          <span style={{
+            position: 'absolute', top: 3, right: 3,
+            width: 7, height: 7, borderRadius: '50%',
+            background: 'var(--accent)',
+            boxShadow: '0 0 5px var(--accent)',
+          }} />
         )}
-      </div>
+      </button>
 
       <button
         className="btn btn-ghost"
