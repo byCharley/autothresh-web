@@ -201,7 +201,7 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
 
     for (const s of subs) {
       const st = String(s.status ?? '').toUpperCase();
-      const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'TRIAL';
+      const valid = st === 'ACTIVE' || st === 'TRIAL';
 
       // Seal uses subscription_type=2 for trials; infer end date from order_placed + TRIAL_DAYS
       const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
