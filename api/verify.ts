@@ -158,24 +158,6 @@ async function checkLdtLicense(email: string): Promise<boolean> {
   }
 }
 
-async function checkLifetimeOrder(token: string): Promise<boolean> {
-  try {
-    const r = await fetch(CUST_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': token },
-      body: JSON.stringify({
-        query: `query { customer { orders(first: 100) { nodes { lineItems(first: 10) { nodes { title } } } } } }`,
-      }),
-    });
-    if (!r.ok) return false;
-    type OData = { data?: { customer?: { orders?: { nodes: Array<{ lineItems: { nodes: Array<{ title: string }> } }> } } } };
-    const data = await r.json() as OData;
-    const orders = data.data?.customer?.orders?.nodes ?? [];
-    return orders.some(o => o.lineItems.nodes.some(item =>
-      item.title.toLowerCase().includes('lifetime')
-    ));
-  } catch { return false; }
-}
 
 async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; activeSubs: number; subscriptionStatus?: string; nextBillingDate?: string; planTitle?: string }> {
   try {
@@ -219,7 +201,7 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
 
     for (const s of subs) {
       const st = String(s.status ?? '').toUpperCase();
-      const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'CANCELLED' || st === 'CANCELED' || st === 'TRIAL';
+      const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'TRIAL';
 
       // Seal uses subscription_type=2 for trials; infer end date from order_placed + TRIAL_DAYS
       const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
@@ -320,9 +302,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = CREATOR_EMAILS.has(emailLower);
 
   // ── Run all async checks in parallel ─────────────────────────────────────
-  const [sealResult, lifetimeResult, ldtResult, testerStatus, securityResult, userPrefs] = await Promise.all([
+  const [sealResult, ldtResult, testerStatus, securityResult, userPrefs] = await Promise.all([
     sealCheckSubscription(email),
-    (!isCreator) ? checkLifetimeOrder(token) : Promise.resolve(false),
     (!isCreator) ? checkLdtLicense(emailLower) : Promise.resolve(false),
     (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve<'active' | 'paused' | null>(null),
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
@@ -330,7 +311,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   ]);
 
   const { hasSub, activeSubs, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
-  const hasLifetime = lifetimeResult || ldtResult;
+  const hasLifetime = ldtResult;
   const isSecurityExpired = securityResult;
 
   // Testers: env var OR active DB record. Paused DB record → no access.
