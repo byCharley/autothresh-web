@@ -335,6 +335,7 @@ function fmtMsgDate(iso: string) {
 }
 
 function ChatPanel({ session }: { session: Session }) {
+  const mobile = useMobile(768);
   const [tickets, setTickets]         = useState<SupportTicket[]>([]);
   const [active, setActive]           = useState<SupportTicket | null>(null);
   const [messages, setMessages]       = useState<SupportMessage[]>([]);
@@ -444,10 +445,10 @@ function ChatPanel({ session }: { session: Session }) {
   const totalUnread = tickets.reduce((s, t) => s + (t.unread_by_creator || 0), 0);
 
   return (
-    <div style={{ display: 'flex', gap: 0, height: 560, border: '1px solid var(--border)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', gap: 0, height: mobile ? '100%' : 560, border: '1px solid var(--border)', overflow: 'hidden' }}>
 
-      {/* Ticket list */}
-      <div style={{ width: 240, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+      {/* Ticket list — hidden on mobile when a ticket is active */}
+      <div style={{ width: mobile ? '100%' : 240, flexShrink: 0, borderRight: mobile ? 'none' : '1px solid var(--border)', display: mobile && active ? 'none' : 'flex', flexDirection: 'column' }}>
         {/* List header */}
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -514,13 +515,20 @@ function ChatPanel({ session }: { session: Session }) {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Convo header */}
           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{active.subject}</div>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 2 }}>
-                {active.user_name ? `${active.user_name} · ` : ''}{active.user_email}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              {mobile && (
+                <button onClick={() => setActive(null)} style={{ height: 26, padding: '0 8px', fontSize: 9, fontFamily: 'var(--font-mono)', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}>
+                  ← Back
+                </button>
+              )}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{active.subject}</div>
+                <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 2 }}>
+                  {active.user_name ? `${active.user_name} · ` : ''}{active.user_email}
+                </div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
               {active.status !== 'solved' && (
                 <button onClick={() => setStatus(active.id, 'solved')} style={{ height: 26, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, background: '#4ade8022', border: '1px solid #4ade8044', color: '#4ade80', cursor: 'pointer' }}>
                   ✓ Solve

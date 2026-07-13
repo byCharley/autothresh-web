@@ -107,26 +107,44 @@ function runFraudCheck(email: string, ip: string, firstName: string, subscriptio
 // Customer Account API
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
 
-// Seal Subscriptions API — token is unique per shop, found in Seal app > Settings > General > API
-// API_SECRET is for webhook HMAC verification only; not needed for read requests.
-const SEAL_TOKEN   = process.env.SEAL_API_TOKEN!;
+const SEAL_TOKEN   = process.env.SEAL_API_TOKEN ?? process.env.SEAL_TOKEN ?? '';
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
+const LDT_ACCESS   = process.env.LDT_ACCESS ?? '';
+const LDT_API_URL  = 'https://digital.ldtsoft.work/api/integrate';
 
-async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; activeSubs: number; subscriptionStatus?: string; nextBillingDate?: string; planTitle?: string }> {
+async function checkLdtLicense(email: string): Promise<boolean> {
+  if (!LDT_ACCESS) return false;
+  try {
+    const r = await fetch(`${LDT_API_URL}/order/search?email=${encodeURIComponent(email)}&page=1&pageSize=20`, {
+      headers: { 'LDT-X-Access-Token': LDT_ACCESS },
+    });
+    if (!r.ok) return false;
+    const raw = JSON.parse(await r.text()) as unknown;
+    let orders: unknown[] = [];
+    if (Array.isArray(raw)) { orders = raw; }
+    else if (raw && typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      for (const key of ['data', 'orders', 'items', 'result', 'list']) {
+        if (Array.isArray(obj[key])) { orders = obj[key] as unknown[]; break; }
+      }
+    }
+    const isWebOrder = (o: unknown) => {
+      const json = JSON.stringify(o).toLowerCase().replace(/™/g, '');
+      return json.includes('autothresh web') && !json.includes('autothresh pro') && !json.includes('autothresh lite');
+    };
+    return orders.filter(isWebOrder).length > 0;
+  } catch { return false; }
+}
+
+async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; activeSubs: number; everInSeal: boolean; subscriptionStatus?: string; nextBillingDate?: string; planTitle?: string }> {
   try {
     const url = `${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`;
-    console.log('Seal request:', url, 'token present:', !!SEAL_TOKEN);
-
     const r = await fetch(url, { headers: { 'X-Seal-Token': SEAL_TOKEN } });
     const rawText = await r.text();
     console.log('Seal HTTP status:', r.status);
-    console.log('Seal raw response:', rawText.slice(0, 800));
-
-    if (!r.ok) return { hasSub: false, activeSubs: 0 };
+    if (!r.ok) return { hasSub: false, activeSubs: 0, everInSeal: false };
 
     const raw = JSON.parse(rawText) as unknown;
-
-    // Extract subscription array — Seal wraps in { payload: { subscriptions: [...] } }
     let subs: Array<Record<string, unknown>> = [];
     if (Array.isArray(raw)) {
       subs = raw as Array<Record<string, unknown>>;
@@ -142,9 +160,7 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
       }
     }
 
-    console.log('Seal parsed subs count:', subs.length);
-    if (subs[0]) console.log('Seal sub[0] keys:', JSON.stringify(subs[0]));
-
+    const everInSeal = subs.length > 0;
     let nextBillingDate: string | undefined;
     let planTitle: string | undefined;
     let subscriptionStatus: string | undefined;
@@ -154,19 +170,20 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
 
     for (const s of subs) {
       const st = String(s.status ?? '').toUpperCase();
-      const valid = st === 'ACTIVE' || st === 'PAUSED' || st === 'CANCELLED' || st === 'CANCELED' || st === 'TRIAL';
-
-      // Seal uses subscription_type=2 for trials; infer end date from order_placed + TRIAL_DAYS
+      // Trial only applies to annual plans — monthly subscribers pay immediately
+      const billingInterval = String(s.billing_interval ?? '').toLowerCase();
+      const isAnnualPlan = billingInterval.includes('year') || billingInterval.includes('annual');
       const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
-      const isTrialType = Number(s.subscription_type) === 2;
+      const isTrialType = Number(s.subscription_type) === 2 && isAnnualPlan;
       const orderPlaced = s.order_placed as string | undefined;
       const trialEndInferred = isTrialType && orderPlaced
         ? new Date(new Date(orderPlaced).getTime() + TRIAL_DAYS * 86_400_000).toISOString()
         : undefined;
       const trialEndRaw = trialEndExplicit ?? trialEndInferred;
-      const isInTrial = st === 'TRIAL' || (!!trialEndRaw && new Date(trialEndRaw) > new Date());
+      const trialStillActive = !!trialEndRaw && new Date(trialEndRaw) > new Date();
+      const valid = st === 'ACTIVE' || st === 'TRIAL';
+      const isInTrial = (st === 'TRIAL' || (st === 'ACTIVE' && trialStillActive)) && isAnnualPlan;
 
-      // Seal nests plan name inside items array
       const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
       const itemPlanName = items[0]?.selling_plan_name ?? items[0]?.title;
 
@@ -174,7 +191,7 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
         activeSubs++;
         hasSub = true;
         if (!subscriptionStatus) {
-          subscriptionStatus = (isInTrial && (st === 'ACTIVE' || st === 'TRIAL')) ? 'trial' : st.toLowerCase();
+          subscriptionStatus = isInTrial ? 'trial' : st.toLowerCase();
           nextBillingDate = isInTrial
             ? trialEndRaw
             : (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
@@ -182,10 +199,10 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
         }
       }
     }
-    return { hasSub, activeSubs, subscriptionStatus, nextBillingDate, planTitle };
+    return { hasSub, activeSubs, everInSeal, subscriptionStatus, nextBillingDate, planTitle };
   } catch (e) {
     console.error('Seal check error:', e);
-    return { hasSub: false, activeSubs: 0 };
+    return { hasSub: false, activeSubs: 0, everInSeal: false };
   }
 }
 
@@ -299,20 +316,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const emailLower = custEmail.toLowerCase();
   const isCreator  = CREATOR_EMAILS.has(emailLower);
 
-  const [sealResult, testerStatus, isSecurityExpired] = await Promise.all([
+  const [sealResult, ldtResult, testerStatus, isSecurityExpired] = await Promise.all([
     sealCheckSubscription(custEmail),
+    (!isCreator) ? checkLdtLicense(emailLower) : Promise.resolve(false),
     (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve<'active' | 'paused' | null>(null),
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
   ]);
 
-  const { hasSub, activeSubs, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
+  const { hasSub, activeSubs, everInSeal, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
+  const hasLifetime = !everInSeal && ldtResult;
   const envTester  = !isCreator && TESTER_EMAILS.has(emailLower);
   const isTester   = envTester || (!isCreator && testerStatus === 'active');
-  const finalHasSub = hasSub || isCreator || isTester;
+  const finalHasSub = hasSub || isCreator || isTester || hasLifetime;
 
-  const finalStatus  = isCreator ? 'creator' : isTester ? 'tester' : subscriptionStatus;
-  const finalPlan    = isCreator ? 'Creator' : isTester ? 'Tester Access' : planTitle;
-  const finalExpiry  = (isCreator || isTester) ? undefined : nextBillingDate;
+  const finalStatus  = isCreator ? 'creator' : isTester ? 'tester' : hasLifetime ? 'lifetime' : subscriptionStatus;
+  const finalPlan    = isCreator ? 'Creator' : isTester ? 'Tester Access' : hasLifetime ? 'Access' : planTitle;
+  const finalExpiry  = (isCreator || isTester || hasLifetime) ? undefined : nextBillingDate;
 
   console.log('Auth result:', { custEmail, hasSub, isCreator, isTester, testerStatus, finalHasSub, nextBillingDate });
 
