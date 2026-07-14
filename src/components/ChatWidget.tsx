@@ -14,7 +14,7 @@ interface Ticket {
 interface Message {
   id: number;
   created_at: string;
-  sender: 'user' | 'creator';
+  sender: 'user' | 'creator' | 'system';
   message: string;
   read_at: string | null;
 }
@@ -55,6 +55,8 @@ export function ChatWidget({ session }: { session: Session }) {
   const replyRef                      = useRef<HTMLTextAreaElement>(null);
   const isMobile                      = useRef(window.innerWidth < 640);
   const lastTypingSentRef             = useRef(0);
+  const [imageUploading, setImageUploading] = useState(false);
+  const fileInputRef                   = useRef<HTMLInputElement>(null);
 
   // Keep isMobile in sync with resize
   useEffect(() => {
@@ -228,6 +230,34 @@ export function ChatWidget({ session }: { session: Session }) {
     await fetch(`/api/chat?resource=message&id=${id}`, { method: 'DELETE', headers: authH() });
   }
 
+  async function uploadImage(file: File) {
+    if (!activeTicket) return;
+    setImageUploading(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const r = await fetch('/api/chat-upload', {
+        method: 'POST',
+        headers: authH(),
+        body: JSON.stringify({ imageData: base64, mimeType: file.type, ticketId: activeTicket.id }),
+      });
+      const data = await r.json() as { url?: string; error?: string };
+      if (data.url) {
+        await fetch('/api/chat', {
+          method: 'POST',
+          headers: authH(),
+          body: JSON.stringify({ resource: 'message', ticket_id: activeTicket.id, message: `[img]:${data.url}` }),
+        });
+        loadMessages(activeTicket.id);
+      }
+    } catch {}
+    setImageUploading(false);
+  }
+
   const hasOpenTicket = tickets.some(t => t.status !== 'solved');
   const mobile = isMobile.current;
 
@@ -363,6 +393,13 @@ export function ChatWidget({ session }: { session: Session }) {
               <div style={{ textAlign: 'center', padding: '20px 0', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>No messages yet</div>
             )}
             {messages.map((msg, idx) => {
+              if (msg.sender === 'system') {
+                return (
+                  <div key={msg.id} style={{ textAlign: 'center', padding: '6px 0', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                    {msg.message}
+                  </div>
+                );
+              }
               const isUser = msg.sender === 'user';
               const showDate = idx === 0 || fmtDate(messages[idx - 1].created_at) !== fmtDate(msg.created_at);
               const isLast = idx === messages.length - 1;
@@ -431,14 +468,16 @@ export function ChatWidget({ session }: { session: Session }) {
                         </div>
                       ) : (
                         <div style={{
-                          padding: '8px 11px', fontSize: 12, lineHeight: 1.55,
+                          padding: msg.message.startsWith('[img]:') ? '4px' : '8px 11px', fontSize: 12, lineHeight: 1.55,
                           fontFamily: 'var(--font-sans)',
                           background: isUser ? 'var(--accent)' : 'var(--surface)',
                           color: isUser ? '#111' : 'var(--text)',
                           border: isUser ? 'none' : '1px solid var(--border)',
                           wordBreak: 'break-word',
                         }}>
-                          {msg.message}
+                          {msg.message.startsWith('[img]:')
+                            ? <img src={msg.message.slice(6)} alt="attachment" style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} />
+                            : msg.message}
                         </div>
                       )}
 
@@ -542,6 +581,16 @@ export function ChatWidget({ session }: { session: Session }) {
                   }}
                 />
                 <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={imageUploading}
+                  title="Attach image"
+                  style={{ width: 36, flexShrink: 0, background: 'var(--surface-2)', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: imageUploading ? 0.4 : 0.7 }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" strokeWidth="2">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                  </svg>
+                </button>
+                <button
                   onClick={sendReply}
                   disabled={sending || !reply.trim()}
                   style={{
@@ -553,6 +602,7 @@ export function ChatWidget({ session }: { session: Session }) {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
               </div>
+              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ''; }} />
               <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 4 }}>⌘↵ to send</div>
             </div>
           )}
