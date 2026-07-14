@@ -372,17 +372,14 @@ function App() {
   const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke, cropToArtwork, withFabricView }: ExportConfig) => {
     if (!originalImage) return;
 
-    const [
-      { default: JSZip },
-      { saveAs },
-      { writePsd },
-      { PDFDocument },
-    ] = await Promise.all([
-      import('jszip'),
-      import('file-saver'),
-      import('ag-psd'),
-      import('pdf-lib'),
-    ]);
+    const loadMods = () => Promise.all([import('jszip'), import('file-saver'), import('ag-psd'), import('pdf-lib')]);
+    let modResult: Awaited<ReturnType<typeof loadMods>>;
+    try {
+      modResult = await loadMods();
+    } catch {
+      throw new Error('A newer version of AutoThresh is available. Please do a hard refresh (Cmd+Shift+R / Ctrl+Shift+R) and re-upload your image to export.');
+    }
+    const [{ default: JSZip }, { saveAs }, { writePsd }, { PDFDocument }] = modResult;
 
     const mode = _mode;
 
@@ -1521,10 +1518,10 @@ function App() {
             <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/>
           </svg>
           <span style={{ fontSize: 11, color: 'var(--text)', letterSpacing: '0.04em' }}>
-            Update available
+            Update available — export your work first
           </span>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => { if (window.confirm('Reloading will lose your current image. Export first if you need it. Reload now?')) window.location.reload(); }}
             style={{
               height: 24, padding: '0 12px', fontSize: 10, fontWeight: 700,
               letterSpacing: '0.06em', background: 'var(--accent)', border: 'none',
