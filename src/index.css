@@ -159,13 +159,14 @@ html, body, #root {
 .topbar-spacer { flex: 1; min-width: 0; }
 
 /* ─── Topbar responsive collapse ──────────────────────────────────────────── */
-/* At 1080px: hide text labels on secondary buttons — keeps icons only */
-@media (max-width: 1080px) {
+/* At 1200px: hide text labels on secondary buttons — keeps icons only.
+   Covers iPad Air (1180px) and iPad Pro 11" (1194px) in landscape. */
+@media (max-width: 1200px) {
   .topbar-label { display: none; }
   .topbar-filename { display: none; }
 }
-/* At 880px: also hide Tour and Tutorials buttons entirely */
-@media (max-width: 880px) {
+/* At 960px: hide Tour and Tutorials buttons entirely */
+@media (max-width: 960px) {
   .topbar-hide-sm { display: none !important; }
 }
 
