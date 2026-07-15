@@ -449,7 +449,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
       </button>
 
       <button
-        className="btn btn-ghost"
+        className="btn btn-ghost topbar-hide-sm"
         onClick={onVideo}
         title="Watch video tutorials"
         style={{ height: 26 }}
@@ -458,10 +458,10 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
           <circle cx="12" cy="12" r="10"/>
           <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
         </svg>
-        Tutorials
+        <span className="topbar-label">Tutorials</span>
       </button>
       <button
-        className="btn btn-ghost"
+        className="btn btn-ghost topbar-hide-sm"
         onClick={onTutorial}
         title="Take a quick tour of the tools"
         style={{ height: 26 }}
@@ -471,7 +471,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
           <line x1="12" y1="8" x2="12" y2="8" strokeWidth="2.5" strokeLinecap="round"/>
           <line x1="12" y1="12" x2="12" y2="16" strokeWidth="2" strokeLinecap="round"/>
         </svg>
-        Tour
+        <span className="topbar-label">Tour</span>
       </button>
       <button
         className="btn btn-ghost"
@@ -483,7 +483,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
           <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
         </svg>
-        Presets
+        <span className="topbar-label">Presets</span>
       </button>
       <button
         className="btn btn-ghost"
@@ -494,9 +494,9 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
         data-tutorial="tutorial-mockup"
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
-          <path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0 0-1.34-2.23z"/>
+          <path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0-1.34-2.23z"/>
         </svg>
-        Mockup
+        <span className="topbar-label">Mockup</span>
       </button>
       <button
         className="btn btn-primary"
