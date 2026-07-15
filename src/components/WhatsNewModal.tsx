@@ -15,6 +15,17 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-14',
+    label: 'Tablet Improvements',
+    fixed: [
+      'Export button was disappearing on tablet screens — it is now always visible across all modes and screen sizes.',
+    ],
+    improved: [
+      'Sliders on tablet are now noticeably smoother and more responsive — dragging updates the preview instantly with no lag or stutter.',
+      'Slider height reduced slightly on touchscreen devices for a more compact, comfortable layout.',
+    ],
+  },
+  {
     date: '2026-07-13',
     label: 'Access & Subscription Fix',
     fixed: [
