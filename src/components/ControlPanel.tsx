@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import type { PatternType } from '../engine/imageProcessor';
 import { getBayer } from '../engine/colorSeparation';
@@ -38,8 +38,29 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '', hint }:
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [localValue, setLocalValue] = useState(value);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const isDragging = useRef(false);
 
-  const displayVal = step < 1 ? value.toFixed(1) : String(value);
+  // Sync external changes (undo, preset load) when not actively dragging
+  useEffect(() => { if (!isDragging.current) setLocalValue(value); }, [value]);
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
+
+  const handleRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
+    setLocalValue(v);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => onChange(v), 80);
+  };
+
+  const handlePointerDown = () => { isDragging.current = true; };
+  const handlePointerUp = (e: React.PointerEvent<HTMLInputElement>) => {
+    isDragging.current = false;
+    clearTimeout(debounceRef.current);
+    onChange(Number((e.target as HTMLInputElement).value));
+  };
+
+  const displayVal = step < 1 ? localValue.toFixed(1) : String(localValue);
 
   const commit = (raw: string) => {
     const n = parseFloat(raw);
@@ -83,8 +104,11 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '', hint }:
         )}
       </div>
       <div className="slider-track">
-        <input type="range" min={min} max={max} step={step} value={value}
-          onChange={(e) => onChange(Number(e.target.value))} />
+        <input type="range" min={min} max={max} step={step} value={localValue}
+          onChange={handleRangeChange}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+        />
       </div>
       {hint && <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 2, lineHeight: 1.4 }}>{hint}</div>}
     </div>

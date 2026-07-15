@@ -150,8 +150,28 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [localValue, setLocalValue] = useState(value);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const isDragging = useRef(false);
 
-  const displayVal = step < 1 ? value.toFixed(1) : String(value);
+  useEffect(() => { if (!isDragging.current) setLocalValue(value); }, [value]);
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
+
+  const handleRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = Number(e.target.value);
+    setLocalValue(v);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => onChange(v), 80);
+  };
+
+  const handlePointerDown = () => { isDragging.current = true; };
+  const handlePointerUp = (e: React.PointerEvent<HTMLInputElement>) => {
+    isDragging.current = false;
+    clearTimeout(debounceRef.current);
+    onChange(Number((e.target as HTMLInputElement).value));
+  };
+
+  const displayVal = step < 1 ? localValue.toFixed(1) : String(localValue);
 
   const commit = (raw: string) => {
     const n = parseFloat(raw);
@@ -193,9 +213,12 @@ function Slider({ label, value, min, max, step = 1, onChange, unit = '' }: {
           </span>
         )}
       </div>
-      <input type="range" min={min} max={max} step={step} value={value}
+      <input type="range" min={min} max={max} step={step} value={localValue}
         style={{ width: '100%' }}
-        onChange={(e) => onChange(Number(e.target.value))} />
+        onChange={handleRangeChange}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+      />
     </div>
   );
 }
@@ -208,16 +231,33 @@ function DualRangeSlider({ valueMin, valueMax, onChange }: {
   valueMin: number; valueMax: number;
   onChange: (min: number, max: number) => void;
 }) {
-  const pctMin = (valueMin / 255) * 100;
-  const pctMax = (valueMax / 255) * 100;
+  const [localMin, setLocalMin] = useState(valueMin);
+  const [localMax, setLocalMax] = useState(valueMax);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const isDragging = useRef(false);
+
+  useEffect(() => { if (!isDragging.current) { setLocalMin(valueMin); setLocalMax(valueMax); } }, [valueMin, valueMax]);
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
+
+  const fire = (min: number, max: number) => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => onChange(min, max), 80);
+  };
+
+  const pctMin = (localMin / 255) * 100;
+  const pctMax = (localMax / 255) * 100;
   return (
     <div className="dual-range">
       <div className="dual-range-track" />
       <div className="dual-range-fill" style={{ left: `${pctMin}%`, width: `${pctMax - pctMin}%` }} />
-      <input type="range" min={0} max={255} value={valueMin}
-        onChange={(e) => onChange(Math.min(Number(e.target.value), valueMax - 1), valueMax)} />
-      <input type="range" min={0} max={255} value={valueMax}
-        onChange={(e) => onChange(valueMin, Math.max(Number(e.target.value), valueMin + 1))} />
+      <input type="range" min={0} max={255} value={localMin}
+        onPointerDown={() => { isDragging.current = true; }}
+        onPointerUp={(e) => { isDragging.current = false; clearTimeout(debounceRef.current); onChange(Math.min(Number((e.target as HTMLInputElement).value), localMax - 1), localMax); }}
+        onChange={(e) => { const v = Math.min(Number(e.target.value), localMax - 1); setLocalMin(v); fire(v, localMax); }} />
+      <input type="range" min={0} max={255} value={localMax}
+        onPointerDown={() => { isDragging.current = true; }}
+        onPointerUp={(e) => { isDragging.current = false; clearTimeout(debounceRef.current); onChange(localMin, Math.max(Number((e.target as HTMLInputElement).value), localMin + 1)); }}
+        onChange={(e) => { const v = Math.max(Number(e.target.value), localMin + 1); setLocalMax(v); fire(localMin, v); }} />
     </div>
   );
 }

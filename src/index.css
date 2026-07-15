@@ -926,41 +926,44 @@ input[type='range']::-moz-range-thumb {
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
 /* ─── Touch device slider improvements ──────────────────────────────────────── */
-/* pointer:coarse = touchscreen. Larger thumbs, bigger hit areas, no hover flash. */
+/* pointer:coarse = touchscreen. Compact but still touch-friendly thumbs, no hover flash. */
 @media (pointer: coarse) {
   input[type='range'] {
     /* pan-y lets the page scroll vertically while the range captures horizontal drag */
     touch-action: pan-y;
-    height: 36px;
+    height: 28px;
     cursor: default;
   }
   input[type='range']::-webkit-slider-thumb {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
+    transition: none; /* remove scale/color flicker on tap */
   }
   input[type='range']::-moz-range-thumb {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
   }
-  /* Suppress the hover scale pop that fires on tap (looks like a flicker on touch) */
+  /* Suppress the hover scale pop that fires on tap */
   input[type='range']:hover::-webkit-slider-thumb {
     transform: none;
     background: var(--accent);
+    transition: none;
   }
   .slider-track {
-    height: 36px;
+    height: 28px;
   }
   /* Dual range */
   .dual-range {
-    height: 36px;
+    height: 28px;
   }
   .dual-range input[type='range'] {
-    height: 36px;
+    height: 28px;
     touch-action: pan-y;
   }
   .dual-range input[type='range']::-webkit-slider-thumb {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
+    transition: none;
   }
 }
 
