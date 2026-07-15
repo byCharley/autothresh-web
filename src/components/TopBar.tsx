@@ -18,6 +18,7 @@ interface TopBarProps {
   onAnalytics?: () => void;
   onWhatsNew?: () => void;
   onLogout?: () => void;
+  onUpdateName?: (name: string) => void;
   userEmail?: string;
   firstName?: string;
   subscriptionExpiresAt?: string;
@@ -28,9 +29,11 @@ interface TopBarProps {
   chatUnread?: number;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onWhatsNew, onLogout, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0 }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onWhatsNew, onLogout, onUpdateName, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0 }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const [seenDate, setSeenDate] = useState(getSeenDate);
   const unreadCount = CHANGELOG.filter(e => e.date > seenDate).length;
@@ -246,22 +249,67 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                 width: 260,
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
-                zIndex: 200,
+                zIndex: 9999,
               }}>
                 {/* Identity */}
                 <div style={{ padding: '13px 15px 11px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
-                      {firstName || userEmail?.split('@')[0]}
-                    </span>
-                    {subscriptionStatus === 'creator' && (
-                      <span style={{
-                        fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em',
-                        textTransform: 'uppercase', color: '#111',
-                        background: subColor, padding: '2px 6px', borderRadius: 2,
-                      }}>
-                        Creator
-                      </span>
+                    {editingName ? (
+                      <form
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1 }}
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          onUpdateName?.(nameDraft);
+                          setEditingName(false);
+                        }}
+                      >
+                        <input
+                          autoFocus
+                          value={nameDraft}
+                          onChange={(e) => setNameDraft(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Escape') setEditingName(false); }}
+                          style={{
+                            flex: 1, fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)',
+                            background: 'var(--surface-2)', border: '1px solid var(--accent)',
+                            color: 'var(--text)', padding: '2px 6px', outline: 'none',
+                          }}
+                        />
+                        <button type="submit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: 0, display: 'flex' }} title="Save">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        </button>
+                        <button type="button" onClick={() => setEditingName(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex' }} title="Cancel">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+                          {firstName || userEmail?.split('@')[0]}
+                        </span>
+                        {subscriptionStatus === 'creator' && (
+                          <span style={{
+                            fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em',
+                            textTransform: 'uppercase', color: '#111',
+                            background: subColor, padding: '2px 6px', borderRadius: 2,
+                          }}>
+                            Creator
+                          </span>
+                        )}
+                        {onUpdateName && (
+                          <button
+                            onClick={() => { setNameDraft(firstName || userEmail?.split('@')[0] || ''); setEditingName(true); }}
+                            title="Change display name"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: 'var(--text-muted)', marginLeft: 'auto', opacity: 0.5 }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.5'; }}
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

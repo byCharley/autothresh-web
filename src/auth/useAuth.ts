@@ -15,8 +15,9 @@ export interface Session {
   accentColor?:            string;
 }
 
-const SESSION_KEY          = 'at_session';
-const SHOPIFY_ID_TOKEN     = 'shopify_id_token';      // saved at login, used as logout hint
+const SESSION_KEY           = 'at_session';
+const DISPLAY_NAME_KEY      = 'at_display_name';
+const SHOPIFY_ID_TOKEN      = 'shopify_id_token';      // saved at login, used as logout hint
 const SHOPIFY_REFRESH_TOKEN = 'shopify_refresh_token'; // used to get a fresh id_token for logout
 const SHOPIFY_STORE_ID     = '52142571674';
 const VERIFIER_KEY     = 'at_pkce_verifier';
@@ -26,13 +27,18 @@ function isInactiveStatus(status?: string): boolean {
   return status === 'paused' || status === 'cancelled' || status === 'canceled';
 }
 
+function applyDisplayNameOverride(s: Session): Session {
+  const override = localStorage.getItem(DISPLAY_NAME_KEY);
+  return override ? { ...s, firstName: override } : s;
+}
+
 function loadSession(): Session | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const s = JSON.parse(raw) as Session;
     if (new Date(s.expiresAt) < new Date()) { localStorage.removeItem(SESSION_KEY); return null; }
-    return s;
+    return applyDisplayNameOverride(s);
   } catch { return null; }
 }
 
@@ -170,7 +176,7 @@ export function useAuth() {
           return;
         }
         if (data.accentColor) applyAccentByHex(data.accentColor);
-        const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor };
+        const updated: Session = applyDisplayNameOverride({ ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor });
         saveSession(updated);
         setSession(updated);
         if (!data.hasSubscription) { setStatus('no-subscription'); return; }
@@ -198,7 +204,7 @@ export function useAuth() {
       if (!data.valid || !data.hasSubscription) return false;
       if (isInactiveStatus(data.subscriptionStatus)) return false;
       if (data.accentColor) applyAccentByHex(data.accentColor);
-      const updated: Session = { ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor };
+      const updated: Session = applyDisplayNameOverride({ ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor });
       saveSession(updated);
       setSession(updated);
       setStatus('authenticated');
@@ -262,5 +268,14 @@ export function useAuth() {
     setStatus('unauthenticated');
   }, []);
 
-  return { status, session, initiateLogin, switchAccount, logout, recheck };
+  const updateDisplayName = useCallback((name: string) => {
+    if (name.trim()) {
+      localStorage.setItem(DISPLAY_NAME_KEY, name.trim());
+    } else {
+      localStorage.removeItem(DISPLAY_NAME_KEY);
+    }
+    setSession(prev => prev ? { ...prev, firstName: name.trim() || prev.firstName } : prev);
+  }, []);
+
+  return { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName };
 }
