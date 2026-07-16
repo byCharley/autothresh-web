@@ -854,7 +854,7 @@ function DtgImageAdjustSection() {
 
 // ─── Fabric / Background Section ─────────────────────────────────────────────
 
-function BackgroundSection({ defaultOpen = false }: { defaultOpen?: boolean } = {}) {
+function BackgroundSection({ defaultOpen = true }: { defaultOpen?: boolean } = {}) {
   const [open, setOpen] = useState(defaultOpen);
   const [brand, setBrand] = useState('LA Apparel');
   const {
