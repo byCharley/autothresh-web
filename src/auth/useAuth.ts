@@ -129,7 +129,7 @@ export function useAuth() {
           if (data.error || !data.token) { setStatus('unauthenticated'); return; }
           if (data.idToken) saveIdToken(data.idToken);
           if (data.refreshToken) saveRefreshToken(data.refreshToken);
-          const s: Session = {
+          const s: Session = applyDisplayNameOverride({
             token:                  data.token!,
             idToken:                data.idToken,
             expiresAt:              data.expiresAt!,
@@ -139,7 +139,7 @@ export function useAuth() {
             subscriptionStatus:     data.subscriptionStatus,
             subscriptionExpiresAt:  data.subscriptionExpiresAt,
             planTitle:              data.planTitle,
-          };
+          });
           saveSession(s);
           setSession(s);
           // No active subscription (never subscribed, paused, or cancelled) →
