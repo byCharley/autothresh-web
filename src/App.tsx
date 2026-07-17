@@ -134,6 +134,8 @@ function App() {
 
   useHistorySync();
   const updateAvailable = useVersionCheck();
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [chunkError, setChunkError] = useState(false);
   const { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [sheetGenerating, setSheetGenerating] = useState(false);
@@ -162,6 +164,22 @@ function App() {
       sessionStorage.removeItem('at-pending-welcome');
     }
   }, [status]);
+
+  // Apply a pending update on next page load (user chose "update on next login").
+  useEffect(() => {
+    if (localStorage.getItem('at_pending_update')) {
+      localStorage.removeItem('at_pending_update');
+      window.location.reload();
+    }
+  }, []);
+
+  // Catch Vite chunk-load failures (old hashed filenames gone after a new deploy)
+  // so the app never shows a blank screen — show the update banner instead.
+  useEffect(() => {
+    const handler = (e: Event) => { e.preventDefault(); setChunkError(true); };
+    window.addEventListener('vite:preloadError', handler);
+    return () => window.removeEventListener('vite:preloadError', handler);
+  }, []);
 
   // Allow any component to open the contact modal via custom event.
   useEffect(() => {
@@ -1506,7 +1524,7 @@ function App() {
       {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
       {session && !isCreator && <ChatWidget session={session} />}
 
-      {updateAvailable && (
+      {(updateAvailable && !updateDismissed) || chunkError ? (
         <div style={{
           position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
           zIndex: 9990, display: 'flex', alignItems: 'center', gap: 12,
@@ -1518,20 +1536,33 @@ function App() {
             <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/>
           </svg>
           <span style={{ fontSize: 11, color: 'var(--text)', letterSpacing: '0.04em' }}>
-            Update available — export your work first
+            {chunkError ? 'Update detected — please reload to continue.' : 'AutoThresh has been updated.'}
           </span>
           <button
-            onClick={() => { if (window.confirm('Reloading will lose your current image. Export first if you need it. Reload now?')) window.location.reload(); }}
+            onClick={() => window.location.reload()}
             style={{
               height: 24, padding: '0 12px', fontSize: 10, fontWeight: 700,
               letterSpacing: '0.06em', background: 'var(--accent)', border: 'none',
               color: '#111', cursor: 'pointer', fontFamily: 'var(--font-mono)',
             }}
           >
-            RELOAD
+            Reload now
           </button>
+          {!chunkError && (
+            <button
+              onClick={() => { localStorage.setItem('at_pending_update', '1'); setUpdateDismissed(true); }}
+              style={{
+                height: 24, padding: '0 12px', fontSize: 10,
+                letterSpacing: '0.06em', background: 'none',
+                border: '1px solid var(--border)', color: 'var(--text-dim)',
+                cursor: 'pointer', fontFamily: 'var(--font-mono)',
+              }}
+            >
+              On next login
+            </button>
+          )}
         </div>
-      )}
+      ) : null}
 
       {showDesktopApp && (
         <div
