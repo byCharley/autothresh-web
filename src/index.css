@@ -983,7 +983,14 @@ input[type='range']::-moz-range-thumb {
   max-width: none !important;
   border-right: none !important;
   border-left: none !important;
-  height: 100%;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+/* Let content flow naturally in the mobile sheet — outer container scrolls */
+.mobile-sheet-content .left-scroll {
+  overflow: visible !important;
+  flex: none !important;
 }
 
 /* ─── Mode switch animation ─────────────────────────────────────────────────── */

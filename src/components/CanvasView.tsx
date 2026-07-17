@@ -1743,7 +1743,7 @@ export function CanvasView() {
       }
     }
     octx.putImageData(imgData, x, y);
-  }, [paintMasks, selectedLayerId, artworkBounds, canvasDims, bgPaintMask, bgPaintMaskDims, bgPaintMode]);
+  }, [paintMasks, selectedLayerId, artworkBounds, canvasDims, bgPaintMask, bgPaintMaskDims, bgPaintMode, dtgPaintMask]);
 
   // Keep brushSizeRef in sync so the key handler always has the latest value.
   brushSizeRef.current = brushSize;
