@@ -15,6 +15,17 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-17',
+    label: 'Bug Fixes',
+    fixed: [
+      'Remove BG was unreachable on iPhone — the panel content was being clipped and could not be scrolled to. Now fully accessible.',
+      'Remove BG section now opens expanded by default on all modes so it is always visible without needing to scroll and expand it manually.',
+      'Clear Touch Up in DTG/DTF mode was not visually resetting — painted brush strokes remained on screen even after clearing. Now clears correctly.',
+      'Account menu (name, plan, sign out) was rendering behind the canvas on some browsers. Fixed.',
+      'Display name changes now persist after signing out and back in.',
+    ],
+  },
+  {
     date: '2026-07-14',
     label: 'Tablet Improvements',
     fixed: [
