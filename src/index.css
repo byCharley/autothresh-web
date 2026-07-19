@@ -257,7 +257,8 @@ html, body, #root {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 .panel-header {
@@ -282,7 +283,10 @@ html, body, #root {
 /* Left panel scrollable area — layers + palette + fabric + bg removal */
 .left-scroll {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
 }
@@ -290,6 +294,12 @@ html, body, #root {
 .left-scroll::-webkit-scrollbar { width: 4px; }
 .left-scroll::-webkit-scrollbar-track { background: transparent; }
 .left-scroll::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* Wider, always-visible scrollbar on touch devices so users know they can scroll */
+@media (pointer: coarse) {
+  .left-scroll::-webkit-scrollbar { width: 6px; }
+  .left-scroll::-webkit-scrollbar-thumb { background: var(--border-2, var(--border)); border-radius: 3px; }
+}
 
 /* Layer list: no independent scroll, just stacks inside left-scroll */
 .layer-list {
