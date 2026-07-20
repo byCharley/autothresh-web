@@ -92,7 +92,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
       sCtx.fillStyle = canvasColor;
       sCtx.fillRect(0, 0, w, h);
       sCtx.drawImage(tmp, 0, 0);
-    } else if (separationMode === 'palette' && ditherComposite) {
+    } else if (ditherComposite && (separationMode === 'palette' || separationMode === 'dtg' || separationMode === 'texture')) {
       srcCanvas = document.createElement('canvas');
       srcCanvas.width  = ditherComposite.w;
       srcCanvas.height = ditherComposite.h;
@@ -134,8 +134,9 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
   const onPreviewMove = (e: React.PointerEvent) => {
     const d = previewDragRef.current;
     if (!d.active || !previewCanvasRef.current) return;
-    const srcW = (separationMode === 'palette' && ditherComposite) ? ditherComposite.w : (processedLayerDims?.w ?? 1);
-    const srcH = (separationMode === 'palette' && ditherComposite) ? ditherComposite.h : (processedLayerDims?.h ?? 1);
+    const usesDitherComposite = ditherComposite && (separationMode === 'palette' || separationMode === 'dtg' || separationMode === 'texture');
+    const srcW = usesDitherComposite ? ditherComposite!.w : (processedLayerDims?.w ?? 1);
+    const srcH = usesDitherComposite ? ditherComposite!.h : (processedLayerDims?.h ?? 1);
     const panFraction = isCmykPro ? 1.0 : 0.35;
     const zoom  = previewCanvasRef.current.width / (srcW * panFraction);
     const dxN = -(e.clientX - d.sx) / zoom / srcW;
