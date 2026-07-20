@@ -1900,7 +1900,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
 
   const {
     layers, selectedLayerId, selectLayer, updateLayer,
-    previewImage, originalImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
+    previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
     paletteNumColors, setPaletteColors,
     separationMode, setSeparationMode,
     passthroughMode,

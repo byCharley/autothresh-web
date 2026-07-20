@@ -227,7 +227,7 @@ export function CanvasView() {
   const {
     originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     globalPattern,
-    bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgSeedColors, setBgEyedropperActive, setBgRemovalEnabled, setBgTolerance, setBgEdgeSoftness,
+    bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgSeedColors, setBgEyedropperActive, setBgRemovalEnabled, setBgTolerance,
     bgPaintMask, bgPaintMaskDims, bgPaintMode, setBgPaintMask, setBgPaintMode,
     showRegistrationMarks, regMarkPadding, documentBleed,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
