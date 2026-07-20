@@ -2201,7 +2201,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
 
   const {
     layers, selectedLayerId, selectLayer, updateLayer,
-    previewImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
+    previewImage, originalImage, palettePool, activePaletteIdx, setPalettePool, applyPalette,
     paletteNumColors, setPaletteColors,
     separationMode, setSeparationMode,
     passthroughMode,
@@ -2218,6 +2218,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
     underbaseDensity, setUnderbaseDensity,
     pantonePreviewActive, setPantonePreviewActive,
     processedLayers,
+    bgRemovalEnabled, setBgRemovalEnabled,
   } = useStore();
 
   const [showPantonePanel, setShowPantonePanel] = useState(false);
@@ -2462,6 +2463,35 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
             </div>
           )}
         </div>}
+
+        {/* ── Remove BG — pinned below mode switcher, always reachable ── */}
+        {originalImage && separationMode !== 'dtg' && separationMode !== 'texture' && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '6px 12px', borderBottom: '1px solid var(--border)',
+            background: bgRemovalEnabled ? 'color-mix(in srgb, var(--accent) 7%, var(--surface))' : 'var(--surface)',
+            flexShrink: 0,
+          }}>
+            <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: bgRemovalEnabled ? 'var(--accent)' : 'var(--text-muted)' }}>
+              Remove BG
+            </span>
+            <button
+              onClick={() => setBgRemovalEnabled(!bgRemovalEnabled)}
+              style={{
+                width: 32, height: 18, borderRadius: 9, border: 'none', cursor: 'pointer', padding: 0,
+                background: bgRemovalEnabled ? 'var(--accent)' : 'var(--border-2, var(--border))',
+                position: 'relative', transition: 'background 0.15s', flexShrink: 0,
+              }}
+            >
+              <span style={{
+                position: 'absolute', top: 2, left: bgRemovalEnabled ? 14 : 2,
+                width: 14, height: 14, borderRadius: '50%',
+                background: bgRemovalEnabled ? '#000' : 'var(--text-muted)',
+                transition: 'left 0.15s',
+              }} />
+            </button>
+          </div>
+        )}
 
         {passthroughMode ? (
           <div className="at-mode-content">

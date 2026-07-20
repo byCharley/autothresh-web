@@ -795,29 +795,24 @@ export function computeBackgroundMask(imageData: ImageData, tolerance: number, s
       if (y < height - 1) addAlpha(idx + width);
     }
 
-    // Pass 2: grow into semi-transparent fringe pixels adjacent to confirmed
-    // background.
-    //   a) alpha ≤ 80 with ≥ 2 bg neighbors → background (thin fringe).
-    //   b) near-white pixel (white-background bleed) alpha ≤ 220 with ≥ 1 bg
-    //      neighbor → background. Only touches semi-transparent white halos,
-    //      never fully-opaque colored subject pixels.
-    for (let pass = 0; pass < 4; pass++) {
+    // Pass 2: grow into near-fully-transparent fringe pixels only.
+    // Keep this very conservative — alpha ≤ 15 only — so genuinely
+    // semi-transparent content like smoke, glow, or drop shadows is
+    // never swept up. Only catches the 1-2px anti-aliasing ring at
+    // hard cut-out edges, not artistic transparency.
+    for (let pass = 0; pass < 2; pass++) {
       let changed = false;
       for (let i = 0; i < n; i++) {
         if (mask[i] !== 0) continue;
         const a = data[i * 4 + 3];
-        if (a > 220) continue;
-        const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
-        const isNearWhite = r > 210 && g > 210 && b > 210;
+        if (a > 15) continue;
         const x = i % width, y = (i / width) | 0;
         let bgN = 0;
         if (x > 0          && mask[i - 1] === 255)     bgN++;
         if (x < width - 1  && mask[i + 1] === 255)     bgN++;
         if (y > 0          && mask[i - width] === 255)  bgN++;
         if (y < height - 1 && mask[i + width] === 255)  bgN++;
-        if ((a <= 80 && bgN >= 2) || (isNearWhite && bgN >= 1)) {
-          mask[i] = 255; changed = true;
-        }
+        if (bgN >= 2) { mask[i] = 255; changed = true; }
       }
       if (!changed) break;
     }
