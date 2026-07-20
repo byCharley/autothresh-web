@@ -638,7 +638,7 @@ function BackgroundSection({ defaultOpen = true }: { defaultOpen?: boolean } = {
           )}
 
           {/* ── BG Removal — hidden for color-sep (pinned strip), dtg, and cmyk (pinned strip) ── */}
-          {!isDtg && !isColorSep && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && separationMode !== 'threshold' && (
+          {!isDtg && !isColorSep && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && separationMode !== 'threshold' && separationMode !== 'palette' && (
             <>
               <div style={{ height: 1, background: 'var(--border)' }} />
               <SwitchRow label="Remove BG" checked={bgRemovalEnabled} onChange={setBgRemovalEnabled} />
@@ -2140,7 +2140,7 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
         </div>}
 
         {/* ── Remove BG + Brush Mask — pinned below mode switcher (not cmyk, handled in bottom toolbar) ── */}
-        {separationMode !== 'dtg' && separationMode !== 'texture' && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && (
+        {separationMode !== 'dtg' && separationMode !== 'texture' && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && separationMode !== 'threshold' && separationMode !== 'palette' && separationMode !== 'color-sep' && (
           <div style={{
             flexShrink: 0, borderBottom: '1px solid var(--border)',
             background: bgRemovalEnabled ? 'color-mix(in srgb, var(--accent) 7%, var(--surface))' : 'var(--surface)',

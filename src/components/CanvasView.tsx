@@ -2544,7 +2544,7 @@ export function CanvasView() {
                 </button>
               </>
             )}
-            {originalImage && (separationMode === 'cmyk' || separationMode === 'cmyk-pro' || separationMode === 'threshold' || separationMode === 'color-sep') && (
+            {originalImage && (separationMode === 'cmyk' || separationMode === 'cmyk-pro' || separationMode === 'threshold' || separationMode === 'palette' || separationMode === 'color-sep') && (
               <>
                 <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
                 {/* Remove BG with settings popover */}
