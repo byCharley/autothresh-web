@@ -775,46 +775,13 @@ export function computeBackgroundMask(imageData: ImageData, tolerance: number, s
     if (data[i * 4 + 3] < 32) transparentPixels++;
   }
   if (transparentPixels > n * 0.005) {
-    // Pass 1: edge flood-fill through alpha < 32 pixels connected to the border.
-    const alphaVisited = new Uint8Array(n);
-    const alphaQueue: number[] = [];
-    const addAlpha = (idx: number) => {
-      if (alphaVisited[idx]) return;
-      alphaVisited[idx] = 1;
-      if (data[idx * 4 + 3] < 32) { mask[idx] = 255; alphaQueue.push(idx); }
-    };
-    for (let x = 0; x < width; x++) { addAlpha(x); addAlpha((height - 1) * width + x); }
-    for (let y = 1; y < height - 1; y++) { addAlpha(y * width); addAlpha(y * width + width - 1); }
-    let alphaHead = 0;
-    while (alphaHead < alphaQueue.length) {
-      const idx = alphaQueue[alphaHead++];
-      const x = idx % width, y = (idx / width) | 0;
-      if (x > 0)          addAlpha(idx - 1);
-      if (x < width - 1)  addAlpha(idx + 1);
-      if (y > 0)          addAlpha(idx - width);
-      if (y < height - 1) addAlpha(idx + width);
-    }
-
-    // Pass 2: grow into near-fully-transparent fringe pixels only.
-    // Keep this very conservative — alpha ≤ 15 only — so genuinely
-    // semi-transparent content like smoke, glow, or drop shadows is
-    // never swept up. Only catches the 1-2px anti-aliasing ring at
-    // hard cut-out edges, not artistic transparency.
-    for (let pass = 0; pass < 2; pass++) {
-      let changed = false;
-      for (let i = 0; i < n; i++) {
-        if (mask[i] !== 0) continue;
-        const a = data[i * 4 + 3];
-        if (a > 15) continue;
-        const x = i % width, y = (i / width) | 0;
-        let bgN = 0;
-        if (x > 0          && mask[i - 1] === 255)     bgN++;
-        if (x < width - 1  && mask[i + 1] === 255)     bgN++;
-        if (y > 0          && mask[i - width] === 255)  bgN++;
-        if (y < height - 1 && mask[i + width] === 255)  bgN++;
-        if (bgN >= 2) { mask[i] = 255; changed = true; }
-      }
-      if (!changed) break;
+    // Pass 1: directly mask pixels where alpha < 10 (effectively invisible).
+    // We intentionally skip a border flood-fill here — connectivity analysis
+    // cannot distinguish "background fringe" from "artistic semi-transparency"
+    // like smoke, glow, or drop shadows, so we only mask pixels that are
+    // essentially invisible (alpha < 10) regardless of their neighbours.
+    for (let i = 0; i < n; i++) {
+      if (data[i * 4 + 3] < 10) mask[i] = 255;
     }
 
     // Pass 3: interior pocket — fully-opaque near-pure-white pixels completely

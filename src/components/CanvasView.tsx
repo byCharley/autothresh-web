@@ -227,8 +227,8 @@ export function CanvasView() {
   const {
     originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
     globalPattern,
-    bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgSeedColors, setBgEyedropperActive,
-    bgPaintMask, bgPaintMaskDims, bgPaintMode, setBgPaintMask,
+    bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgSeedColors, setBgEyedropperActive, setBgRemovalEnabled, setBgTolerance, setBgEdgeSoftness,
+    bgPaintMask, bgPaintMaskDims, bgPaintMode, setBgPaintMask, setBgPaintMode,
     showRegistrationMarks, regMarkPadding, documentBleed,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
     canvasColor, showFabricBg, fabricTexture, fabricBlendStrength, fabricTextureDepth,
@@ -278,6 +278,11 @@ export function CanvasView() {
   // Only separation-affecting fields (profile, GCR, densities, bg mask).
   // Halftone settings (LPI/angle/shape/gain) are client-side — they never invalidate the cache.
   const cmykProApiKeyRef = useRef('');
+  // Tracks bgPaintMask identity so cache invalidates on every paint stroke commit.
+  const bgPaintMaskVersionRef = useRef(0);
+  const prevBgPaintMaskRef = useRef<Uint8Array | null>(null);
+  // Tracks previous separation mode to detect switches and clear paint mask.
+  const prevSeparationModeRef = useRef(separationMode);
   // Ref mirror of printSimActive so the .then() closure always reads the live value.
   const printSimActiveRef = useRef(printSimActive);
   useEffect(() => { printSimActiveRef.current = printSimActive; }, [printSimActive]);
@@ -305,6 +310,7 @@ export function CanvasView() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart]   = useState({ x: 0, y: 0 });
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showBgPopover, setShowBgPopover] = useState(false);
 
 
 
@@ -457,6 +463,16 @@ export function CanvasView() {
   // Keep zoomRef in sync so pinch handlers can read current zoom without stale closures.
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
+  // Clear paint mask on mode switch — modes are independent; strokes from one
+  // mode must not bleed into another.
+  useEffect(() => {
+    if (prevSeparationModeRef.current !== separationMode) {
+      prevSeparationModeRef.current = separationMode;
+      setBgPaintMask(null, null);
+      setBgPaintMode('off');
+    }
+  }, [separationMode, setBgPaintMask, setBgPaintMode]);
+
   // Debounce zoom → renderDim.
   // When the user zooms in, wait 200 ms for them to stop, then re-render at a
   // proportionally higher resolution so each screen pixel maps to one canvas pixel.
@@ -595,6 +611,13 @@ export function CanvasView() {
   }
 
 
+  // Increment bgPaintMaskVersion when the mask reference changes so the CMYK Pro
+  // apiKey invalidates on paint strokes (bgPaintMask is a new array each commit).
+  if (prevBgPaintMaskRef.current !== bgPaintMask) {
+    bgPaintMaskVersionRef.current++;
+    prevBgPaintMaskRef.current = bgPaintMask;
+  }
+
   // Main processing effect.
   // Runs when settings change — zoom is a pure CSS transform and never triggers a reprocess.
   // Always renders at MAX_PREVIEW_DIM; bilinear CSS upscaling gives clean results at any zoom.
@@ -618,28 +641,53 @@ export function CanvasView() {
         // Single high-quality scale from original → exact slot size.
         const artScaled    = scaleImageDataExact(originalImage, artPrevW, artPrevH);
         const localBgMask = (() => {
-          if (!bgRemovalEnabled) return null;
-          const seeds = bgSeedColors.length > 0 ? bgSeedColors : undefined;
-          if (separationMode !== 'palette') {
-            return computeBackgroundMask(artScaled, bgTolerance, seeds);
-          }
-          // Palette mode with bg removal on: auto-pick tolerance based on background
-          // luminance to handle feathered/vignette edges on light backgrounds.
-          const d = artScaled.data, w = artScaled.width, h = artScaled.height;
-          const corners = [0, (w - 1) * 4, (h - 1) * w * 4, ((h - 1) * w + w - 1) * 4];
-          const bgLum = corners.reduce((s, p) => s + 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2], 0) / 4;
-          const tol = bgLum > 200 ? 40 : bgTolerance;
-          return computeBackgroundMask(artScaled, tol, seeds);
-        })();
+          let mask: Uint8Array | null = null;
+          const n = artPrevW * artPrevH;
 
-        // Apply user paint-fix overrides on top of the computed mask
-        if (localBgMask && bgPaintMask && bgPaintMaskDims &&
-            bgPaintMaskDims.w === artPrevW && bgPaintMaskDims.h === artPrevH) {
-          for (let i = 0; i < localBgMask.length; i++) {
-            if (bgPaintMask[i] === 1) localBgMask[i] = 0;
-            else if (bgPaintMask[i] === 2) localBgMask[i] = 255;
+          if (bgRemovalEnabled) {
+            // User explicitly enabled Remove BG — run flood-fill + respect alpha
+            const seeds = bgSeedColors.length > 0 ? bgSeedColors : undefined;
+            if (separationMode !== 'palette') {
+              mask = computeBackgroundMask(artScaled, bgTolerance, seeds);
+            } else {
+              // Palette mode: auto-pick tolerance based on background luminance
+              const d = artScaled.data, w = artScaled.width, h = artScaled.height;
+              const corners = [0, (w - 1) * 4, (h - 1) * w * 4, ((h - 1) * w + w - 1) * 4];
+              const bgLum = corners.reduce((s, p) => s + 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2], 0) / 4;
+              const tol = bgLum > 200 ? 40 : bgTolerance;
+              mask = computeBackgroundMask(artScaled, tol, seeds);
+            }
+            // Also mask truly-transparent pixels (catches PNG alpha fringing)
+            const d = artScaled.data;
+            for (let i = 0; i < n; i++) {
+              if (d[i * 4 + 3] < 16) {
+                if (!mask) mask = new Uint8Array(n);
+                mask[i] = 255;
+              }
+            }
+          } else if (separationMode !== 'cmyk' && separationMode !== 'cmyk-pro') {
+            // Non-CMYK modes: always respect PNG alpha so transparent areas stay transparent
+            const d = artScaled.data;
+            for (let i = 0; i < n; i++) {
+              if (d[i * 4 + 3] < 16) {
+                if (!mask) mask = new Uint8Array(n);
+                mask[i] = 255;
+              }
+            }
           }
-        }
+          // CMYK + Remove BG off → no mask at all; ICC compositor handles everything.
+
+          // Brush Mask strokes always apply — user-driven, independent of BG removal
+          if (bgPaintMask && bgPaintMaskDims &&
+              bgPaintMaskDims.w === artPrevW && bgPaintMaskDims.h === artPrevH) {
+            if (!mask) mask = new Uint8Array(n);
+            for (let i = 0; i < mask.length; i++) {
+              if (bgPaintMask[i] === 1) mask[i] = 0;
+              else if (bgPaintMask[i] === 2) mask[i] = 255;
+            }
+          }
+          return mask;
+        })();
 
         const importanceMap = buildImportanceMap(artScaled, localBgMask);
 
@@ -691,14 +739,15 @@ export function CanvasView() {
           // Level 2 (fast):    raw ICC cache — density/GCR/TAC changed, run applyPostIcc sync.
           // Level 3 (slow):    full ICC separation async when image or profile changes.
 
-          // iccKey: invalidate only when image content or profile changes.
+          // iccKey: invalidate when image content, profile, or any image adjustment changes.
           const iccKey = JSON.stringify([
             proCmykSettings.cmykProfile,
             artPrevW, artPrevH,
             imageAdjustments.adjMode, imageAdjustments.exposure, imageAdjustments.contrast,
             imageAdjustments.shadows, imageAdjustments.highlights, imageAdjustments.blur,
+            imageAdjustments.saturation, imageAdjustments.levels, imageAdjustments.curves,
           ]);
-          // plateKey: full fingerprint including post-ICC settings.
+          // plateKey: full fingerprint including post-ICC settings and paint mask version.
           const apiKey = JSON.stringify([
             iccKey,
             proCmykSettings.blackGeneration,
@@ -707,12 +756,16 @@ export function CanvasView() {
             proCmykSettings.densityY, proCmykSettings.densityK,
             proCmykSettings.grayBalance,
             bgRemovalEnabled, bgTolerance,
+            bgPaintMaskVersionRef.current,
           ]);
           const cached = cmykProCacheRef.current;
           if (cached && cmykProApiKeyRef.current === apiKey) {
             // Separation settings unchanged — rebuild composite from cached plates.
             // This handles LPI/angle/shape/dotGain changes without an API round-trip.
-            const { plates, bgMask: cachedBgMask } = cached;
+            // Always use localBgMask (not cached.bgMask) so the current BG removal
+            // settings are reflected without needing a full re-separation.
+            const { plates } = cached;
+            cached.bgMask = localBgMask; // keep cache in sync
             const primaries = buildNeugebauerPrimaries(proCmykSettings.cmykProfile);
             const hexVal = canvasColor.replace('#', '');
             const garmentRgb: [number, number, number] = [
@@ -732,13 +785,13 @@ export function CanvasView() {
             const previewDpi = artPrevW / documentWidthIn;
             let whitePlate: Uint8Array | undefined;
             if (underbaseEnabled) {
-              const raw = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows }, cachedBgMask);
+              const raw = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows }, localBgMask);
               whitePlate = chokeWhitePlate(raw, plates.width, plates.height, underbaseChoke);
             }
             // Dot View: 150 DPI floor gives ~2.3px cells — visible rosette, clean K holes.
             // ss=2 gives 4 subsamples per cell — fast enough for interactive, quality enough for display.
             const dotViewDpi = Math.max(150, previewDpi);
-            const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, dotViewDpi, cachedBgMask, whitePlate, 2);
+            const allLayers = applyHalftoneToCmykPlates(plates, proCmykSettings, dotViewDpi, localBgMask, whitePlate, 2);
             const visibleIds = Object.entries(cmykVisibility).filter(([, v]) => v).map(([id]) => id);
             setProcessedLayers(allLayers.filter(l => visibleIds.includes(l.id)));
             setProcessedLayerDims({ w: artPrevW, h: artPrevH });
@@ -747,13 +800,13 @@ export function CanvasView() {
               // Print Sim: 2× upsample → Neugebauer composite → area-downsample (fast interactive path)
               const SCALE = 2;
               const plates2x = upsampleCmykPlates(plates, SCALE);
-              const bgMask2x = cachedBgMask ? upsampleMask(cachedBgMask, artPrevW, artPrevH, SCALE) : null;
+              const bgMask2x = localBgMask ? upsampleMask(localBgMask, artPrevW, artPrevH, SCALE) : null;
               const wp2x = whitePlate ? upsampleMask(whitePlate, plates.width, plates.height, SCALE) : undefined;
               const layers2x = applyHalftoneToCmykPlates(plates2x, proCmykSettings, previewDpi * SCALE, bgMask2x, wp2x);
               const hi = compositeHalftonePlates(layers2x, artPrevW * SCALE, artPrevH * SCALE, primaries, bgMask2x, vis, garmentMode, garmentRgb);
               composite = areaAverageDownsample(hi, artPrevW, artPrevH);
             } else {
-              composite = compositeHalftonePlates(allLayers, artPrevW, artPrevH, primaries, cachedBgMask, vis, garmentMode, garmentRgb);
+              composite = compositeHalftonePlates(allLayers, artPrevW, artPrevH, primaries, localBgMask, vis, garmentMode, garmentRgb);
             }
             setDitherComposite({ data: composite, w: artPrevW, h: artPrevH });
             // Let the main effect's sync draw path render `artComposite` to the canvas.
@@ -775,7 +828,7 @@ export function CanvasView() {
           // Re-enter the plate-cache path synchronously to build the composite
           const cachedL2 = cmykProCacheRef.current;
           {
-            const { plates, bgMask: cachedBgMask } = cachedL2;
+            const { plates } = cachedL2;
             const primariesL2 = buildNeugebauerPrimaries(proCmykSettings.cmykProfile);
             const hexL2 = canvasColor.replace('#', '');
             const gRgbL2: [number, number, number] = [parseInt(hexL2.slice(0,2),16), parseInt(hexL2.slice(2,4),16), parseInt(hexL2.slice(4,6),16)];
@@ -785,20 +838,20 @@ export function CanvasView() {
             const visL2 = { c: cmykVisibility['cmyk-c'], m: cmykVisibility['cmyk-m'], y: cmykVisibility['cmyk-y'], k: cmykVisibility['cmyk-k'] };
             const prevDpiL2 = artPrevW / documentWidthIn;
             let wpL2: Uint8Array | undefined;
-            if (underbaseEnabled) { const rL2 = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows }, cachedBgMask); wpL2 = chokeWhitePlate(rL2, plates.width, plates.height, underbaseChoke); }
+            if (underbaseEnabled) { const rL2 = generateCmykProUnderbase(plates, { density: underbaseDensity, includeShadows: underbaseIncludeShadows }, localBgMask); wpL2 = chokeWhitePlate(rL2, plates.width, plates.height, underbaseChoke); }
             const dotDpiL2 = Math.max(150, prevDpiL2);
-            const allLayersL2 = applyHalftoneToCmykPlates(plates, proCmykSettings, dotDpiL2, cachedBgMask, wpL2, 2);
+            const allLayersL2 = applyHalftoneToCmykPlates(plates, proCmykSettings, dotDpiL2, localBgMask, wpL2, 2);
             const visIdsL2 = Object.entries(cmykVisibility).filter(([,v])=>v).map(([id])=>id);
             setProcessedLayers(allLayersL2.filter(l => visIdsL2.includes(l.id)));
             setProcessedLayerDims({ w: artPrevW, h: artPrevH });
             let compL2: ImageData;
             if (simL2) {
-              const SCALE=2; const p2=upsampleCmykPlates(plates,SCALE); const bm2=cachedBgMask?upsampleMask(cachedBgMask,artPrevW,artPrevH,SCALE):null;
+              const SCALE=2; const p2=upsampleCmykPlates(plates,SCALE); const bm2=localBgMask?upsampleMask(localBgMask,artPrevW,artPrevH,SCALE):null;
               const wp2=wpL2?upsampleMask(wpL2,plates.width,plates.height,SCALE):undefined;
               const l2=applyHalftoneToCmykPlates(p2,proCmykSettings,prevDpiL2*SCALE,bm2,wp2);
               const hi=compositeHalftonePlates(l2,artPrevW*SCALE,artPrevH*SCALE,primariesL2,bm2,visL2,gModeL2,gRgbL2);
               compL2=areaAverageDownsample(hi,artPrevW,artPrevH);
-            } else { compL2=compositeHalftonePlates(allLayersL2,artPrevW,artPrevH,primariesL2,cachedBgMask,visL2,gModeL2,gRgbL2); }
+            } else { compL2=compositeHalftonePlates(allLayersL2,artPrevW,artPrevH,primariesL2,localBgMask,visL2,gModeL2,gRgbL2); }
             setDitherComposite({ data: compL2, w: artPrevW, h: artPrevH });
             artComposite = compL2;
           }
@@ -1083,6 +1136,7 @@ export function CanvasView() {
             ? csColors.map(([r, g, b]) => nearestPantoneRgb(r, g, b))
             : csColors;
           artComposite = renderColorSepCompositeFromLayers(csLayers, renderCsColors, colorSepVisibility, artPrevW, artPrevH);
+
 
           if (textureEnabled) {
             const texMask = generateTextureMask(artPrevW, artPrevH, textureType, textureIntensity, textureScale, textureWidth, textureSeed);
@@ -1819,12 +1873,18 @@ export function CanvasView() {
       cCtx.drawImage(img, 0, 0);
       const original = cCtx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
       const preview  = scaleImageData(original, MAX_PREVIEW_DIM);
+      // Disable BG removal when the image already has a transparent background —
+      // the artist has already cut it out, so removing it again eats semi-transparent content.
+      const d = preview.data; const np = preview.width * preview.height;
+      let transparentCount = 0;
+      for (let i = 0; i < np; i++) { if (d[i * 4 + 3] < 32) transparentCount++; }
+      if (transparentCount > np * 0.005) setBgRemovalEnabled(false);
       setOriginalImage(original, preview, file.name);
       setCanvasColor(detectBackgroundColor(preview));
       URL.revokeObjectURL(url);
     };
     img.src = url;
-  }, [setOriginalImage, setCanvasColor]);
+  }, [setOriginalImage, setCanvasColor, setBgRemovalEnabled]);
 
   // ── Interaction ────────────────────────────────────────────────────────────────
 
@@ -1956,6 +2016,7 @@ export function CanvasView() {
     const hex = '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
     setBgSeedColors([...bgSeedColors, hex]);
     setBgEyedropperActive(false);
+    if (!bgRemovalEnabled) setBgRemovalEnabled(true);
   };
 
   // ── BG paint-fix handlers ───────────────────────────────────────────────────────
@@ -2481,6 +2542,133 @@ export function CanvasView() {
                   </svg>
                   Split
                 </button>
+              </>
+            )}
+            {originalImage && (separationMode === 'cmyk' || separationMode === 'cmyk-pro' || separationMode === 'threshold' || separationMode === 'color-sep') && (
+              <>
+                <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                {/* Remove BG with settings popover */}
+                <div style={{ position: 'relative' }}>
+                  <button
+                    className="btn btn-ghost"
+                    style={{
+                      fontSize: 10, padding: '0 8px', height: 26,
+                      color: (bgRemovalEnabled || showBgPopover) ? 'var(--accent)' : 'var(--text-muted)',
+                      background: (bgRemovalEnabled || showBgPopover) ? 'var(--accent-dim)' : undefined,
+                      border: (bgRemovalEnabled || showBgPopover) ? '1px solid var(--accent)' : '1px solid transparent',
+                    }}
+                    onClick={() => setShowBgPopover(v => !v)}
+                  >Remove BG</button>
+                  {showBgPopover && (
+                    <>
+                      <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setShowBgPopover(false)} />
+                      <div style={{
+                        position: 'absolute', bottom: 'calc(100% + 10px)', left: '50%', transform: 'translateX(-50%)',
+                        background: 'var(--surface)', border: '1px solid var(--border)',
+                        borderRadius: 6, padding: '14px 16px', minWidth: 220,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.3)', zIndex: 100,
+                        display: 'flex', flexDirection: 'column', gap: 14,
+                      }}>
+                        {/* Enable toggle */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: 11, color: 'var(--text)', fontWeight: 500 }}>Remove Background</span>
+                          <button
+                            className="btn btn-ghost"
+                            style={{
+                              fontSize: 10, padding: '2px 8px', height: 22,
+                              color: bgRemovalEnabled ? 'var(--accent)' : 'var(--text-muted)',
+                              background: bgRemovalEnabled ? 'var(--accent-dim)' : 'var(--surface-raised)',
+                              border: bgRemovalEnabled ? '1px solid var(--accent)' : '1px solid var(--border)',
+                              borderRadius: 4,
+                            }}
+                            onClick={() => setBgRemovalEnabled(!bgRemovalEnabled)}
+                          >{bgRemovalEnabled ? 'ON' : 'OFF'}</button>
+                        </div>
+                        {/* Tolerance */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Tolerance</span>
+                            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{bgTolerance}</span>
+                          </div>
+                          <input type="range" min={5} max={100} value={bgTolerance}
+                            style={{ width: '100%' }}
+                            onChange={e => setBgTolerance(Number(e.target.value))} />
+                        </div>
+                        {/* Color sample */}
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <button
+                            className="btn btn-ghost"
+                            style={{
+                              fontSize: 10, padding: '2px 8px', height: 22, flex: 1,
+                              color: bgEyedropperActive ? 'var(--accent)' : 'var(--text-muted)',
+                              border: bgEyedropperActive ? '1px solid var(--accent)' : '1px solid var(--border)',
+                              background: bgEyedropperActive ? 'var(--accent-dim)' : 'var(--surface-raised)',
+                              borderRadius: 4,
+                            }}
+                            onClick={() => { setBgEyedropperActive(!bgEyedropperActive); }}
+                          >{bgEyedropperActive ? 'Click Image to Sample' : 'Pick BG Color'}</button>
+                          {bgSeedColors.length > 0 && (
+                            <button
+                              className="btn btn-ghost"
+                              style={{ fontSize: 10, padding: '2px 8px', height: 22, color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface-raised)' }}
+                              onClick={() => setBgSeedColors([])}
+                            >Clear</button>
+                          )}
+                        </div>
+                        {bgSeedColors.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {bgSeedColors.map((c, i) => (
+                              <div key={i} style={{ width: 16, height: 16, borderRadius: 3, background: c, border: '1px solid var(--border)' }} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                <button
+                  className="btn btn-ghost"
+                  style={{
+                    fontSize: 10, padding: '0 8px', height: 26,
+                    color: bgPaintMode === 'restore' ? '#288cff' : 'var(--text-muted)',
+                    background: bgPaintMode === 'restore' ? 'rgba(40,140,255,0.12)' : undefined,
+                    border: bgPaintMode === 'restore' ? '1px solid rgba(40,140,255,0.35)' : '1px solid transparent',
+                  }}
+                  onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
+                >Restore</button>
+                <button
+                  className="btn btn-ghost"
+                  style={{
+                    fontSize: 10, padding: '0 8px', height: 26,
+                    color: bgPaintMode === 'remove' ? '#ff7800' : 'var(--text-muted)',
+                    background: bgPaintMode === 'remove' ? 'rgba(255,120,0,0.12)' : undefined,
+                    border: bgPaintMode === 'remove' ? '1px solid rgba(255,120,0,0.35)' : '1px solid transparent',
+                  }}
+                  onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
+                >Remove</button>
+                {bgPaintMode !== 'off' && (
+                  <>
+                    <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                    <input
+                      type="range" min={2} max={120} value={brushSize}
+                      style={{ width: 60 }}
+                      onChange={(e) => setBrushSize(Number(e.target.value))}
+                      title={`Brush: ${brushSize}px  ·  [ to shrink  ] to grow`}
+                    />
+                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 20 }}>{brushSize}</span>
+                  </>
+                )}
+                {bgPaintMask && (
+                  <>
+                    <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: 10, padding: '0 7px', height: 26, color: 'var(--text-dim)' }}
+                      onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
+                    >Clear</button>
+                  </>
+                )}
               </>
             )}
             {originalImage && separationMode === 'threshold' && (

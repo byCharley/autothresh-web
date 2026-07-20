@@ -15,6 +15,23 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-20',
+    label: 'CMYK Pro Improvements & Toolbar Masking',
+    added: [
+      'Remove BG and Brush Mask tools are now available directly in the bottom toolbar for Dither and Color Separation modes — no need to scroll the left panel.',
+      'Remove BG in CMYK modes now opens a settings popup with Tolerance slider and Pick BG Color eyedropper. Clicking the eyedropper and sampling a color automatically enables removal.',
+    ],
+    improved: [
+      'CMYK Pro now applies separations to the entire image by default — transparent-background PNGs and images with solid backgrounds are handled correctly without any unwanted auto-removal.',
+      'Background section in the left panel renamed to "BG Color" for clarity.',
+      'Remove BG and Brush Mask tools removed from the left panel for Dither and Color Separation modes since they are now on the toolbar.',
+    ],
+    fixed: [
+      'CMYK Pro was incorrectly making the background transparent on images with solid black backgrounds (e.g. transparent-black PNGs) even when Remove BG was off.',
+      'Stale cache in CMYK Pro could persist an old background mask after toggling Remove BG off, causing the background to appear transparent. Now always reflects the current setting instantly.',
+    ],
+  },
+  {
     date: '2026-07-17',
     label: 'Bug Fixes',
     fixed: [

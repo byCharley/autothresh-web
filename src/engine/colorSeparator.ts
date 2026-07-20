@@ -173,7 +173,7 @@ export function kMeansOklab(
   const samples: OKLab[] = [];
   const weights: number[] = [];
   for (let i = 0; i < n; i += step) {
-    if (bgMask?.[i] === 255 || data[i * 4 + 3] < 128) continue;
+    if (bgMask?.[i] === 255 || data[i * 4 + 3] < 10) continue;
     samples.push(rgbToOklab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]));
     weights.push(importanceMap ? 0.5 + importanceMap[i] * 1.5 : 1);
   }
@@ -181,7 +181,7 @@ export function kMeansOklab(
   // extract meaningful colors rather than returning hardcoded grays.
   if (samples.length === 0) {
     for (let i = 0; i < n; i += step) {
-      if (data[i * 4 + 3] < 128) continue;
+      if (data[i * 4 + 3] < 10) continue;
       samples.push(rgbToOklab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]));
       weights.push(1);
     }
@@ -222,9 +222,10 @@ export interface ColorSepSettings {
 
 // Max L-axis shift (OKLAB units) when pattern blends color zone boundaries.
 // L spans 0–1; typical inter-cluster spacing is 0.15–0.25.
-// At MAX_PERTURB=0.50, density=50 → perturbStrength=0.25 → a pixel a quarter of
-// the way into any zone can be flipped by the pattern, creating strong organic transitions.
-const MAX_PERTURB = 0.50;
+// Kept at 0.22 so the perturbation only reaches the nearest neighbouring cluster
+// (half the typical inter-cluster gap) — enough for organic boundary blending
+// without flipping pixels across distant clusters (the source of stray grey pixels).
+const MAX_PERTURB = 0.22;
 
 function makeLayerStub(pattern: PatternType, scale: number, angle: number, density: number): LayerConfig {
   return {
@@ -278,10 +279,14 @@ export function colorSeparate(
 
   for (let i = 0; i < n; i++) {
     if (bgMask?.[i] === 255) continue;
-    if (data[i * 4 + 3] < 128) continue;
+    const alpha = data[i * 4 + 3];
+    if (alpha < 10) continue;
     const ri = data[i * 4], gi = data[i * 4 + 1], bi = data[i * 4 + 2];
     const lab = rgbToOklab(ri, gi, bi);
-    const dL = patVals ? (patVals[i] - 0.5) * 2 * perturbStrength : 0;
+    // Scale perturbation by alpha: keeps semi-transparent pixels (smoke, glow)
+    // near their natural cluster so full perturbation doesn't push them dark/invisible.
+    const alphaScale = alpha / 255;
+    const dL = patVals ? (patVals[i] - 0.5) * 2 * perturbStrength * alphaScale : 0;
     const labQ: OKLab = [lab[0] + dL, lab[1], lab[2]];
     let minD = Infinity, nearest = 0;
     for (let c = 0; c < nc; c++) {
@@ -291,12 +296,24 @@ export function colorSeparate(
     assignment[i] = nearest;
   }
 
-  // 4. Standard path: every assigned pixel is solid ink.
-  // The pattern's influence is entirely in where boundaries fall.
+  // 4. Build layer masks.
+  // For opaque pixels (alpha ≥ 250) or no-pattern mode: solid ink, the composite
+  // alpha channel handles transparency in the preview.
+  // For semi-transparent pixels with an active pattern: convert alpha to halftone
+  // density so smoke/glow fades through progressively sparser dots rather than a
+  // smooth gradient that looks like the original image.
   const layers: ProcessedLayer[] = colors.map(([cr, cg, cb], ci) => {
     const mask = new Uint8Array(n);
     for (let i = 0; i < n; i++) {
-      if (assignment[i] === ci) mask[i] = 255;
+      if (assignment[i] !== ci) continue;
+      const origAlpha = data[i * 4 + 3];
+      if (!usePattern || !patVals || origAlpha >= 250) {
+        mask[i] = 255;
+      } else {
+        // Map alpha to halftone coverage: pixel included if pattern value ≥ (1 - density)
+        const density = origAlpha / 255;
+        if (patVals[i] >= 1 - density) mask[i] = 255;
+      }
     }
     return {
       id: `colorsep-${ci}`,

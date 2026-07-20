@@ -467,6 +467,119 @@ function DocumentSection() {
   );
 }
 
+// ─── Garment Color Section (color-sep right panel) ───────────────────────────
+
+const GARMENT_PRESETS: { hex: string; name: string }[] = [
+  { hex: '#FFFFFF', name: 'White' },
+  { hex: '#F4EED4', name: 'Natural' },
+  { hex: '#C8C9CC', name: 'Silver' },
+  { hex: '#4A4A55', name: 'Charcoal' },
+  { hex: '#0D0D0D', name: 'Black' },
+  { hex: '#7EB0D4', name: 'Carolina Blue' },
+  { hex: '#1B62A8', name: 'Royal' },
+  { hex: '#1C2848', name: 'Navy' },
+  { hex: '#228C8C', name: 'Teal' },
+  { hex: '#1A7A30', name: 'Kelly Green' },
+  { hex: '#426840', name: 'Forest' },
+  { hex: '#8A9A76', name: 'Sage' },
+  { hex: '#5A5A24', name: 'Olive' },
+  { hex: '#D2A828', name: 'Gold' },
+  { hex: '#E85C1C', name: 'Orange' },
+  { hex: '#CC1E1E', name: 'Red' },
+  { hex: '#6A0E18', name: 'Maroon' },
+  { hex: '#7B3FA0', name: 'Purple' },
+];
+
+function BgColorSection() {
+  const {
+    canvasColor, setCanvasColor,
+    showFabricBg, setShowFabricBg,
+    fabricTexture, setFabricTexture,
+    fabricBlendStrength, setFabricBlendStrength,
+    fabricTextureDepth, setFabricTextureDepth,
+    originalImage, separationMode,
+  } = useStore();
+  const fabricOn = fabricTexture !== 'none';
+  return (
+    <Section title="Background Color" defaultOpen={true}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{
+          position: 'relative', width: 32, height: 32, flexShrink: 0,
+          background: canvasColor,
+          border: '2px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+          cursor: 'pointer',
+        }}>
+          <input type="color" value={canvasColor} onChange={(e) => setCanvasColor(e.target.value)}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', border: 'none', padding: 0 }} />
+        </div>
+        <input
+          type="text" value={canvasColor} maxLength={7}
+          style={{
+            flex: 1, height: 26, padding: '0 6px', fontSize: 11, fontFamily: 'var(--font-mono)',
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            color: 'var(--text)', letterSpacing: '0.05em',
+          }}
+          onChange={(e) => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) setCanvasColor(e.target.value); }}
+        />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: 3, marginBottom: 8 }}>
+        {GARMENT_PRESETS.map(({ hex, name }) => {
+          const active = canvasColor.toLowerCase() === hex.toLowerCase();
+          return (
+            <button key={hex} onClick={() => setCanvasColor(hex)} title={name}
+              style={{
+                aspectRatio: '1', background: hex, cursor: 'pointer',
+                border: active ? '2px solid var(--accent)' : '1.5px solid color-mix(in srgb, var(--border-2) 60%, transparent)',
+                boxShadow: active ? '0 0 0 1.5px var(--accent)' : 'inset 0 1px 2px rgba(0,0,0,0.15)',
+                transform: active ? 'scale(1.1)' : 'scale(1)',
+                transition: 'transform 0.1s, border 0.1s',
+              }}
+            />
+          );
+        })}
+      </div>
+      <SwitchRow label="Show Background" checked={showFabricBg} onChange={setShowFabricBg} />
+      <SwitchRow
+        label="Fabric View"
+        checked={fabricOn}
+        onChange={(v) => {
+          if (!v) { setFabricTexture('none'); return; }
+          if (separationMode === 'dtg' && originalImage) {
+            const d = originalImage.data;
+            const n = originalImage.width * originalImage.height;
+            let lum = 0;
+            for (let i = 0; i < n; i += Math.max(1, Math.floor(n / 2000))) lum += 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+            setFabricTexture(lum / Math.ceil(n / Math.max(1, Math.floor(n / 2000))) < 128 ? 'dark' : 'light');
+          } else { setFabricTexture('light'); }
+          if (!showFabricBg) setShowFabricBg(true);
+        }}
+      />
+      {fabricOn && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 4 }}>
+            {(['light', 'dark'] as const).map((t) => (
+              <button key={t} onClick={() => setFabricTexture(t)}
+                style={{
+                  padding: '4px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                  textTransform: 'uppercase', letterSpacing: '0.06em',
+                  background: fabricTexture === t ? 'var(--accent)' : 'var(--surface-2)',
+                  color: fabricTexture === t ? '#000' : 'var(--text-dim)',
+                  border: `1px solid ${fabricTexture === t ? 'var(--accent)' : 'var(--border)'}`,
+                  cursor: 'pointer', fontWeight: fabricTexture === t ? 700 : 400,
+                }}>
+                {t === 'light' ? 'Light Shirt' : 'Dark Shirt'}
+              </button>
+            ))}
+          </div>
+          <Slider label="Blend Strength" value={Math.round(fabricBlendStrength * 100)} min={0} max={100} step={1} unit="%" onChange={(v) => setFabricBlendStrength(v / 100)} />
+          <Slider label="Texture Depth" value={Math.round(fabricTextureDepth * 100)} min={0} max={100} step={1} unit="%" onChange={(v) => setFabricTextureDepth(v / 100)} />
+        </>
+      )}
+    </Section>
+  );
+}
+
 function RegistrationSection() {
   const {
     showRegistrationMarks, setShowRegistrationMarks,
@@ -1585,6 +1698,7 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         <div className="control-scroll">
           <DocumentSection />
           <RegistrationSection />
+          {separationMode === 'color-sep' && <BgColorSection />}
           {separationMode === 'dtg' && <DtgSection />}
           {separationMode === 'threshold' && (
             <>
@@ -1647,7 +1761,10 @@ export function ControlPanel({ cmykQuality = null }: { cmykQuality?: number | nu
         ) : separationMode === 'palette' ? (
           <PaletteSection />
         ) : separationMode === 'color-sep' ? (
-          <ColorSepSection />
+          <>
+            <BgColorSection />
+            <ColorSepSection />
+          </>
         ) : separationMode === 'texture' ? (
           <>
             <GrainSection />

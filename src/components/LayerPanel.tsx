@@ -292,353 +292,6 @@ function ThreshPatternSelect({ value, onChange }: { value: PatternType; onChange
   );
 }
 
-// ─── Brand fabric palettes ────────────────────────────────────────────────────
-
-const BRAND_PALETTES: { brand: string; colors: { hex: string; name: string }[] }[] = [
-  {
-    brand: 'Bella Canvas',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#F4EED4', name: 'Cream' },
-      { hex: '#E5D4B2', name: 'Natural' },
-      { hex: '#F0E8D8', name: 'Soft Crème' },
-      { hex: '#B8BCC0', name: 'Athletic Heather' },
-      { hex: '#C8C9CC', name: 'Silver' },
-      { hex: '#CEC9C5', name: 'Ash' },
-      { hex: '#6B6B76', name: 'Dark Grey Heather' },
-      { hex: '#4A4A55', name: 'Charcoal' },
-      { hex: '#3C3C44', name: 'Dark Grey' },
-      { hex: '#0D0D0D', name: 'Black' },
-      { hex: '#A5C8DE', name: 'Baby Blue' },
-      { hex: '#7EB0D4', name: 'Carolina Blue' },
-      { hex: '#1B62A8', name: 'True Royal' },
-      { hex: '#1A5C8A', name: 'Ocean' },
-      { hex: '#2C3D5C', name: 'Heather Navy' },
-      { hex: '#1C2848', name: 'Navy' },
-      { hex: '#228C8C', name: 'Teal' },
-      { hex: '#1A7A30', name: 'Kelly Green' },
-      { hex: '#426840', name: 'Leaf' },
-      { hex: '#1A4828', name: 'Forest' },
-      { hex: '#8A9A76', name: 'Sage' },
-      { hex: '#5A5A24', name: 'Olive' },
-      { hex: '#D2A828', name: 'Yellow Gold' },
-      { hex: '#BA9810', name: 'Mustard' },
-      { hex: '#E85C1C', name: 'Orange' },
-      { hex: '#CC1E1E', name: 'Red' },
-      { hex: '#9A1818', name: 'Cardinal' },
-      { hex: '#6A0E18', name: 'Maroon' },
-      { hex: '#781A44', name: 'Berry' },
-      { hex: '#BC7880', name: 'Mauve' },
-      { hex: '#F4B0C0', name: 'Light Pink' },
-      { hex: '#9898CC', name: 'Lavender Blue' },
-      { hex: '#BFA8D8', name: 'Lilac' },
-      { hex: '#5A1A7A', name: 'Purple' },
-    ],
-  },
-  {
-    brand: 'Comfort Colors',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#F2E8D0', name: 'Ivory' },
-      { hex: '#F2DC88', name: 'Butter' },
-      { hex: '#ECC81A', name: 'Citrus' },
-      { hex: '#E8C520', name: 'Yellow' },
-      { hex: '#C89820', name: 'Mustard' },
-      { hex: '#F4A088', name: 'Melon' },
-      { hex: '#F07040', name: 'Tangerine' },
-      { hex: '#E86020', name: 'Orange' },
-      { hex: '#C41C1C', name: 'Pepper' },
-      { hex: '#C01A1A', name: 'Red' },
-      { hex: '#9A2818', name: 'Brick' },
-      { hex: '#9E1A30', name: 'Crimson' },
-      { hex: '#CC3858', name: 'Watermelon' },
-      { hex: '#781845', name: 'Berry' },
-      { hex: '#841830', name: 'Garnet' },
-      { hex: '#681030', name: 'Wine' },
-      { hex: '#D898A8', name: 'Blossom' },
-      { hex: '#E87898', name: 'Candy Pink' },
-      { hex: '#A0D8BE', name: 'Chalky Mint' },
-      { hex: '#3ABE88', name: 'Spearmint' },
-      { hex: '#1E9878', name: 'Island Green' },
-      { hex: '#58CAA8', name: 'Seafoam' },
-      { hex: '#6E7858', name: 'Artichoke' },
-      { hex: '#687838', name: 'Moss' },
-      { hex: '#386090', name: 'Blue Jean' },
-      { hex: '#1E50A8', name: 'Cobalt' },
-      { hex: '#1A2A50', name: 'True Navy' },
-      { hex: '#98C0D8', name: 'Ice Blue' },
-      { hex: '#4878A0', name: 'Steel Blue' },
-      { hex: '#7898B8', name: 'Washed Denim' },
-      { hex: '#5830A0', name: 'Violet' },
-      { hex: '#581A80', name: 'Purple' },
-      { hex: '#B878C8', name: 'Orchid' },
-      { hex: '#ADADB5', name: 'Grey' },
-      { hex: '#8888A0', name: 'Pewter' },
-      { hex: '#484860', name: 'Graphite' },
-      { hex: '#191919', name: 'Black' },
-    ],
-  },
-  {
-    brand: 'Gildan',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#EDE0C9', name: 'Natural' },
-      { hex: '#D0CCCC', name: 'Ice Grey' },
-      { hex: '#A09E9E', name: 'Sport Grey' },
-      { hex: '#5A5A5E', name: 'Graphite Heather' },
-      { hex: '#40404A', name: 'Dark Heather' },
-      { hex: '#404040', name: 'Charcoal' },
-      { hex: '#1A1A1A', name: 'Black' },
-      { hex: '#8ABDE0', name: 'Light Blue' },
-      { hex: '#80B4D8', name: 'Carolina Blue' },
-      { hex: '#90C8E8', name: 'Sky' },
-      { hex: '#1A5CAA', name: 'Royal' },
-      { hex: '#2050B0', name: 'Cobalt' },
-      { hex: '#1A4C8A', name: 'Sapphire' },
-      { hex: '#1A2440', name: 'Navy' },
-      { hex: '#1A9870', name: 'Jade Dome' },
-      { hex: '#1A8030', name: 'Kelly Green' },
-      { hex: '#20A040', name: 'Irish Green' },
-      { hex: '#205030', name: 'Forest Green' },
-      { hex: '#5A6030', name: 'Military Green' },
-      { hex: '#F0E000', name: 'Safety Yellow' },
-      { hex: '#F0D840', name: 'Daisy' },
-      { hex: '#D4A810', name: 'Gold' },
-      { hex: '#E85A14', name: 'Orange' },
-      { hex: '#F07800', name: 'Safety Orange' },
-      { hex: '#E8600A', name: 'Tennessee Orange' },
-      { hex: '#C01818', name: 'Red' },
-      { hex: '#B01020', name: 'Cherry Red' },
-      { hex: '#601020', name: 'Maroon' },
-      { hex: '#8A1830', name: 'Garnet' },
-      { hex: '#CC2860', name: 'Heliconia' },
-      { hex: '#E0789A', name: 'Azalea' },
-      { hex: '#F0B8C4', name: 'Light Pink' },
-      { hex: '#5C1C82', name: 'Purple' },
-      { hex: '#6030A8', name: 'Violet' },
-      { hex: '#C8B898', name: 'Sand' },
-    ],
-  },
-  {
-    brand: 'Hanes',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#D0CCCC', name: 'Ash' },
-      { hex: '#B8B8BE', name: 'Light Steel' },
-      { hex: '#9A989A', name: 'Smoke Grey' },
-      { hex: '#585860', name: 'Charcoal Heather' },
-      { hex: '#1C1C1E', name: 'Black' },
-      { hex: '#AA1820', name: 'Deep Red' },
-      { hex: '#E8607A', name: 'Wow Pink' },
-      { hex: '#D4A820', name: 'Gold' },
-      { hex: '#E8601A', name: 'Orange' },
-      { hex: '#386898', name: 'Denim Blue' },
-      { hex: '#1A5CAA', name: 'Athletic Royal' },
-      { hex: '#1A2748', name: 'Navy' },
-      { hex: '#1E4A28', name: 'Deep Forest' },
-      { hex: '#5A6030', name: 'Fatigue' },
-    ],
-  },
-  {
-    brand: 'Alstyle',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#C0C0C8', name: 'Silver' },
-      { hex: '#9A9898', name: 'Sport Grey' },
-      { hex: '#424248', name: 'Charcoal' },
-      { hex: '#1A1A1A', name: 'Black' },
-      { hex: '#1A5CA8', name: 'Royal' },
-      { hex: '#1A2448', name: 'Navy' },
-      { hex: '#CC1820', name: 'Red' },
-      { hex: '#601020', name: 'Maroon' },
-      { hex: '#3A2018', name: 'Dark Chocolate' },
-      { hex: '#80B4D8', name: 'Carolina Blue' },
-      { hex: '#205030', name: 'Forest Green' },
-      { hex: '#E8601A', name: 'Orange' },
-      { hex: '#1A8030', name: 'Kelly Green' },
-    ],
-  },
-  {
-    brand: 'Tultex',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#B5B9BD', name: 'Athletic Heather' },
-      { hex: '#B8B8BC', name: 'Heather Grey' },
-      { hex: '#5A5A60', name: 'Charcoal Heather' },
-      { hex: '#1A1A1A', name: 'Black' },
-      { hex: '#2D3D5C', name: 'Heather Navy' },
-      { hex: '#1A2448', name: 'Navy' },
-      { hex: '#BC3A40', name: 'Heather Red' },
-      { hex: '#CC1820', name: 'Red' },
-      { hex: '#3A68B0', name: 'Heather Royal' },
-      { hex: '#1A5CA8', name: 'Royal' },
-      { hex: '#3A6038', name: 'Heather Forest' },
-      { hex: '#1E4A28', name: 'Forest' },
-      { hex: '#9898CC', name: 'Heather Lavender' },
-    ],
-  },
-  {
-    brand: 'Delta',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#C8C8CC', name: 'Silver' },
-      { hex: '#D0CCCC', name: 'Light Grey' },
-      { hex: '#B0AEB0', name: 'Athletic Grey' },
-      { hex: '#404048', name: 'Charcoal' },
-      { hex: '#1A1A1A', name: 'Black' },
-      { hex: '#1A2448', name: 'Navy' },
-      { hex: '#1A5CA8', name: 'Royal' },
-      { hex: '#CC1820', name: 'Red' },
-      { hex: '#601020', name: 'Maroon' },
-      { hex: '#1E4A28', name: 'Forest' },
-      { hex: '#D4A820', name: 'Gold' },
-      { hex: '#CC5010', name: 'Burnt Orange' },
-    ],
-  },
-  {
-    brand: 'AS Colour',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#F0E8D4', name: 'Cream' },
-      { hex: '#E0D4BC', name: 'Natural' },
-      { hex: '#E8E0D0', name: 'Bone' },
-      { hex: '#C8C4BE', name: 'Birch Heather' },
-      { hex: '#B0ACB0', name: 'Grey Marle' },
-      { hex: '#6A6870', name: 'Dark Grey' },
-      { hex: '#484850', name: 'Charcoal' },
-      { hex: '#0A0A0A', name: 'Black' },
-      { hex: '#AACCE0', name: 'Pale Blue' },
-      { hex: '#6AAACE', name: 'Sky Blue' },
-      { hex: '#3A70B0', name: 'Mid Blue' },
-      { hex: '#1A5C9A', name: 'Pacific Blue' },
-      { hex: '#1C2A50', name: 'Navy' },
-      { hex: '#1A7888', name: 'Teal Blue' },
-      { hex: '#2A5030', name: 'Forest' },
-      { hex: '#8A9A78', name: 'Sage' },
-      { hex: '#B89060', name: 'Tan' },
-      { hex: '#C8A060', name: 'Camel' },
-      { hex: '#6A4030', name: 'Brown' },
-      { hex: '#985030', name: 'Terra' },
-      { hex: '#C84820', name: 'Rust' },
-      { hex: '#E86020', name: 'Orange' },
-      { hex: '#E03050', name: 'Watermelon' },
-      { hex: '#C81A20', name: 'Red' },
-      { hex: '#781828', name: 'Burgundy' },
-      { hex: '#681840', name: 'Mulberry' },
-      { hex: '#B82050', name: 'Raspberry' },
-      { hex: '#D8A0A8', name: 'Dusty Pink' },
-      { hex: '#F0C0C8', name: 'Baby Pink' },
-      { hex: '#A8A0CC', name: 'Lavender' },
-      { hex: '#C8B8D8', name: 'Lilac' },
-      { hex: '#5A1878', name: 'Purple' },
-    ],
-  },
-  {
-    brand: 'Shaka Wear',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#F0E4CC', name: 'Natural' },
-      { hex: '#D8C8A0', name: 'Sand' },
-      { hex: '#B8B8BC', name: 'Heather Grey' },
-      { hex: '#6A6A72', name: 'Dark Heather' },
-      { hex: '#484850', name: 'Charcoal' },
-      { hex: '#0A0A0A', name: 'Black' },
-      { hex: '#C81A1A', name: 'Red' },
-      { hex: '#8A1818', name: 'Cardinal' },
-      { hex: '#601018', name: 'Maroon' },
-      { hex: '#701830', name: 'Burgundy' },
-      { hex: '#D4A010', name: 'Gold' },
-      { hex: '#E8D020', name: 'Yellow' },
-      { hex: '#E86018', name: 'Orange' },
-      { hex: '#FF6600', name: 'Neon Orange' },
-      { hex: '#DCEE00', name: 'Neon Yellow' },
-      { hex: '#FF2880', name: 'Neon Pink' },
-      { hex: '#00CC44', name: 'Neon Green' },
-      { hex: '#1A5CA8', name: 'Royal Blue' },
-      { hex: '#A0C8E0', name: 'Baby Blue' },
-      { hex: '#1A2448', name: 'Navy' },
-      { hex: '#2050B0', name: 'Cobalt' },
-      { hex: '#205030', name: 'Forest' },
-      { hex: '#1A7830', name: 'Kelly' },
-      { hex: '#5A1878', name: 'Purple' },
-      { hex: '#D82060', name: 'Hot Pink' },
-      { hex: '#F0A0B8', name: 'Pink' },
-      { hex: '#1A8080', name: 'Teal' },
-    ],
-  },
-  {
-    brand: 'LA Apparel',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#F2E8D4', name: 'Cream' },
-      { hex: '#F0E8D8', name: 'Off White' },
-      { hex: '#C4C4C8', name: 'Silver' },
-      { hex: '#ACACB2', name: 'Heather Grey' },
-      { hex: '#888898', name: 'Slate' },
-      { hex: '#484850', name: 'Charcoal' },
-      { hex: '#0A0A0A', name: 'Black' },
-      { hex: '#98C8E0', name: 'Light Blue' },
-      { hex: '#507098', name: 'Denim' },
-      { hex: '#1858A8', name: 'Royal Blue' },
-      { hex: '#1A2448', name: 'Navy' },
-      { hex: '#206030', name: 'Forest Green' },
-      { hex: '#1E4828', name: 'Hunter Green' },
-      { hex: '#5A6028', name: 'Army Green' },
-      { hex: '#CC1A1A', name: 'Red' },
-      { hex: '#901830', name: 'Cranberry' },
-      { hex: '#701828', name: 'Burgundy' },
-      { hex: '#8A2820', name: 'Brick' },
-      { hex: '#E86020', name: 'Orange' },
-      { hex: '#D0A020', name: 'Gold' },
-      { hex: '#E8D028', name: 'Yellow' },
-      { hex: '#F0A8B8', name: 'Pink' },
-      { hex: '#D82058', name: 'Hot Pink' },
-      { hex: '#C07880', name: 'Mauve' },
-      { hex: '#A8A0CC', name: 'Lavender' },
-      { hex: '#5A1878', name: 'Purple' },
-      { hex: '#6A4030', name: 'Brown' },
-      { hex: '#C0A070', name: 'Tan' },
-    ],
-  },
-  {
-    brand: 'Independent Trading',
-    colors: [
-      { hex: '#FFFFFF', name: 'White' },
-      { hex: '#EDE4D0', name: 'Natural' },
-      { hex: '#E8DECE', name: 'Bone' },
-      { hex: '#D8CEB8', name: 'Oatmeal Heather' },
-      { hex: '#B8B8BC', name: 'Heather Grey' },
-      { hex: '#6A6A72', name: 'Graphite Heather' },
-      { hex: '#484850', name: 'Charcoal' },
-      { hex: '#0A0A0A', name: 'Black' },
-      { hex: '#A0C8E0', name: 'Light Blue' },
-      { hex: '#6AAAD0', name: 'Sky Blue' },
-      { hex: '#6070A0', name: 'Slate Blue' },
-      { hex: '#1860A8', name: 'True Royal' },
-      { hex: '#789AB0', name: 'Dusty Blue' },
-      { hex: '#1E2A50', name: 'Navy' },
-      { hex: '#1A7A80', name: 'Teal' },
-      { hex: '#205030', name: 'Forest Green' },
-      { hex: '#889878', name: 'Sage' },
-      { hex: '#6A7850', name: 'Cactus' },
-      { hex: '#6A4028', name: 'Chocolate Brown' },
-      { hex: '#C8A060', name: 'Camel' },
-      { hex: '#C84818', name: 'Rust' },
-      { hex: '#E86018', name: 'Orange' },
-      { hex: '#CC1A1A', name: 'Red' },
-      { hex: '#8E1828', name: 'Cranberry' },
-      { hex: '#601018', name: 'Maroon' },
-      { hex: '#D8A0A8', name: 'Dusty Pink' },
-      { hex: '#F0C0C8', name: 'Light Pink' },
-      { hex: '#C89888', name: 'Rose Gold' },
-      { hex: '#B87880', name: 'Mauve' },
-      { hex: '#A8A0CC', name: 'Lavender' },
-      { hex: '#5A1878', name: 'Purple' },
-      { hex: '#D0A020', name: 'Gold' },
-    ],
-  },
-];
-
 // ─── Inks Section ─────────────────────────────────────────────────────────────
 
 function InksSection() {
@@ -854,89 +507,105 @@ function DtgImageAdjustSection() {
 
 // ─── Fabric / Background Section ─────────────────────────────────────────────
 
+const GARMENT_PRESETS: { hex: string; name: string }[] = [
+  { hex: '#FFFFFF', name: 'White' },
+  { hex: '#F4EED4', name: 'Natural' },
+  { hex: '#C8C9CC', name: 'Silver' },
+  { hex: '#4A4A55', name: 'Charcoal' },
+  { hex: '#0D0D0D', name: 'Black' },
+  { hex: '#7EB0D4', name: 'Carolina Blue' },
+  { hex: '#1B62A8', name: 'Royal' },
+  { hex: '#1C2848', name: 'Navy' },
+  { hex: '#228C8C', name: 'Teal' },
+  { hex: '#1A7A30', name: 'Kelly Green' },
+  { hex: '#426840', name: 'Forest' },
+  { hex: '#8A9A76', name: 'Sage' },
+  { hex: '#5A5A24', name: 'Olive' },
+  { hex: '#D2A828', name: 'Gold' },
+  { hex: '#E85C1C', name: 'Orange' },
+  { hex: '#CC1E1E', name: 'Red' },
+  { hex: '#6A0E18', name: 'Maroon' },
+  { hex: '#7B3FA0', name: 'Purple' },
+];
+
+function GarmentColorPicker() {
+  const { canvasColor, setCanvasColor } = useStore();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Swatch + hex */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="color-swatch-btn" style={{
+          background: canvasColor, width: 32, height: 32, flexShrink: 0,
+          border: '2px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+        }}>
+          <input type="color" value={canvasColor} onChange={(e) => setCanvasColor(e.target.value)} />
+        </div>
+        <input className="color-hex" type="text" value={canvasColor} maxLength={7}
+          style={{ flex: 1 }}
+          onChange={(e) => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) setCanvasColor(e.target.value); }} />
+      </div>
+      {/* Preset grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+        {GARMENT_PRESETS.map(({ hex, name }) => {
+          const active = canvasColor.toLowerCase() === hex.toLowerCase();
+          return (
+            <button key={hex} onClick={() => setCanvasColor(hex)} title={name}
+              style={{
+                aspectRatio: '1', background: hex, cursor: 'pointer',
+                border: active ? '2px solid var(--accent)' : '1.5px solid color-mix(in srgb, var(--border-2) 60%, transparent)',
+                boxShadow: active ? '0 0 0 1.5px var(--accent)' : 'inset 0 1px 2px rgba(0,0,0,0.15)',
+                transform: active ? 'scale(1.1)' : 'scale(1)',
+                transition: 'transform 0.1s, border 0.1s',
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function BackgroundSection({ defaultOpen = true }: { defaultOpen?: boolean } = {}) {
   const [open, setOpen] = useState(defaultOpen);
-  const [brand, setBrand] = useState('LA Apparel');
   const {
     originalImage, separationMode,
     bgRemovalEnabled, bgTolerance, bgEdgeSoftness, setBgRemovalEnabled, setBgTolerance, setBgEdgeSoftness,
     bgSeedColors, setBgSeedColors, bgEyedropperActive, setBgEyedropperActive,
     bgPaintMask, bgPaintMode, setBgPaintMask, setBgPaintMode,
-    canvasColor, setCanvasColor, showFabricBg, setShowFabricBg,
+    showFabricBg, setShowFabricBg,
     fabricTexture, setFabricTexture,
     fabricBlendStrength, setFabricBlendStrength,
     fabricTextureDepth, setFabricTextureDepth,
   } = useStore();
   const isDtg = separationMode === 'dtg';
-
-  const palette = BRAND_PALETTES.find((b) => b.brand === brand)?.colors ?? [];
-  const matchedColor = palette.find((c) => c.hex.toLowerCase() === canvasColor.toLowerCase());
+  const isColorSep = separationMode === 'color-sep';
   const realisticOn = fabricTexture !== 'none';
 
   return (
     <>
-      <SectionHeader title="Background" open={open} onToggle={() => setOpen(!open)} />
+      <SectionHeader title="BG Color" open={open} onToggle={() => setOpen(!open)} />
       {open && (
         <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-          {/* ── Garment color ── */}
-          <div style={{
-            opacity: showFabricBg ? 1 : 0.45,
-            pointerEvents: showFabricBg ? 'auto' : 'none',
-            transition: 'opacity 0.2s',
-            display: 'flex', flexDirection: 'column', gap: 8,
-          }}>
-            {/* Color row: swatch + hex + name stacked */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="color-swatch-btn" style={{
-                background: canvasColor, width: 36, height: 36, flexShrink: 0,
-                borderRadius: 5, border: '2px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+          {/* ── Garment color — hidden in color-sep (lives in right panel there) ── */}
+          {!isColorSep && (
+            <>
+              <div style={{
+                opacity: showFabricBg ? 1 : 0.45,
+                pointerEvents: showFabricBg ? 'auto' : 'none',
+                transition: 'opacity 0.2s',
               }}>
-                <input type="color" value={canvasColor} onChange={(e) => setCanvasColor(e.target.value)} />
+                <GarmentColorPicker />
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {matchedColor ? matchedColor.name : 'Custom'}
-                </div>
-                <input className="color-hex" type="text" value={canvasColor} maxLength={7}
-                  style={{ width: '100%' }}
-                  onChange={(e) => { if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) setCanvasColor(e.target.value); }} />
-              </div>
-            </div>
-
-            {/* Brand selector */}
-            <select className="at-select" value={brand} onChange={(e) => setBrand(e.target.value)}>
-              {BRAND_PALETTES.map((b) => (
-                <option key={b.brand} value={b.brand}>{b.brand}</option>
-              ))}
-            </select>
-
-            {/* Swatch grid — 7 columns, tighter */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-              {palette.map(({ hex, name }) => {
-                const active = canvasColor.toLowerCase() === hex.toLowerCase();
-                return (
-                  <button key={hex + name} onClick={() => setCanvasColor(hex)} title={name}
-                    style={{
-                      aspectRatio: '1', background: hex, cursor: 'pointer', borderRadius: 4,
-                      border: active ? '2px solid var(--accent)' : '1.5px solid color-mix(in srgb, var(--border-2) 60%, transparent)',
-                      boxShadow: active ? '0 0 0 1.5px var(--accent)' : 'inset 0 1px 2px rgba(0,0,0,0.15)',
-                      transform: active ? 'scale(1.1)' : 'scale(1)',
-                      transition: 'transform 0.1s, border 0.1s',
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ height: 1, background: 'var(--border)' }} />
+              <div style={{ height: 1, background: 'var(--border)' }} />
+            </>
+          )}
 
           {/* ── View options ── */}
           <SwitchRow label="Show Background" checked={showFabricBg} onChange={setShowFabricBg} />
           <SwitchRow
-            label="Realistic View"
+            label="Fabric View"
             checked={realisticOn}
             onChange={(v) => {
               if (!v) { setFabricTexture('none'); return; }
@@ -968,89 +637,92 @@ function BackgroundSection({ defaultOpen = true }: { defaultOpen?: boolean } = {
             </div>
           )}
 
-          <div style={{ height: 1, background: 'var(--border)' }} />
-
-          {/* ── BG Removal ── */}
-          {!isDtg && <SwitchRow label="Remove BG" checked={bgRemovalEnabled} onChange={setBgRemovalEnabled} />}
-          {!isDtg && bgRemovalEnabled && (
+          {/* ── BG Removal — hidden for color-sep (pinned strip), dtg, and cmyk (pinned strip) ── */}
+          {!isDtg && !isColorSep && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && separationMode !== 'threshold' && (
             <>
-              <Slider label="Tolerance"    value={bgTolerance}    min={1}  max={100} onChange={setBgTolerance}    unit="%" />
-              <Slider label="Edge Softness" value={bgEdgeSoftness} min={0}  max={20}  onChange={setBgEdgeSoftness} unit="px" />
+              <div style={{ height: 1, background: 'var(--border)' }} />
+              <SwitchRow label="Remove BG" checked={bgRemovalEnabled} onChange={setBgRemovalEnabled} />
+              {bgRemovalEnabled && (
+                <>
+                  <Slider label="Tolerance"    value={bgTolerance}    min={1}  max={100} onChange={setBgTolerance}    unit="%" />
+                  <Slider label="Edge Softness" value={bgEdgeSoftness} min={0}  max={20}  onChange={setBgEdgeSoftness} unit="px" />
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Color Sample
-                </span>
-                <button onClick={() => setBgEyedropperActive(!bgEyedropperActive)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', fontSize: 9,
-                    fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
-                    background: bgEyedropperActive ? 'var(--accent)' : 'var(--surface-2)',
-                    color: bgEyedropperActive ? '#000' : 'var(--text-dim)',
-                    border: `1px solid ${bgEyedropperActive ? 'var(--accent)' : 'var(--border)'}`,
-                    cursor: 'pointer',
-                  }}>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M12 2a2 2 0 0 1 3 3L7 13l-4 1 1-4 8-8z"/><line x1="15" y1="5" x2="19" y2="9"/>
-                  </svg>
-                  {bgEyedropperActive ? 'Click image…' : '+ Sample'}
-                </button>
-              </div>
-
-              {bgSeedColors.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                  {bgSeedColors.map((hex, i) => (
-                    <button key={i} onClick={() => setBgSeedColors(bgSeedColors.filter((_, j) => j !== i))}
-                      title={`Remove ${hex}`}
-                      style={{ width: 20, height: 20, background: hex, border: '1px solid var(--border-2)', cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
-                      <span className="swatch-x" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', textShadow: '0 0 3px #000', opacity: 0, transition: 'opacity 0.15s' }}>×</span>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      Color Sample
+                    </span>
+                    <button onClick={() => setBgEyedropperActive(!bgEyedropperActive)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', fontSize: 9,
+                        fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                        background: bgEyedropperActive ? 'var(--accent)' : 'var(--surface-2)',
+                        color: bgEyedropperActive ? '#000' : 'var(--text-dim)',
+                        border: `1px solid ${bgEyedropperActive ? 'var(--accent)' : 'var(--border)'}`,
+                        cursor: 'pointer',
+                      }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M12 2a2 2 0 0 1 3 3L7 13l-4 1 1-4 8-8z"/><line x1="15" y1="5" x2="19" y2="9"/>
+                      </svg>
+                      {bgEyedropperActive ? 'Click image…' : '+ Sample'}
                     </button>
-                  ))}
-                  <button onClick={() => setBgSeedColors([])}
-                    style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', textDecoration: 'underline' }}>
-                    clear
-                  </button>
-                </div>
-              )}
+                  </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                  Paint Fix
-                </span>
-                <div style={{ display: 'flex', gap: 4 }}>
-                  <button onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
-                    style={{
-                      padding: '4px 8px', fontSize: 9, fontFamily: 'var(--font-mono)',
-                      textTransform: 'uppercase', letterSpacing: '0.06em',
-                      background: bgPaintMode === 'restore' ? '#2866cc' : 'var(--surface-2)',
-                      color: bgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
-                      border: `1px solid ${bgPaintMode === 'restore' ? '#2866cc' : 'var(--border)'}`,
-                      cursor: 'pointer',
-                    }}>Restore</button>
-                  <button onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
-                    style={{
-                      padding: '4px 8px', fontSize: 9, fontFamily: 'var(--font-mono)',
-                      textTransform: 'uppercase', letterSpacing: '0.06em',
-                      background: bgPaintMode === 'remove' ? '#cc6600' : 'var(--surface-2)',
-                      color: bgPaintMode === 'remove' ? '#fff' : 'var(--text-dim)',
-                      border: `1px solid ${bgPaintMode === 'remove' ? '#cc6600' : 'var(--border)'}`,
-                      cursor: 'pointer',
-                    }}>Remove</button>
-                </div>
-              </div>
+                  {bgSeedColors.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                      {bgSeedColors.map((hex, i) => (
+                        <button key={i} onClick={() => setBgSeedColors(bgSeedColors.filter((_, j) => j !== i))}
+                          title={`Remove ${hex}`}
+                          style={{ width: 20, height: 20, background: hex, border: '1px solid var(--border-2)', cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+                          <span className="swatch-x" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', textShadow: '0 0 3px #000', opacity: 0, transition: 'opacity 0.15s' }}>×</span>
+                        </button>
+                      ))}
+                      <button onClick={() => setBgSeedColors([])}
+                        style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', textDecoration: 'underline' }}>
+                        clear
+                      </button>
+                    </div>
+                  )}
 
-              {bgPaintMode !== 'off' && (
-                <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                  Drag on image to {bgPaintMode} · [ ] to resize brush
-                </div>
-              )}
-              {bgPaintMask && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
-                    style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: '0 2px' }}>
-                    clear paint fixes
-                  </button>
-                </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                      Brush Mask
+                    </span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
+                        style={{
+                          padding: '4px 8px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                          textTransform: 'uppercase', letterSpacing: '0.06em',
+                          background: bgPaintMode === 'restore' ? '#2866cc' : 'var(--surface-2)',
+                          color: bgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
+                          border: `1px solid ${bgPaintMode === 'restore' ? '#2866cc' : 'var(--border)'}`,
+                          cursor: 'pointer',
+                        }}>Restore</button>
+                      <button onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
+                        style={{
+                          padding: '4px 8px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                          textTransform: 'uppercase', letterSpacing: '0.06em',
+                          background: bgPaintMode === 'remove' ? '#cc6600' : 'var(--surface-2)',
+                          color: bgPaintMode === 'remove' ? '#fff' : 'var(--text-dim)',
+                          border: `1px solid ${bgPaintMode === 'remove' ? '#cc6600' : 'var(--border)'}`,
+                          cursor: 'pointer',
+                        }}>Remove</button>
+                    </div>
+                  </div>
+
+                  {bgPaintMode !== 'off' && (
+                    <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      Drag on image to {bgPaintMode} · [ ] to resize brush
+                    </div>
+                  )}
+                  {bgPaintMask && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
+                        style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: '0 2px' }}>
+                        clear brush mask
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -1332,7 +1004,7 @@ function TextureBgSection() {
   const { canvasColor, setCanvasColor } = useStore();
   return (
     <>
-      <SectionHeader title="Background" open={true} onToggle={() => {}} />
+      <SectionHeader title="BG Color" open={true} onToggle={() => {}} />
       <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
         <input type="color" value={canvasColor} onChange={e => setCanvasColor(e.target.value)}
           style={{ width: 32, height: 32, border: 'none', padding: 0, cursor: 'pointer',
@@ -2219,6 +1891,9 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
     pantonePreviewActive, setPantonePreviewActive,
     processedLayers,
     bgRemovalEnabled, setBgRemovalEnabled,
+    bgTolerance, bgEdgeSoftness, setBgTolerance, setBgEdgeSoftness,
+    bgSeedColors, setBgSeedColors, bgEyedropperActive, setBgEyedropperActive,
+    bgPaintMask, bgPaintMode, setBgPaintMask, setBgPaintMode,
   } = useStore();
 
   const [showPantonePanel, setShowPantonePanel] = useState(false);
@@ -2464,32 +2139,110 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
           )}
         </div>}
 
-        {/* ── Remove BG — pinned below mode switcher, always reachable ── */}
-        {originalImage && separationMode !== 'dtg' && separationMode !== 'texture' && (
+        {/* ── Remove BG + Brush Mask — pinned below mode switcher (not cmyk, handled in bottom toolbar) ── */}
+        {separationMode !== 'dtg' && separationMode !== 'texture' && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && (
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '6px 12px', borderBottom: '1px solid var(--border)',
+            flexShrink: 0, borderBottom: '1px solid var(--border)',
             background: bgRemovalEnabled ? 'color-mix(in srgb, var(--accent) 7%, var(--surface))' : 'var(--surface)',
-            flexShrink: 0,
           }}>
-            <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: bgRemovalEnabled ? 'var(--accent)' : 'var(--text-muted)' }}>
-              Remove BG
-            </span>
-            <button
-              onClick={() => setBgRemovalEnabled(!bgRemovalEnabled)}
-              style={{
-                width: 32, height: 18, borderRadius: 9, border: 'none', cursor: 'pointer', padding: 0,
-                background: bgRemovalEnabled ? 'var(--accent)' : 'var(--border-2, var(--border))',
-                position: 'relative', transition: 'background 0.15s', flexShrink: 0,
-              }}
-            >
-              <span style={{
-                position: 'absolute', top: 2, left: bgRemovalEnabled ? 14 : 2,
-                width: 14, height: 14, borderRadius: '50%',
-                background: bgRemovalEnabled ? '#000' : 'var(--text-muted)',
-                transition: 'left 0.15s',
-              }} />
-            </button>
+            {/* Toggle row */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 12px' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-mono)', letterSpacing: '0.07em', textTransform: 'uppercase', color: bgRemovalEnabled ? 'var(--accent)' : 'var(--text-muted)' }}>
+                Remove BG
+              </span>
+              <label className="switch" style={{ flexShrink: 0 }}>
+                <input type="checkbox" checked={bgRemovalEnabled} onChange={e => setBgRemovalEnabled(e.target.checked)} />
+                <div className="switch-track" />
+                <div className="switch-thumb" />
+              </label>
+            </div>
+
+            {/* BG-removal settings — only when enabled */}
+            {bgRemovalEnabled && (
+              <div style={{ padding: '0 12px 8px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Slider label="Tolerance" value={bgTolerance} min={1} max={100} onChange={setBgTolerance} unit="%" />
+                <Slider label="Edge Softness" value={bgEdgeSoftness} min={0} max={20} onChange={setBgEdgeSoftness} unit="px" />
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    Color Sample
+                  </span>
+                  <button onClick={() => setBgEyedropperActive(!bgEyedropperActive)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', fontSize: 9,
+                      fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: bgEyedropperActive ? 'var(--accent)' : 'var(--surface-2)',
+                      color: bgEyedropperActive ? '#000' : 'var(--text-dim)',
+                      border: `1px solid ${bgEyedropperActive ? 'var(--accent)' : 'var(--border)'}`,
+                      cursor: 'pointer',
+                    }}>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M12 2a2 2 0 0 1 3 3L7 13l-4 1 1-4 8-8z"/><line x1="15" y1="5" x2="19" y2="9"/>
+                    </svg>
+                    {bgEyedropperActive ? 'Click image…' : '+ Sample'}
+                  </button>
+                </div>
+
+                {bgSeedColors.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                    {bgSeedColors.map((hex, i) => (
+                      <button key={i} onClick={() => setBgSeedColors(bgSeedColors.filter((_, j) => j !== i))}
+                        title={`Remove ${hex}`}
+                        style={{ width: 20, height: 20, background: hex, border: '1px solid var(--border-2)', cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+                        <span className="swatch-x" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', textShadow: '0 0 3px #000', opacity: 0, transition: 'opacity 0.15s' }}>×</span>
+                      </button>
+                    ))}
+                    <button onClick={() => setBgSeedColors([])}
+                      style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', textDecoration: 'underline' }}>
+                      clear
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Brush Mask — always accessible regardless of BG removal state */}
+            <div style={{ padding: `${bgRemovalEnabled ? '0' : '0'} 12px 10px`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {bgRemovalEnabled && <div style={{ height: 1, background: 'var(--border)', marginBottom: 2 }} />}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 10, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                  Brush Mask
+                </span>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
+                    style={{
+                      padding: '4px 8px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: bgPaintMode === 'restore' ? '#2866cc' : 'var(--surface-2)',
+                      color: bgPaintMode === 'restore' ? '#fff' : 'var(--text-dim)',
+                      border: `1px solid ${bgPaintMode === 'restore' ? '#2866cc' : 'var(--border)'}`,
+                      cursor: 'pointer',
+                    }}>Restore</button>
+                  <button onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
+                    style={{
+                      padding: '4px 8px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      background: bgPaintMode === 'remove' ? '#cc6600' : 'var(--surface-2)',
+                      color: bgPaintMode === 'remove' ? '#fff' : 'var(--text-dim)',
+                      border: `1px solid ${bgPaintMode === 'remove' ? '#cc6600' : 'var(--border)'}`,
+                      cursor: 'pointer',
+                    }}>Remove</button>
+                </div>
+              </div>
+              {bgPaintMode !== 'off' && (
+                <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                  Drag on image to {bgPaintMode} · [ ] to resize brush
+                </div>
+              )}
+              {bgPaintMask && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
+                    style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: '0 2px' }}>
+                    clear brush mask
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -2545,7 +2298,6 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
             <UnderbaseSection />
             <PantonePreviewSection />
             <TextureSection />
-            <BackgroundSection />
           </>
         ) : separationMode === 'texture' ? (
           <>
