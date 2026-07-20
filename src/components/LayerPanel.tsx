@@ -295,14 +295,26 @@ function ThreshPatternSelect({ value, onChange }: { value: PatternType; onChange
 // ─── Inks Section ─────────────────────────────────────────────────────────────
 
 function InksSection() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [editingPaletteIdx, setEditingPaletteIdx] = useState<number | null>(null);
   const [paletteDraft, setPaletteDraft] = useState('');
+  const [sampling, setSampling] = useState(false);
   const {
     paletteColors, paletteVisibility, setPaletteVisibility, setPaletteColor,
     paletteNumColors, setPaletteNumColors, setPaletteColors,
     paletteNames, setPaletteNames,
+    previewImage,
   } = useStore();
+
+  const sampleFromArtwork = () => {
+    if (!previewImage || sampling) return;
+    setSampling(true);
+    setTimeout(() => {
+      const colors = kMeansColors(previewImage, paletteNumColors);
+      setPaletteColors(colors);
+      setSampling(false);
+    }, 0);
+  };
 
   const commitPaletteName = (ci: number) => {
     const next = [...paletteNames];
@@ -327,6 +339,21 @@ function InksSection() {
           flex: 1, textAlign: 'left', fontSize: 10, fontWeight: 600,
           letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)',
         }}>Inks</span>
+        {/* Sample colors button — stops propagation so it doesn't toggle collapse */}
+        <button
+          onClick={(e) => { e.stopPropagation(); sampleFromArtwork(); }}
+          disabled={!previewImage || sampling}
+          title="Sample colors from artwork"
+          style={{
+            marginRight: 6, height: 22, padding: '0 8px',
+            fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 600,
+            letterSpacing: '0.05em', textTransform: 'uppercase',
+            background: 'var(--bg-3)', border: '1px solid var(--border-2)',
+            borderRadius: 3, color: 'var(--text-dim)', cursor: previewImage ? 'pointer' : 'default',
+            opacity: (!previewImage || sampling) ? 0.4 : 1,
+            whiteSpace: 'nowrap',
+          }}
+        >{sampling ? '…' : 'Sample'}</button>
         {/* Stepper — stops propagation so it doesn't toggle collapse */}
         <div
           onClick={(e) => e.stopPropagation()}

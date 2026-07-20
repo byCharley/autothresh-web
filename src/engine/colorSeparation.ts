@@ -25,6 +25,27 @@ export function hexToRgb(hex: string): RGB {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255] as RGB;
 }
 
+function rgbToLab(r: number, g: number, b: number): [number, number, number] {
+  const lin = (v: number) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const lr = lin(r), lg = lin(g), lb = lin(b);
+  const X = lr * 0.4124564 + lg * 0.3575761 + lb * 0.1804375;
+  const Y = lr * 0.2126729 + lg * 0.7151522 + lb * 0.0721750;
+  const Z = lr * 0.0193339 + lg * 0.1191920 + lb * 0.9503041;
+  const f = (t: number) => t > 0.008856 ? t ** (1/3) : 7.787 * t + 16/116;
+  return [116 * f(Y) - 16, 500 * (f(X / 0.95047) - f(Y)), 200 * (f(Y) - f(Z / 1.08883))];
+}
+
+function labToRgb(L: number, a: number, b: number): RGB {
+  const fy = (L + 16) / 116;
+  const f = (t: number) => t > 0.20689 ? t*t*t : (t - 16/116) / 7.787;
+  const X = 0.95047 * f(a / 500 + fy), Y = f(fy), Z = 1.08883 * f(fy - b / 200);
+  const r = X *  3.2404542 + Y * -1.5371385 + Z * -0.4985314;
+  const g = X * -0.9692660 + Y *  1.8760108 + Z *  0.0415560;
+  const bv = X *  0.0556434 + Y * -0.2040259 + Z *  1.0572252;
+  const enc = (v: number) => Math.round(Math.max(0, Math.min(1, v <= 0.0031308 ? 12.92*v : 1.055*v**(1/2.4) - 0.055)) * 255);
+  return [enc(r), enc(g), enc(bv)];
+}
+
 // ─── Color Presets ────────────────────────────────────────────────────────────
 // Each preset is defined with 6 stops (dark→light). sampleK() picks evenly
 // spaced stops for smaller k values so they always look correct.
@@ -192,28 +213,27 @@ export function kMeansColors(
 ): RGB[] {
   const { data, width, height } = imageData;
   const n = width * height;
-  const step = Math.max(1, Math.floor(n / 5000));
+  const step = Math.max(1, Math.floor(n / 8000));
 
-  const samples: RGB[] = [];
+  type LabPt = [number, number, number];
+  const samples: LabPt[] = [];
   for (let i = 0; i < n; i += step) {
     if (bgMask && bgMask[i] === 255) continue;
     if (data[i * 4 + 3] < 128) continue;
-    samples.push([data[i * 4], data[i * 4 + 1], data[i * 4 + 2]]);
+    samples.push(rgbToLab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]));
   }
   if (samples.length === 0) return defaultPaletteColors(k);
 
   let rng = seed >>> 0;
   const rand = () => { rng = (Math.imul(1664525, rng) + 1013904223) >>> 0; return rng / 4294967296; };
+  const labDist2 = (a: LabPt, b: LabPt) => (a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2;
 
-  const centers: RGB[] = [samples[Math.floor(rand() * samples.length)]];
+  const centers: LabPt[] = [samples[Math.floor(rand() * samples.length)]];
   for (let c = 1; c < k; c++) {
     let total = 0;
-    const dists = samples.map(([r, g, b]) => {
+    const dists = samples.map(s => {
       let minD = Infinity;
-      for (const [cr, cg, cb] of centers) {
-        const d = (r-cr)**2 + (g-cg)**2 + (b-cb)**2;
-        if (d < minD) minD = d;
-      }
+      for (const cen of centers) { const d = labDist2(s, cen); if (d < minD) minD = d; }
       total += minD;
       return minD;
     });
@@ -223,27 +243,26 @@ export function kMeansColors(
     centers.push(samples[Math.max(0, idx)]);
   }
 
-  for (let iter = 0; iter < 30; iter++) {
+  for (let iter = 0; iter < 50; iter++) {
     const sums: [number, number, number, number][] = Array.from({ length: k }, () => [0, 0, 0, 0]);
-    for (const [r, g, b] of samples) {
+    for (const s of samples) {
       let minD = Infinity, nearest = 0;
-      for (let c = 0; c < k; c++) {
-        const [cr,cg,cb]=centers[c]; const d=(r-cr)**2+(g-cg)**2+(b-cb)**2;
-        if (d < minD) { minD = d; nearest = c; }
-      }
-      sums[nearest][0]+=r; sums[nearest][1]+=g; sums[nearest][2]+=b; sums[nearest][3]++;
+      for (let c = 0; c < k; c++) { const d = labDist2(s, centers[c]); if (d < minD) { minD = d; nearest = c; } }
+      sums[nearest][0] += s[0]; sums[nearest][1] += s[1]; sums[nearest][2] += s[2]; sums[nearest][3]++;
     }
     let changed = false;
     for (let c = 0; c < k; c++) {
-      const [sr,sg,sb,cnt] = sums[c];
+      const [sL, sa, sb, cnt] = sums[c];
       if (!cnt) continue;
-      const nr=Math.round(sr/cnt), ng=Math.round(sg/cnt), nb=Math.round(sb/cnt);
-      if (nr!==centers[c][0]||ng!==centers[c][1]||nb!==centers[c][2]) { centers[c]=[nr,ng,nb]; changed=true; }
+      const nL = sL/cnt, na = sa/cnt, nb = sb/cnt;
+      if (Math.abs(nL - centers[c][0]) > 0.1 || Math.abs(na - centers[c][1]) > 0.1 || Math.abs(nb - centers[c][2]) > 0.1) {
+        centers[c] = [nL, na, nb]; changed = true;
+      }
     }
     if (!changed) break;
   }
 
-  return centers.sort((a, b) =>
+  return centers.map(([L, a, b]) => labToRgb(L, a, b)).sort((a, b) =>
     (0.299*a[0]+0.587*a[1]+0.114*a[2]) - (0.299*b[0]+0.587*b[1]+0.114*b[2])
   );
 }
@@ -601,6 +620,7 @@ export function computeZones(
   angle?: number,
   softness?: number,
   importanceMap?: Float32Array | null,
+  paletteColors?: RGB[] | null,
 ): Int32Array {
   const { data, width: w, height: h } = imageData;
   const n = w * h;
@@ -669,8 +689,49 @@ export function computeZones(
         const bi = Math.floor(Math.floor(i / w) / S) * bw + Math.floor((i % w) / S);
         zones[i] = blockZones[bi];
       }
+    } else if (paletteColors && paletteColors.length >= 1) {
+      // Color-space error diffusion: find nearest palette color per pixel,
+      // diffuse RGB quantization error to neighbors
+      const errR = new Float32Array(n), errG = new Float32Array(n), errB = new Float32Array(n);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (lum[i] < 0) continue;
+          const adjR = Math.max(0, Math.min(255, data[i*4]   + errR[i]));
+          const adjG = Math.max(0, Math.min(255, data[i*4+1] + errG[i]));
+          const adjB = Math.max(0, Math.min(255, data[i*4+2] + errB[i]));
+          let minD = Infinity, nearestIdx = 0;
+          for (let c = 0; c < k; c++) {
+            const [cr, cg, cb] = paletteColors[c];
+            const rm = (adjR + cr) / 2;
+            const d = (2 + rm/256)*(adjR-cr)**2 + 4*(adjG-cg)**2 + (2 + (255-rm)/256)*(adjB-cb)**2;
+            if (d < minD) { minD = d; nearestIdx = c; }
+          }
+          zones[i] = nearestIdx;
+          const [qr, qg, qb] = paletteColors[nearestIdx];
+          const er = (adjR - qr) * dn, eg = (adjG - qg) * dn, eb = (adjB - qb) * dn;
+          const sp = (ni: number, wt: number) => {
+            if (ni >= 0 && ni < n && lum[ni] >= 0) { errR[ni] += er*wt; errG[ni] += eg*wt; errB[ni] += eb*wt; }
+          };
+          if (pattern === 'atkinson') {
+            sp(i+1,1/8); sp(i+2,1/8);
+            if (y+1<h) { if (x>0) sp(i+w-1,1/8); sp(i+w,1/8); if (x+1<w) sp(i+w+1,1/8); }
+            if (y+2<h) sp(i+2*w,1/8);
+          } else if (pattern === 'jarvis') {
+            sp(i+1,7/48); sp(i+2,5/48);
+            if (y+1<h) { if (x>=2) sp(i+w-2,3/48); if (x>=1) sp(i+w-1,5/48); sp(i+w,7/48); if (x+1<w) sp(i+w+1,5/48); if (x+2<w) sp(i+w+2,3/48); }
+            if (y+2<h) { if (x>=2) sp(i+2*w-2,1/48); if (x>=1) sp(i+2*w-1,3/48); sp(i+2*w,5/48); if (x+1<w) sp(i+2*w+1,3/48); if (x+2<w) sp(i+2*w+2,1/48); }
+          } else if (pattern === 'stucki') {
+            sp(i+1,8/42); sp(i+2,4/42);
+            if (y+1<h) { if (x>=2) sp(i+w-2,2/42); if (x>=1) sp(i+w-1,4/42); sp(i+w,8/42); if (x+1<w) sp(i+w+1,4/42); if (x+2<w) sp(i+w+2,2/42); }
+            if (y+2<h) { if (x>=2) sp(i+2*w-2,1/42); if (x>=1) sp(i+2*w-1,2/42); sp(i+2*w,4/42); if (x+1<w) sp(i+2*w+1,2/42); if (x+2<w) sp(i+2*w+2,1/42); }
+          } else {
+            sp(i+1,7/16); sp(i+w-1,3/16); sp(i+w,5/16); sp(i+w+1,1/16);
+          }
+        }
+      }
     } else {
-      // Full-resolution error diffusion with variant kernels
+      // Luminosity-based error diffusion with variant kernels
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           const i = y * w + x;
@@ -839,32 +900,71 @@ export function computeZones(
       for (let ii = 0; ii < n; ii++) { if (bgFlags2[ii]) lum[ii] = -1; }
     }
     if (!tile) {
-      for (let i = 0; i < n; i++) {
-        if (lum[i] < 0) continue;
-        zones[i] = Math.min(k - 1, Math.floor(Math.max(0, Math.min(255, lum[i])) / step));
+      if (paletteColors && paletteColors.length >= 1) {
+        for (let i = 0; i < n; i++) {
+          if (lum[i] < 0) continue;
+          const r = data[i*4], g = data[i*4+1], b = data[i*4+2];
+          let minD = Infinity, nearestIdx = 0;
+          for (let c = 0; c < k; c++) {
+            const [cr, cg, cb] = paletteColors[c];
+            const rm = (r + cr) / 2;
+            const d = (2 + rm/256)*(r-cr)**2 + 4*(g-cg)**2 + (2 + (255-rm)/256)*(b-cb)**2;
+            if (d < minD) { minD = d; nearestIdx = c; }
+          }
+          zones[i] = nearestIdx;
+        }
+      } else {
+        for (let i = 0; i < n; i++) {
+          if (lum[i] < 0) continue;
+          zones[i] = Math.min(k - 1, Math.floor(Math.max(0, Math.min(255, lum[i])) / step));
+        }
       }
       return zones;
     }
     const useAngle = angle != null && Math.abs(angle % 360) > 0.5;
     const cosA = useAngle ? Math.cos((angle! * Math.PI) / 180) : 1;
     const sinA = useAngle ? Math.sin((angle! * Math.PI) / 180) : 0;
-    for (let i = 0; i < n; i++) {
-      if (lum[i] < 0) continue;
-      const x = i % w, y = Math.floor(i / w);
-      let tx: number, ty: number;
-      if (useAngle) {
-        tx = Math.round(x * cosA - y * sinA);
-        ty = Math.round(x * sinA + y * cosA);
-      } else { tx = x; ty = y; }
-      const L = Math.max(0, Math.min(255, lum[i]));
-      const tileVal = tile[(((ty % S) + S) % S) * S + (((tx % S) + S) % S)];
-      // Offset spans ±step (full zone width) so the pattern is visible throughout
-      // ink areas, not just at zone boundaries. Previously was ±step/2 which made
-      // dithering invisible in solid areas — looked like an overlay rather than
-      // being baked into the separation.
-      const impScale = importanceMap ? 1 - importanceMap[i] * 0.55 : 1;
-      const offset = tileVal * step * 2 * dn * impScale;
-      zones[i] = Math.max(0, Math.min(k - 1, Math.floor((L + offset) / step)));
+    if (paletteColors && paletteColors.length >= 1) {
+      // Color-nearest ordered dither: assign each pixel to its nearest palette
+      // color, then use the dither tile to blend toward the 2nd-nearest at boundaries
+      for (let i = 0; i < n; i++) {
+        if (lum[i] < 0) continue;
+        const x = i % w, y = Math.floor(i / w);
+        let tx: number, ty: number;
+        if (useAngle) {
+          tx = Math.round(x * cosA - y * sinA);
+          ty = Math.round(x * sinA + y * cosA);
+        } else { tx = x; ty = y; }
+        const r = data[i*4], g = data[i*4+1], b = data[i*4+2];
+        let minD = Infinity, nearestIdx = 0, minD2 = Infinity, nearest2Idx = k > 1 ? 1 : 0;
+        for (let c = 0; c < k; c++) {
+          const [cr, cg, cb] = paletteColors[c];
+          const rm = (r + cr) / 2;
+          const d = (2 + rm/256)*(r-cr)**2 + 4*(g-cg)**2 + (2 + (255-rm)/256)*(b-cb)**2;
+          if (d < minD) { minD2 = minD; nearest2Idx = nearestIdx; minD = d; nearestIdx = c; }
+          else if (d < minD2) { minD2 = d; nearest2Idx = c; }
+        }
+        const tileVal = tile[(((ty % S) + S) % S) * S + (((tx % S) + S) % S)];
+        const impScale = importanceMap ? 1 - importanceMap[i] * 0.55 : 1;
+        // t: 0 = pixel matches nearest exactly, 0.5 = equidistant, >0.5 = closer to 2nd
+        const t = minD / Math.max(1e-10, minD + minD2);
+        zones[i] = (t - 0.5 + tileVal * dn * impScale > 0) ? nearest2Idx : nearestIdx;
+      }
+    } else {
+      for (let i = 0; i < n; i++) {
+        if (lum[i] < 0) continue;
+        const x = i % w, y = Math.floor(i / w);
+        let tx: number, ty: number;
+        if (useAngle) {
+          tx = Math.round(x * cosA - y * sinA);
+          ty = Math.round(x * sinA + y * cosA);
+        } else { tx = x; ty = y; }
+        const L = Math.max(0, Math.min(255, lum[i]));
+        const tileVal = tile[(((ty % S) + S) % S) * S + (((tx % S) + S) % S)];
+        const impScale = importanceMap ? 1 - importanceMap[i] * 0.55 : 1;
+        const offset = tileVal * step * 2 * dn * impScale;
+        zones[i] = Math.max(0, Math.min(k - 1, Math.floor((L + offset) / step)));
+      }
     }
   }
 
@@ -889,7 +989,7 @@ export function paletteSeparate(
   const k = colors.length;
   const n = w * h;
 
-  const zones = computeZones(imageData, k, bgMask, pattern, Math.round(patternScale), imageAdj, density, angle, softness, importanceMap);
+  const zones = computeZones(imageData, k, bgMask, pattern, Math.round(patternScale), imageAdj, density, angle, softness, importanceMap, colors);
 
   return colors.map(([cr, cg, cb], ci) => {
     const mask = new Uint8Array(n);
@@ -925,7 +1025,7 @@ export function renderPaletteComposite(
   const k = colors.length;
   const n = w * h;
 
-  const zones = computeZones(imageData, k, bgMask, pattern, Math.round(patternScale), imageAdj, density, angle, softness, importanceMap);
+  const zones = computeZones(imageData, k, bgMask, pattern, Math.round(patternScale), imageAdj, density, angle, softness, importanceMap, colors);
 
   const out = new ImageData(w, h);
   const od = out.data;
