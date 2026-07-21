@@ -628,6 +628,20 @@ export function computeZones(
   const step = 255 / k;
   const dn = density != null ? density / 100 : 1;
 
+  // Apply imageAdj to an RGB pixel by scaling channels via the luminosity ratio.
+  // This preserves hue while applying brightness/contrast/levels/curves to colour-nearest paths.
+  const applyAdjToRgb = (r: number, g: number, b: number): [number, number, number] => {
+    if (!imageAdj) return [r, g, b];
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    const adjLum = applyGlobalAdjustments(lum, imageAdj);
+    const scale = lum > 1 ? adjLum / lum : adjLum / 128;
+    return [
+      Math.max(0, Math.min(255, r * scale)),
+      Math.max(0, Math.min(255, g * scale)),
+      Math.max(0, Math.min(255, b * scale)),
+    ];
+  };
+
   // Build adjusted luminosity array (shared for all dither methods)
   const buildLums = (): Float32Array => {
     let lums = new Float32Array(n);
@@ -697,9 +711,10 @@ export function computeZones(
         for (let x = 0; x < w; x++) {
           const i = y * w + x;
           if (lum[i] < 0) continue;
-          const adjR = Math.max(0, Math.min(255, data[i*4]   + errR[i]));
-          const adjG = Math.max(0, Math.min(255, data[i*4+1] + errG[i]));
-          const adjB = Math.max(0, Math.min(255, data[i*4+2] + errB[i]));
+          const [br, bg, bb] = applyAdjToRgb(data[i*4], data[i*4+1], data[i*4+2]);
+          const adjR = Math.max(0, Math.min(255, br + errR[i]));
+          const adjG = Math.max(0, Math.min(255, bg + errG[i]));
+          const adjB = Math.max(0, Math.min(255, bb + errB[i]));
           let minD = Infinity, nearestIdx = 0;
           for (let c = 0; c < k; c++) {
             const [cr, cg, cb] = paletteColors[c];
@@ -903,7 +918,7 @@ export function computeZones(
       if (paletteColors && paletteColors.length >= 1) {
         for (let i = 0; i < n; i++) {
           if (lum[i] < 0) continue;
-          const r = data[i*4], g = data[i*4+1], b = data[i*4+2];
+          const [r, g, b] = applyAdjToRgb(data[i*4], data[i*4+1], data[i*4+2]);
           let minD = Infinity, nearestIdx = 0;
           for (let c = 0; c < k; c++) {
             const [cr, cg, cb] = paletteColors[c];
@@ -935,7 +950,7 @@ export function computeZones(
           tx = Math.round(x * cosA - y * sinA);
           ty = Math.round(x * sinA + y * cosA);
         } else { tx = x; ty = y; }
-        const r = data[i*4], g = data[i*4+1], b = data[i*4+2];
+        const [r, g, b] = applyAdjToRgb(data[i*4], data[i*4+1], data[i*4+2]);
         let minD = Infinity, nearestIdx = 0, minD2 = Infinity, nearest2Idx = k > 1 ? 1 : 0;
         for (let c = 0; c < k; c++) {
           const [cr, cg, cb] = paletteColors[c];
