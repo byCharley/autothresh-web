@@ -49,11 +49,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── Testers resource ──────────────────────────────────────────────────────
   if (resource === 'testers') {
-    const TABLE_MISSING = 'testers table not found — run: create table testers (email text primary key, status text not null default \'active\', notes text, created_at timestamptz not null default now());';
+    const TABLE_MISSING = 'testers table not found — run:\n\nCREATE TABLE testers (\n  email text PRIMARY KEY,\n  status text NOT NULL DEFAULT \'active\',\n  role text NOT NULL DEFAULT \'tester\',\n  notes text,\n  created_at timestamptz NOT NULL DEFAULT now()\n);\n\nIf the table exists but is missing the role column, run:\nALTER TABLE testers ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT \'tester\';';
 
     if (req.method === 'GET') {
       try {
-        const r = await sb('testers?order=created_at.desc&select=email,status,notes,created_at');
+        const r = await sb('testers?order=created_at.desc&select=email,status,role,notes,created_at');
         if (!r.ok) {
           const text = await r.text();
           if (r.status === 404 || text.includes('does not exist') || text.includes('relation')) {
@@ -67,12 +67,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'POST') {
-      const { action, email, notes } = req.body as { action?: string; email?: string; notes?: string };
+      const { action, email, notes, role } = req.body as { action?: string; email?: string; notes?: string; role?: string };
       if (!action || !email) return res.status(400).json({ error: 'action and email required' });
       const em = email.toLowerCase().trim();
+      const validRole = (role === 'lifetime' || role === 'tester') ? role : 'tester';
       try {
         if (action === 'add') {
-          const r = await sb('testers', 'POST', { email: em, status: 'active', notes: notes ?? null });
+          const r = await sb('testers', 'POST', { email: em, status: 'active', role: validRole, notes: notes ?? null });
           if (!r.ok) {
             const text = await r.text();
             if (text.includes('does not exist') || text.includes('relation')) {

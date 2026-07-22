@@ -1090,21 +1090,23 @@ function ConfidenceBadge({ level }: { level: string }) {
   );
 }
 
-// ── Testers Panel ────────────────────────────────────────────────────────────
+// ── Access Panel ──────────────────────────────────────────────────────────────
 
-interface Tester {
+interface AccessEntry {
   email: string;
   status: 'active' | 'paused';
+  role: 'tester' | 'lifetime';
   notes: string | null;
   created_at: string;
 }
 
-function TestersPanel({ session }: { session: Session }) {
-  const [testers, setTesters]   = useState<Tester[]>([]);
+function AccessPanel({ session }: { session: Session }) {
+  const [testers, setTesters]   = useState<AccessEntry[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
   const [addEmail, setAddEmail] = useState('');
   const [addNotes, setAddNotes] = useState('');
+  const [addRole, setAddRole]   = useState<'tester' | 'lifetime'>('tester');
   const [adding, setAdding]     = useState(false);
   const [addErr, setAddErr]     = useState<string | null>(null);
   const [showAdd, setShowAdd]   = useState(false);
@@ -1113,13 +1115,13 @@ function TestersPanel({ session }: { session: Session }) {
   const load = useCallback(() => {
     setLoading(true); setError(null);
     fetch('/api/security?resource=testers', { headers: { Authorization: `Bearer ${session.token}` } })
-      .then(r => r.json() as Promise<{ testers?: Tester[]; error?: string; setupRequired?: boolean }>)
+      .then(r => r.json() as Promise<{ testers?: AccessEntry[]; error?: string; setupRequired?: boolean }>)
       .then(d => {
         if (d.error) { setError(d.error); return; }
-        if (d.setupRequired) { setError('⚠ Supabase testers table not found. Run this SQL in your Supabase SQL editor:\n\nCREATE TABLE testers (\n  email text PRIMARY KEY,\n  status text NOT NULL DEFAULT \'active\',\n  notes text,\n  created_at timestamptz NOT NULL DEFAULT now()\n);'); return; }
+        if (d.setupRequired) { setError('⚠ Supabase testers table not found. Run this SQL in your Supabase SQL editor:\n\nCREATE TABLE testers (\n  email text PRIMARY KEY,\n  status text NOT NULL DEFAULT \'active\',\n  role text NOT NULL DEFAULT \'tester\',\n  notes text,\n  created_at timestamptz NOT NULL DEFAULT now()\n);\n\nIf the table exists but is missing the role column, run:\nALTER TABLE testers ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT \'tester\';'); return; }
         setTesters(d.testers ?? []);
       })
-      .catch(() => setError('Failed to load testers'))
+      .catch(() => setError('Failed to load access list'))
       .finally(() => setLoading(false));
   }, [session.token]);
 
@@ -1151,14 +1153,14 @@ function TestersPanel({ session }: { session: Session }) {
       const r = await fetch('/api/security?resource=testers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
-        body: JSON.stringify({ action: 'add', email, notes: addNotes.trim() || null }),
+        body: JSON.stringify({ action: 'add', email, role: addRole, notes: addNotes.trim() || null }),
       });
       const d = await r.json() as { ok?: boolean; error?: string };
-      if (!d.ok) throw new Error(d.error ?? 'Failed to add tester');
-      setAddEmail(''); setAddNotes(''); setShowAdd(false);
+      if (!d.ok) throw new Error(d.error ?? 'Failed to add user');
+      setAddEmail(''); setAddNotes(''); setAddRole('tester'); setShowAdd(false);
       load();
     } catch (e) {
-      setAddErr(e instanceof Error ? e.message : 'Failed to add tester');
+      setAddErr(e instanceof Error ? e.message : 'Failed to add user');
     } finally {
       setAdding(false);
     }
@@ -1186,22 +1188,35 @@ function TestersPanel({ session }: { session: Session }) {
           onClick={() => { setShowAdd(v => !v); setAddErr(null); }}
           style={{ fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', padding: '6px 14px', background: showAdd ? 'var(--surface-2)' : 'var(--accent)', color: showAdd ? 'var(--text-dim)' : '#000', border: '1px solid var(--accent)', cursor: 'pointer' }}
         >
-          {showAdd ? 'Cancel' : '+ Add Tester'}
+          {showAdd ? 'Cancel' : '+ Add User'}
         </button>
       </div>
 
       {/* Add form */}
       {showAdd && (
         <div style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 2 }}>New Tester</div>
+          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 2 }}>Grant Access</div>
           <input
             type="email"
-            placeholder="tester@email.com"
+            placeholder="user@email.com"
             value={addEmail}
             onChange={e => { setAddEmail(e.target.value); setAddErr(null); }}
             onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
             style={{ fontFamily: 'var(--font-mono)', fontSize: 12, padding: '8px 10px', background: 'var(--bg)', border: `1px solid ${addErr ? '#f87171' : 'var(--border)'}`, color: 'var(--text)', outline: 'none', width: '100%', boxSizing: 'border-box' }}
           />
+          {/* Role selector */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            {(['tester', 'lifetime'] as const).map(r => (
+              <button key={r} onClick={() => setAddRole(r)}
+                style={{ flex: 1, padding: '6px 0', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', cursor: 'pointer',
+                  background: addRole === r ? (r === 'lifetime' ? 'rgba(251,191,36,0.15)' : 'rgba(var(--accent-rgb),0.15)') : 'var(--bg)',
+                  border: `1px solid ${addRole === r ? (r === 'lifetime' ? '#fbbf24' : 'var(--accent)') : 'var(--border)'}`,
+                  color: addRole === r ? (r === 'lifetime' ? '#fbbf24' : 'var(--accent)') : 'var(--text-dim)',
+                }}>
+                {r === 'tester' ? 'Tester' : 'Lifetime Member'}
+              </button>
+            ))}
+          </div>
           <input
             type="text"
             placeholder="Notes (optional)"
@@ -1216,7 +1231,7 @@ function TestersPanel({ session }: { session: Session }) {
             disabled={adding}
             style={{ alignSelf: 'flex-end', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em', padding: '7px 18px', background: adding ? 'var(--surface-3)' : 'var(--accent)', color: '#000', border: 'none', cursor: adding ? 'default' : 'pointer' }}
           >
-            {adding ? 'Adding...' : 'Add Tester →'}
+            {adding ? 'Adding...' : 'Grant Access →'}
           </button>
         </div>
       )}
@@ -1224,7 +1239,7 @@ function TestersPanel({ session }: { session: Session }) {
       {/* States */}
       {loading && (
         <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-          Loading testers...
+          Loading...
         </div>
       )}
       {error && (
@@ -1236,15 +1251,16 @@ function TestersPanel({ session }: { session: Session }) {
       {/* Tester list */}
       {!loading && !error && testers.length === 0 && (
         <div style={{ textAlign: 'center', padding: '60px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-          No testers yet — add one above.
+          No users yet — grant access above.
         </div>
       )}
 
       {!loading && testers.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--border)' }}>
           {/* Column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, background: 'var(--surface-2)', padding: '8px 14px', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 12, background: 'var(--surface-2)', padding: '8px 14px', alignItems: 'center' }}>
             <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Email</span>
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Role</span>
             <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Status</span>
             <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Actions</span>
           </div>
@@ -1252,7 +1268,7 @@ function TestersPanel({ session }: { session: Session }) {
           {testers.map(t => (
             <div
               key={t.email}
-              style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, background: 'var(--surface)', padding: '12px 14px', alignItems: 'center' }}
+              style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 12, background: 'var(--surface)', padding: '12px 14px', alignItems: 'center' }}
             >
               {/* Email + notes + date */}
               <div>
@@ -1263,6 +1279,15 @@ function TestersPanel({ session }: { session: Session }) {
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-dim)', marginTop: 3 }}>
                   Added {new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 </div>
+              </div>
+
+              {/* Role badge */}
+              <div>
+                {t.role === 'lifetime' ? (
+                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 8px', background: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)', whiteSpace: 'nowrap' }}>Lifetime</span>
+                ) : (
+                  <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 8px', background: 'rgba(139,92,246,0.12)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.3)' }}>Tester</span>
+                )}
               </div>
 
               {/* Status badge */}
@@ -1294,7 +1319,7 @@ function TestersPanel({ session }: { session: Session }) {
                   </button>
                 )}
                 <button
-                  onClick={() => { if (confirm(`Remove ${t.email} from testers?`)) act('remove', t.email); }}
+                  onClick={() => { if (confirm(`Remove ${t.email} from access list?`)) act('remove', t.email); }}
                   disabled={!!busy}
                   style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, padding: '4px 10px', background: 'none', border: '1px solid #f87171', color: '#f87171', cursor: 'pointer', opacity: busy ? 0.6 : 1 }}
                 >
@@ -1307,7 +1332,7 @@ function TestersPanel({ session }: { session: Session }) {
       )}
 
       <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.7, marginTop: 4 }}>
-        Active testers get full app access without a subscription. Pausing revokes access immediately — they'll see the subscribe screen on next login.
+        <b style={{ color: 'var(--text-dim)' }}>Tester</b> — full app access without a subscription. <b style={{ color: 'var(--text-dim)' }}>Lifetime Member</b> — grants lifetime access manually (use for LTD customers who can't authenticate through the store). Pausing revokes access immediately.
       </div>
     </div>
   );
@@ -1791,7 +1816,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     setPreset('custom');
   }
 
-  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'testers' | 'videos' | 'chat'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'access' | 'videos' | 'chat'>('stats');
   const [securityUnreviewed, setSecurityUnreviewed] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
 
@@ -1957,7 +1982,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
         {/* Tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px' }}>
-          {(['stats', 'security', 'testers', 'videos', 'chat'] as const).map(tab => (
+          {(['stats', 'security', 'access', 'videos', 'chat'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1975,7 +2000,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
             >
               {tab === 'stats' ? 'Stats'
                 : tab === 'security' ? (securityUnreviewed > 0 ? `Security (${securityUnreviewed > 99 ? '99+' : securityUnreviewed})` : 'Security')
-                : tab === 'testers' ? 'Testers'
+                : tab === 'access' ? 'Access'
                 : tab === 'videos' ? 'Videos'
                 : chatUnread > 0 ? `Chat (${chatUnread > 99 ? '99+' : chatUnread})` : 'Chat'}
             </button>
@@ -1988,8 +2013,8 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
             <SecurityPanel session={session} onDataLoad={setSecurityUnreviewed} />
           )}
 
-          {activeTab === 'testers' && (
-            <TestersPanel session={session} />
+          {activeTab === 'access' && (
+            <AccessPanel session={session} />
           )}
 
           {activeTab === 'videos' && (

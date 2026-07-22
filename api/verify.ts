@@ -43,17 +43,17 @@ async function getUserPrefs(email: string): Promise<{ accentColor?: string }> {
   } catch { return {}; }
 }
 
-async function checkTesterStatus(email: string): Promise<'active' | 'paused' | null> {
+async function checkTesterStatus(email: string): Promise<{ status: 'active' | 'paused'; role: string } | null> {
   if (!SUPABASE_URL || !SERVICE_KEY) return null;
   try {
     const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/testers?email=eq.${encodeURIComponent(email)}&select=status&limit=1`,
+      `${SUPABASE_URL}/rest/v1/testers?email=eq.${encodeURIComponent(email)}&select=status,role&limit=1`,
       { headers: { 'Authorization': `Bearer ${SERVICE_KEY}`, 'apikey': SERVICE_KEY } }
     );
     if (!r.ok) return null;
-    const rows = await r.json() as Array<{ status: string }>;
+    const rows = await r.json() as Array<{ status: string; role?: string }>;
     if (!rows.length) return null;
-    return rows[0].status === 'paused' ? 'paused' : 'active';
+    return { status: rows[0].status === 'paused' ? 'paused' : 'active', role: rows[0].role ?? 'tester' };
   } catch { return null; }
 }
 
@@ -316,14 +316,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   ]);
 
   const { hasSub, activeSubs, everInSeal, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
-  // Lifetime = not in Seal at all (subscription customers always appear in Seal, even if cancelled)
-  //            + LDT confirms an AutoThresh Web order exists for this email
-  const hasLifetime = !everInSeal && ldtResult;
   const isSecurityExpired = securityResult;
 
   // Testers: env var OR active DB record. Paused DB record → no access.
+  // Role 'lifetime' in the access table grants lifetime access manually.
   const envTester = !isCreator && TESTER_EMAILS.has(emailLower);
-  const isTester  = envTester || (!isCreator && testerStatus === 'active');
+  const testerRecord = !isCreator ? testerStatus : null;
+  const isTester = envTester || (!isCreator && testerRecord?.status === 'active' && testerRecord?.role !== 'lifetime');
+  const hasManualLifetime = !isCreator && testerRecord?.status === 'active' && testerRecord?.role === 'lifetime';
+
+  // LDT is authoritative for lifetime purchases — check it regardless of Seal history.
+  // Previously required !everInSeal but users who trialed a subscription before buying
+  // lifetime were incorrectly blocked because cancelled subs still appear in Seal.
+  const hasLifetime = ldtResult || hasManualLifetime;
 
   const finalHasSub = hasSub || isCreator || isTester || hasLifetime;
 
@@ -331,7 +336,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const finalPlan     = isCreator ? 'Creator' : isTester ? 'Tester Access' : hasLifetime ? 'Access' : planTitle;
   const finalExpiry   = (isCreator || isTester || hasLifetime) ? undefined : nextBillingDate;
 
-  console.log('Verify result:', { email, hasSub, isCreator, isTester, testerStatus, finalHasSub, finalStatus, nextBillingDate, planTitle });
+  console.log('Verify result:', { email, hasSub, isCreator, isTester, testerRecord, hasManualLifetime, ldtResult, finalHasSub, finalStatus, nextBillingDate, planTitle });
 
   // ── Log analytics + security events (fire-and-forget) ────────────────────
   const ua = String(req.headers['user-agent'] ?? '');
