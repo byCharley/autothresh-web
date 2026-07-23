@@ -468,16 +468,24 @@ export function ChatWidget({ session }: { session: Session }) {
                         </div>
                       ) : (
                         <div style={{
-                          padding: msg.message.startsWith('[img]:') ? '4px' : '8px 11px', fontSize: 12, lineHeight: 1.55,
+                          padding: (() => { const m = msg.message; if (m.startsWith('[img]:')) return '4px'; const u = m.match(/(https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?)/i); return (u && m.replace(u[0],'').trim() === '') ? '4px' : '8px 11px'; })(),
+                          fontSize: 12, lineHeight: 1.55,
                           fontFamily: 'var(--font-sans)',
                           background: isUser ? 'var(--accent)' : 'var(--surface)',
                           color: isUser ? '#111' : 'var(--text)',
                           border: isUser ? 'none' : '1px solid var(--border)',
                           wordBreak: 'break-word',
                         }}>
-                          {msg.message.startsWith('[img]:')
-                            ? <img src={msg.message.slice(6)} alt="attachment" style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} />
-                            : msg.message}
+                          {(() => {
+                            const m = msg.message;
+                            if (m.startsWith('[img]:')) return <img src={m.slice(6)} alt="attachment" style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} />;
+                            const urlMatch = m.match(/(https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?)/i);
+                            if (urlMatch) {
+                              const text = m.replace(urlMatch[0], '').trim();
+                              return <>{text && <div style={{ marginBottom: 4 }}>{text}</div>}<img src={urlMatch[0]} alt="attachment" style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} /></>;
+                            }
+                            return m;
+                          })()}
                         </div>
                       )}
 
