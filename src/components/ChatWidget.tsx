@@ -325,7 +325,16 @@ export function ChatWidget({ session }: { session: Session }) {
                 <option value="" disabled>Select a category…</option>
                 <option value="Account">Account</option>
                 <option value="Billing">Billing</option>
-                <option value="Report a Bug">Report a Bug</option>
+                <optgroup label="Report a Bug">
+                  <option value="Bug — Threshold">Bug — Threshold</option>
+                  <option value="Bug — Dither">Bug — Dither</option>
+                  <option value="Bug — Color Separation">Bug — Color Separation</option>
+                  <option value="Bug — CMYK Pro">Bug — CMYK Pro</option>
+                  <option value="Bug — DTG / DTF">Bug — DTG / DTF</option>
+                  <option value="Bug — Texture">Bug — Texture</option>
+                  <option value="Bug — Export">Bug — Export</option>
+                  <option value="Bug — Other">Bug — Other</option>
+                </optgroup>
                 <option value="Questions">Questions</option>
                 <option value="Requests">Requests</option>
                 <option value="Other">Other</option>
