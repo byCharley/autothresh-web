@@ -343,7 +343,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
               cursor: 'pointer', borderRadius: 2, WebkitTapHighlightColor: 'transparent',
             } as React.CSSProperties}
           >Show</button>
-          {/* Fabric */}
+          {/* Fabric toggle */}
           <button
             onClick={() => {
               if (fabricTexture !== 'none') { setFabricTexture('none'); }
@@ -358,6 +358,31 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
               cursor: 'pointer', borderRadius: 2, WebkitTapHighlightColor: 'transparent',
             } as React.CSSProperties}
           >Fabric</button>
+          {/* Light / Dark shirt picker — only when fabric is on */}
+          {fabricTexture !== 'none' && (
+            <>
+              <button onClick={() => setFabricTexture('light')}
+                style={{
+                  fontSize: 9, padding: '2px 6px', height: 22, flexShrink: 0,
+                  fontFamily: 'var(--font-mono)',
+                  color: fabricTexture === 'light' ? 'var(--accent)' : 'var(--text-dim)',
+                  background: fabricTexture === 'light' ? 'var(--accent-dim)' : 'transparent',
+                  border: `1px solid ${fabricTexture === 'light' ? 'var(--accent)' : 'var(--border)'}`,
+                  cursor: 'pointer', borderRadius: 2, WebkitTapHighlightColor: 'transparent',
+                } as React.CSSProperties}
+              >Lt</button>
+              <button onClick={() => setFabricTexture('dark')}
+                style={{
+                  fontSize: 9, padding: '2px 6px', height: 22, flexShrink: 0,
+                  fontFamily: 'var(--font-mono)',
+                  color: fabricTexture === 'dark' ? 'var(--accent)' : 'var(--text-dim)',
+                  background: fabricTexture === 'dark' ? 'var(--accent-dim)' : 'transparent',
+                  border: `1px solid ${fabricTexture === 'dark' ? 'var(--accent)' : 'var(--border)'}`,
+                  cursor: 'pointer', borderRadius: 2, WebkitTapHighlightColor: 'transparent',
+                } as React.CSSProperties}
+              >Dk</button>
+            </>
+          )}
 
           {modePickerOpen && (
             <div style={{
