@@ -283,24 +283,24 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
         </div>
       </div>
 
-      {/* ─── Mode + BG row ───────────────────────────────────── */}
+      {/* ─── Mode row + BG quick controls ────────────────────── */}
       {originalImage && (
-        <div style={{ flexShrink: 0 }}>
         <div style={{
-          position: 'relative',
-          display: 'flex', alignItems: 'center', gap: 8,
-          padding: '6px 14px',
+          flexShrink: 0, position: 'relative',
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '6px 10px',
           background: 'var(--surface-2)',
           borderBottom: '1px solid var(--border)',
         }}>
           <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', flexShrink: 0 }}>
             Mode
           </span>
+          {/* Mode button — shrinks to make room for BG controls */}
           <button
             onClick={() => !passthroughMode && setModePickerOpen(v => !v)}
             style={{
-              flex: 1, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '0 10px',
+              flex: 1, minWidth: 0, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '0 8px',
               background: modePickerOpen ? '#252525' : 'var(--surface)',
               border: `1px solid ${modePickerOpen ? 'var(--accent)' : 'var(--border)'}`,
               color: 'var(--accent)',
@@ -308,18 +308,60 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
               letterSpacing: '0.07em', textTransform: 'uppercase',
               cursor: passthroughMode ? 'default' : 'pointer',
               opacity: passthroughMode ? 0.4 : 1,
+              overflow: 'hidden',
               WebkitTapHighlightColor: 'transparent',
             } as React.CSSProperties}
           >
-            <span>{MODE_OPTS.find(m => m.value === separationMode)?.label ?? separationMode}</span>
-            <svg width="8" height="5" viewBox="0 0 8 5" fill="none" style={{ flexShrink: 0, transform: modePickerOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {MODE_OPTS.find(m => m.value === separationMode)?.label ?? separationMode}
+            </span>
+            <svg width="8" height="5" viewBox="0 0 8 5" fill="none" style={{ flexShrink: 0, marginLeft: 4, transform: modePickerOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
               <path d="M0 0l4 5 4-5z" fill="var(--accent)"/>
             </svg>
           </button>
 
+          {/* BG color swatch */}
+          <div style={{
+            position: 'relative', width: 22, height: 22, flexShrink: 0,
+            background: canvasColor,
+            border: '1.5px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+            opacity: showFabricBg ? 1 : 0.5,
+            cursor: 'pointer',
+          }}>
+            <input type="color" value={canvasColor} onChange={e => setCanvasColor(e.target.value)}
+              style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+          </div>
+          {/* Show BG */}
+          <button onClick={() => setShowFabricBg(!showFabricBg)}
+            style={{
+              fontSize: 9, padding: '2px 7px', height: 22, flexShrink: 0,
+              fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
+              color: showFabricBg ? 'var(--accent)' : 'var(--text-dim)',
+              background: showFabricBg ? 'var(--accent-dim)' : 'transparent',
+              border: `1px solid ${showFabricBg ? 'var(--accent)' : 'var(--border)'}`,
+              cursor: 'pointer', borderRadius: 2, WebkitTapHighlightColor: 'transparent',
+            } as React.CSSProperties}
+          >Show</button>
+          {/* Fabric */}
+          <button
+            onClick={() => {
+              if (fabricTexture !== 'none') { setFabricTexture('none'); }
+              else { setFabricTexture('light'); if (!showFabricBg) setShowFabricBg(true); }
+            }}
+            style={{
+              fontSize: 9, padding: '2px 7px', height: 22, flexShrink: 0,
+              fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
+              color: fabricTexture !== 'none' ? 'var(--accent)' : 'var(--text-dim)',
+              background: fabricTexture !== 'none' ? 'var(--accent-dim)' : 'transparent',
+              border: `1px solid ${fabricTexture !== 'none' ? 'var(--accent)' : 'var(--border)'}`,
+              cursor: 'pointer', borderRadius: 2, WebkitTapHighlightColor: 'transparent',
+            } as React.CSSProperties}
+          >Fabric</button>
+
           {modePickerOpen && (
             <div style={{
-              position: 'absolute', top: 'calc(100% + 2px)', left: 14, right: 14,
+              position: 'absolute', top: 'calc(100% + 2px)', left: 10, right: 10,
               background: 'var(--surface)', border: '1px solid var(--accent)',
               boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
               zIndex: 200,
@@ -362,62 +404,6 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
               ))}
             </div>
           )}
-        </div>
-
-        {/* ─── BG quick row ──────────────────────────────────── */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '5px 14px',
-          background: 'var(--surface-2)',
-          borderBottom: '1px solid var(--border)',
-        }}>
-          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', flexShrink: 0 }}>BG</span>
-          {/* Color swatch — opens native picker */}
-          <div style={{
-            position: 'relative', width: 22, height: 22, flexShrink: 0,
-            background: canvasColor,
-            border: '1.5px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-            opacity: showFabricBg ? 1 : 0.5,
-            cursor: 'pointer',
-          }}>
-            <input type="color" value={canvasColor} onChange={e => setCanvasColor(e.target.value)}
-              style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
-          </div>
-          {/* Show BG */}
-          <button
-            onClick={() => setShowFabricBg(!showFabricBg)}
-            style={{
-              fontSize: 10, padding: '3px 10px', height: 24, flexShrink: 0,
-              fontFamily: 'var(--font-mono)', letterSpacing: '0.05em',
-              color: showFabricBg ? 'var(--accent)' : 'var(--text-dim)',
-              background: showFabricBg ? 'var(--accent-dim)' : 'transparent',
-              border: `1px solid ${showFabricBg ? 'var(--accent)' : 'var(--border)'}`,
-              cursor: 'pointer', borderRadius: 2,
-              WebkitTapHighlightColor: 'transparent',
-            } as React.CSSProperties}
-          >Show BG</button>
-          {/* Fabric view */}
-          <button
-            onClick={() => {
-              if (fabricTexture !== 'none') {
-                setFabricTexture('none');
-              } else {
-                setFabricTexture('light');
-                if (!showFabricBg) setShowFabricBg(true);
-              }
-            }}
-            style={{
-              fontSize: 10, padding: '3px 10px', height: 24, flexShrink: 0,
-              fontFamily: 'var(--font-mono)', letterSpacing: '0.05em',
-              color: fabricTexture !== 'none' ? 'var(--accent)' : 'var(--text-dim)',
-              background: fabricTexture !== 'none' ? 'var(--accent-dim)' : 'transparent',
-              border: `1px solid ${fabricTexture !== 'none' ? 'var(--accent)' : 'var(--border)'}`,
-              cursor: 'pointer', borderRadius: 2,
-              WebkitTapHighlightColor: 'transparent',
-            } as React.CSSProperties}
-          >Fabric</button>
-        </div>
         </div>
       )}
 

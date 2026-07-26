@@ -1923,10 +1923,6 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
     bgTolerance, bgEdgeSoftness, setBgTolerance, setBgEdgeSoftness,
     bgSeedColors, setBgSeedColors, bgEyedropperActive, setBgEyedropperActive,
     bgPaintMask, bgPaintMode, setBgPaintMask, setBgPaintMode,
-    canvasColor, setCanvasColor,
-    showFabricBg, setShowFabricBg,
-    fabricTexture, setFabricTexture,
-    originalImage,
   } = useStore();
 
   const [showPantonePanel, setShowPantonePanel] = useState(false);
@@ -2206,75 +2202,6 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
             </div>
           )}
         </div>}
-
-        {/* ── BG Quick Row ── */}
-        {!hideModeSwitch && (
-          <div style={{
-            display: 'flex', alignItems: 'center', padding: '5px 8px', gap: 5,
-            background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', flexShrink: 0,
-          }}>
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>BG</span>
-            {/* Color swatch */}
-            <div className="color-swatch-btn" style={{
-              background: canvasColor, width: 20, height: 20, flexShrink: 0,
-              border: '1.5px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
-              opacity: showFabricBg ? 1 : 0.5,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-            }}>
-              <input type="color" value={canvasColor} onChange={(e) => setCanvasColor(e.target.value)} />
-            </div>
-            {/* Preset swatches — a few quick ones */}
-            <div style={{ display: 'flex', gap: 3, flex: 1, overflow: 'hidden' }}>
-              {GARMENT_PRESETS.slice(0, 6).map(({ hex, name }) => (
-                <button key={hex} onClick={() => setCanvasColor(hex)} title={name}
-                  style={{
-                    width: 16, height: 16, flexShrink: 0, background: hex, cursor: 'pointer',
-                    border: canvasColor.toLowerCase() === hex.toLowerCase() ? '2px solid var(--accent)' : '1px solid var(--border-2)',
-                    borderRadius: 2,
-                  }}
-                />
-              ))}
-            </div>
-            {/* Show BG toggle */}
-            <button
-              onClick={() => setShowFabricBg(!showFabricBg)}
-              title="Show / hide garment background"
-              style={{
-                fontSize: 9, padding: '2px 6px', height: 20, flexShrink: 0,
-                fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
-                color: showFabricBg ? 'var(--accent)' : 'var(--text-dim)',
-                background: showFabricBg ? 'var(--accent-dim)' : 'transparent',
-                border: `1px solid ${showFabricBg ? 'var(--accent)' : 'var(--border)'}`,
-                cursor: 'pointer', borderRadius: 2,
-              }}
-            >Show</button>
-            {/* Fabric View toggle */}
-            <button
-              onClick={() => {
-                if (fabricTexture !== 'none') {
-                  setFabricTexture('none');
-                } else {
-                  if (separationMode === 'dtg' && originalImage) {
-                    const [r, g, b] = detectDtgBgColor(originalImage);
-                    setFabricTexture(0.299 * r + 0.587 * g + 0.114 * b < 128 ? 'dark' : 'light');
-                  } else {
-                    setFabricTexture('light');
-                  }
-                  if (!showFabricBg) setShowFabricBg(true);
-                }
-              }}
-              title="Toggle fabric / realistic garment view"
-              style={{
-                fontSize: 9, padding: '2px 6px', height: 20, flexShrink: 0,
-                fontFamily: 'var(--font-mono)', letterSpacing: '0.04em',
-                color: fabricTexture !== 'none' ? 'var(--accent)' : 'var(--text-dim)',
-                background: fabricTexture !== 'none' ? 'var(--accent-dim)' : 'transparent',
-                border: `1px solid ${fabricTexture !== 'none' ? 'var(--accent)' : 'var(--border)'}`,
-                cursor: 'pointer', borderRadius: 2,
-              }}
-            >Fabric</button>
-          </div>
-        )}
 
         {/* ── Remove BG + Brush Mask — pinned below mode switcher (not cmyk, handled in bottom toolbar) ── */}
         {separationMode !== 'dtg' && separationMode !== 'texture' && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro' && separationMode !== 'threshold' && separationMode !== 'palette' && separationMode !== 'color-sep' && (
