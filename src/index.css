@@ -641,7 +641,12 @@ html, body, #root {
   border: 1px solid var(--border);
   padding: 4px;
   z-index: 5;
+  max-width: calc(100vw - 24px);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.canvas-toolbar::-webkit-scrollbar { display: none; }
 
 .canvas-zoom-label {
   font-family: var(--font-mono);
