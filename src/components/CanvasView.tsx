@@ -2620,33 +2620,35 @@ export function CanvasView() {
           </div>
 
           <div className="canvas-toolbar">
-            <button className="btn btn-ghost btn-icon" onClick={() => setZoom((z) => Math.max(0.05, z / 1.25))}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
-              </svg>
-            </button>
-            <span className="canvas-zoom-label">{Math.round(zoom * 100)}%</span>
-            <button className="btn btn-ghost btn-icon" onClick={() => setZoom((z) => Math.min(8, z * 1.25))}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-              </svg>
-            </button>
-            <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
-            <button
-              className="btn btn-ghost"
-              style={{ fontSize: 11, padding: '0 8px' }}
-              onClick={() => {
-                if (!originalImage || !containerRef.current) return;
-                const layout = computeDocLayout(MAX_PREVIEW_DIM);
-                if (!layout) return;
-                const { clientWidth: cw, clientHeight: ch } = containerRef.current;
-                const fitZoom = Math.min(1, (cw - 48) / layout.docPrevW, (ch - 48) / layout.docPrevH);
-                setZoom(fitZoom);
-                setOffset({ x: (cw - layout.docPrevW * fitZoom) / 2, y: (ch - layout.docPrevH * fitZoom) / 2 });
-              }}
-            >Fit</button>
+            <div className="canvas-toolbar-zoom-group">
+              <button className="btn btn-ghost btn-icon" onClick={() => setZoom((z) => Math.max(0.05, z / 1.25))}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
+                </svg>
+              </button>
+              <span className="canvas-zoom-label">{Math.round(zoom * 100)}%</span>
+              <button className="btn btn-ghost btn-icon" onClick={() => setZoom((z) => Math.min(8, z * 1.25))}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+                </svg>
+              </button>
+              <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: 11, padding: '0 8px' }}
+                onClick={() => {
+                  if (!originalImage || !containerRef.current) return;
+                  const layout = computeDocLayout(MAX_PREVIEW_DIM);
+                  if (!layout) return;
+                  const { clientWidth: cw, clientHeight: ch } = containerRef.current;
+                  const fitZoom = Math.min(1, (cw - 48) / layout.docPrevW, (ch - 48) / layout.docPrevH);
+                  setZoom(fitZoom);
+                  setOffset({ x: (cw - layout.docPrevW * fitZoom) / 2, y: (ch - layout.docPrevH * fitZoom) / 2 });
+                }}
+              >Fit</button>
+            </div>
             {originalImage && (
-              <>
+              <div className="canvas-toolbar-split-group">
                 <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
                 <button
                   className="btn btn-ghost"
@@ -2664,11 +2666,11 @@ export function CanvasView() {
                   </svg>
                   Split
                 </button>
-              </>
+              </div>
             )}
             {originalImage && (separationMode === 'cmyk' || separationMode === 'cmyk-pro' || separationMode === 'threshold' || separationMode === 'palette' || separationMode === 'color-sep') && (
               <>
-                <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                <div className="canvas-toolbar-mask-sep" style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
                 {/* Remove BG with settings popover */}
                 <div style={{ position: 'relative' }}>
                   <button

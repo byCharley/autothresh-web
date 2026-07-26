@@ -642,11 +642,22 @@ html, body, #root {
   padding: 4px;
   z-index: 5;
   max-width: calc(100vw - 24px);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
 }
-.canvas-toolbar::-webkit-scrollbar { display: none; }
+
+/* Transparent to flex layout on desktop */
+.canvas-toolbar-zoom-group,
+.canvas-toolbar-split-group {
+  display: contents;
+}
+
+@media (max-width: 600px) {
+  /* Hide zoom controls and split on mobile — use pinch-to-zoom */
+  .canvas-toolbar-zoom-group,
+  .canvas-toolbar-split-group,
+  .canvas-toolbar-mask-sep {
+    display: none;
+  }
+}
 
 .canvas-zoom-label {
   font-family: var(--font-mono);
