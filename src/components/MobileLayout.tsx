@@ -36,7 +36,10 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
   const { originalImage, imageFileName, separationMode, setSeparationMode,
           passthroughMode, cmykQuality,
           processedLayers, processedLayerDims, ditherComposite,
-          canvasColor, proCmykSettings } = useStore();
+          canvasColor, setCanvasColor,
+          showFabricBg, setShowFabricBg,
+          fabricTexture, setFabricTexture,
+          proCmykSettings } = useStore();
 
   const [modePickerOpen, setModePickerOpen] = useState(false);
   const [showCmykDisclaimer, setShowCmykDisclaimer] = useState(false);
@@ -280,10 +283,11 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
         </div>
       </div>
 
-      {/* ─── Mode dropdown row ───────────────────────────────── */}
+      {/* ─── Mode + BG row ───────────────────────────────────── */}
       {originalImage && (
+        <div style={{ flexShrink: 0 }}>
         <div style={{
-          flexShrink: 0, position: 'relative',
+          position: 'relative',
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '6px 14px',
           background: 'var(--surface-2)',
@@ -358,6 +362,62 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
               ))}
             </div>
           )}
+        </div>
+
+        {/* ─── BG quick row ──────────────────────────────────── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '5px 14px',
+          background: 'var(--surface-2)',
+          borderBottom: '1px solid var(--border)',
+        }}>
+          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', flexShrink: 0 }}>BG</span>
+          {/* Color swatch — opens native picker */}
+          <div style={{
+            position: 'relative', width: 22, height: 22, flexShrink: 0,
+            background: canvasColor,
+            border: '1.5px solid color-mix(in srgb, currentColor 20%, var(--border-2))',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+            opacity: showFabricBg ? 1 : 0.5,
+            cursor: 'pointer',
+          }}>
+            <input type="color" value={canvasColor} onChange={e => setCanvasColor(e.target.value)}
+              style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+          </div>
+          {/* Show BG */}
+          <button
+            onClick={() => setShowFabricBg(!showFabricBg)}
+            style={{
+              fontSize: 10, padding: '3px 10px', height: 24, flexShrink: 0,
+              fontFamily: 'var(--font-mono)', letterSpacing: '0.05em',
+              color: showFabricBg ? 'var(--accent)' : 'var(--text-dim)',
+              background: showFabricBg ? 'var(--accent-dim)' : 'transparent',
+              border: `1px solid ${showFabricBg ? 'var(--accent)' : 'var(--border)'}`,
+              cursor: 'pointer', borderRadius: 2,
+              WebkitTapHighlightColor: 'transparent',
+            } as React.CSSProperties}
+          >Show BG</button>
+          {/* Fabric view */}
+          <button
+            onClick={() => {
+              if (fabricTexture !== 'none') {
+                setFabricTexture('none');
+              } else {
+                setFabricTexture('light');
+                if (!showFabricBg) setShowFabricBg(true);
+              }
+            }}
+            style={{
+              fontSize: 10, padding: '3px 10px', height: 24, flexShrink: 0,
+              fontFamily: 'var(--font-mono)', letterSpacing: '0.05em',
+              color: fabricTexture !== 'none' ? 'var(--accent)' : 'var(--text-dim)',
+              background: fabricTexture !== 'none' ? 'var(--accent-dim)' : 'transparent',
+              border: `1px solid ${fabricTexture !== 'none' ? 'var(--accent)' : 'var(--border)'}`,
+              cursor: 'pointer', borderRadius: 2,
+              WebkitTapHighlightColor: 'transparent',
+            } as React.CSSProperties}
+          >Fabric</button>
+        </div>
         </div>
       )}
 
