@@ -248,7 +248,7 @@ export function CanvasView() {
     paintMasks, paintMode, brushSize, selectedLayerId,
     processedLayers, processedLayerDims,
     isProcessing, setOriginalImage, setProcessedLayers, setProcessedLayerDims, setDitherComposite, setIsProcessing, setCanvasColor, setImageAdjustment,
-    setPaintMask, setPaintMode, setBrushSize, clearPaintMask,
+    setPaintMask, setPaintMode, setBrushSize,
     soloLayerId, setCmykQuality,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepVisibility, setColorSepColors,
@@ -266,7 +266,7 @@ export function CanvasView() {
     xeroxEnabled, xeroxSettings,
     setUnderbasePreviewImage,
     setUnderbaseMaskData,
-    layerUnderbaseMasks, setLayerUnderbaseMask, clearAllLayerUnderbaseMasks, clearAllPaintMasks,
+    layerUnderbaseMasks, clearAllLayerUnderbaseMasks, clearAllPaintMasks,
   } = useStore();
 
   // underbasePaintMode = true only in threshold mode when masking globally (no solo) or soloing
@@ -2111,22 +2111,6 @@ export function CanvasView() {
     }
   };
 
-  const handleInvertMask = () => {
-    if (!selectedLayerId || !artworkBounds) return;
-    const { w, h } = artworkBounds;
-    const existing = paintMasks[selectedLayerId] ?? null;
-    const newMask = new Uint8Array(w * h);
-    if (!existing) {
-      newMask.fill(2); // empty mask → invert = hide everything, paint back what you want
-    } else {
-      for (let i = 0; i < newMask.length; i++) {
-        newMask[i] = existing[i] === 2 ? 1 : 2; // erased→shown, shown/unset→erased
-      }
-    }
-    const prevStack = undoStackRef.current[selectedLayerId] ?? [];
-    undoStackRef.current[selectedLayerId] = [...prevStack.slice(-19), existing ? new Uint8Array(existing) : null];
-    setPaintMask(selectedLayerId, newMask);
-  };
 
   // ── Eyedropper click: sample original image pixel at clicked position ──────────
   const handleEyedropperClick = (e: React.MouseEvent<HTMLElement>) => {

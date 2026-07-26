@@ -2507,16 +2507,6 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
                             ))}
                           </div>
                         </div>
-                        {/* Density — CMYK Pro only */}
-                        {separationMode === 'cmyk-pro' && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>Density</span>
-                            <input type="range" min={0} max={100} step={5} value={underbaseDensity}
-                              onChange={e => setUnderbaseDensity(Number(e.target.value))}
-                              style={{ flex: 1, accentColor: 'var(--accent)' }} />
-                            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text)', minWidth: 28, textAlign: 'right' }}>{underbaseDensity}%</span>
-                          </div>
-                        )}
                         {/* Include shadows */}
                         <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
                           <input type="checkbox" checked={underbaseIncludeShadows} onChange={e => setUnderbaseIncludeShadows(e.target.checked)}
