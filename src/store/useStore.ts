@@ -283,6 +283,9 @@ interface AppState {
   underbaseChoke: number;
   underbaseIncludeShadows: boolean;
   underbaseDensity: number;
+  underbaseMaskData: string | null;
+  underbasePreviewImage: ImageData | null;
+  layerUnderbaseMasks: Record<string, Uint8Array | null>;
   pantonePreviewActive: boolean;
   splitView: boolean;
   showCanvasBorder: boolean;
@@ -417,6 +420,10 @@ interface AppState {
   setUnderbaseChoke: (v: number) => void;
   setUnderbaseIncludeShadows: (v: boolean) => void;
   setUnderbaseDensity: (v: number) => void;
+  setUnderbaseMaskData: (v: string | null) => void;
+  setUnderbasePreviewImage: (v: ImageData | null) => void;
+  setLayerUnderbaseMask: (id: string, mask: Uint8Array | null) => void;
+  clearAllLayerUnderbaseMasks: () => void;
   setPantonePreviewActive: (v: boolean) => void;
   setSplitView: (v: boolean) => void;
   setShowCanvasBorder: (v: boolean) => void;
@@ -469,6 +476,7 @@ interface AppState {
 
   setPaintMask: (layerId: string, mask: Uint8Array | null) => void;
   clearPaintMask: (layerId: string) => void;
+  clearAllPaintMasks: () => void;
   setPaintMode: (mode: 'off' | 'paint' | 'erase') => void;
   setBrushSize: (size: number) => void;
 
@@ -552,6 +560,9 @@ export const useStore = create<AppState>((set, get) => ({
   underbaseChoke: 1,
   underbaseIncludeShadows: false,
   underbaseDensity: 85,
+  underbaseMaskData: null,
+  underbasePreviewImage: null,
+  layerUnderbaseMasks: {},
   pantonePreviewActive: false,
   splitView: false,
   showCanvasBorder: true,
@@ -696,6 +707,10 @@ export const useStore = create<AppState>((set, get) => ({
   setUnderbaseChoke: (underbaseChoke) => set({ underbaseChoke }),
   setUnderbaseIncludeShadows: (underbaseIncludeShadows) => set({ underbaseIncludeShadows }),
   setUnderbaseDensity: (underbaseDensity) => set({ underbaseDensity }),
+  setUnderbaseMaskData: (underbaseMaskData) => set({ underbaseMaskData }),
+  setUnderbasePreviewImage: (underbasePreviewImage) => set({ underbasePreviewImage }),
+  setLayerUnderbaseMask: (id, mask) => set(s => ({ layerUnderbaseMasks: { ...s.layerUnderbaseMasks, [id]: mask } })),
+  clearAllLayerUnderbaseMasks: () => set({ layerUnderbaseMasks: {} }),
   setPantonePreviewActive: (pantonePreviewActive) => set({ pantonePreviewActive }),
   setSplitView: (splitView) => set({ splitView }),
   setShowCanvasBorder: (showCanvasBorder) => set({ showCanvasBorder }),
@@ -873,6 +888,7 @@ export const useStore = create<AppState>((set, get) => ({
   }),
   setPaintMask: (layerId, mask) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: mask } })),
   clearPaintMask: (layerId) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: null } })),
+  clearAllPaintMasks: () => set({ paintMasks: {} }),
   setPaintMode: (paintMode) => set({ paintMode }),
   setBrushSize: (brushSize) => set({ brushSize: Math.max(2, Math.min(120, brushSize)) }),
   setSeparationMode: (separationMode) => { localStorage.setItem('at-mode', separationMode); return set((s) => ({

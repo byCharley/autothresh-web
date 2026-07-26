@@ -203,7 +203,7 @@ function App() {
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepLockedColors, colorSepVisibility, colorSepNames,
     paintMasks,
-    underbaseIncludeShadows, underbaseEnabled, underbaseDensity, underbaseChoke: storeUnderbaseChoke,
+    underbaseIncludeShadows, underbaseEnabled, underbaseDensity, underbaseChoke: storeUnderbaseChoke, underbaseMaskData, layerUnderbaseMasks,
     passthroughMode, bgSeedColors, bgPaintMask, bgPaintMaskDims,
     fabricTexture, fabricBlendStrength, fabricTextureDepth,
     printSettings,
@@ -429,7 +429,30 @@ function App() {
     artExpCtx.drawImage(artSrcCanvas, 0, 0, artScaleW, artScaleH);
     const artImageData = artExpCtx.getImageData(0, 0, artScaleW, artScaleH);
 
-    const artBgMask = bgRemovalEnabled ? computeBackgroundMask(artImageData, bgTolerance) : null;
+    const artBgMask = (() => {
+      if (bgRemovalEnabled) return computeBackgroundMask(artImageData, bgTolerance);
+      // CMYK modes: auto-detect plain white/black backgrounds even without explicit BG removal.
+      // Without masking, the ICC separator produces ink on background pixels (black bg → full K plate;
+      // near-white → faint CMY dots). Only trigger for clearly plain backgrounds.
+      if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
+        const d = artImageData.data;
+        const w = artImageData.width, h = artImageData.height;
+        const patchSz = Math.min(5, w, h);
+        let bgSumR = 0, bgSumG = 0, bgSumB = 0, bgCnt = 0;
+        const cOff = [[0,0],[w-patchSz,0],[0,h-patchSz],[w-patchSz,h-patchSz]] as const;
+        for (const [ox, oy] of cOff) {
+          for (let py = oy; py < oy + patchSz; py++) {
+            for (let px = ox; px < ox + patchSz; px++) {
+              const pi = (py * w + px) * 4;
+              bgSumR += d[pi]; bgSumG += d[pi+1]; bgSumB += d[pi+2]; bgCnt++;
+            }
+          }
+        }
+        const cornerLum = 0.299*(bgSumR/bgCnt) + 0.587*(bgSumG/bgCnt) + 0.114*(bgSumB/bgCnt);
+        if (cornerLum > 228 || cornerLum < 28) return computeBackgroundMask(artImageData, 22);
+      }
+      return null;
+    })();
 
     // ── Passthrough mode: flat PNG export (bypasses all separation) ─────────────
     if (passthroughMode) {
@@ -660,8 +683,11 @@ function App() {
       }
     }
 
-    // Apply paint masks (scale from preview to export resolution)
-    const pds2 = Math.min(MAX_PREVIEW_DIM / Math.max(artScaleW, artScaleH), 1.0);
+    // Apply paint masks (scale from preview to export resolution).
+    // IMPORTANT: CanvasView stores paint masks at artPrevW×artPrevH, where artPrevW is computed
+    // using docPxW (not artScaleW) as the MAX_PREVIEW_DIM denominator. We must use the same
+    // denominator here so the row stride matches the stored mask dimensions.
+    const pds2 = Math.min(MAX_PREVIEW_DIM / Math.max(docPxW, docPxH), 1.0);
     const pmW = Math.round(artScaleW * pds2);
     const pmH = Math.round(artScaleH * pds2);
     const pmScaleX = artScaleW / Math.max(1, pmW);
@@ -824,14 +850,46 @@ function App() {
 
     const visibleLayers = artLayers.filter((pl) => pl.visible);
 
+    // Pre-decode underbase user mask (async, before the sync buildUnderbaseCanvas)
+    let _ubUserMaskPx: Uint8Array | null = null;
+    let _ubUserMaskW = 0, _ubUserMaskH = 0;
+    if (underbaseMaskData && underbaseEnabled && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro') {
+      await new Promise<void>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = img.width; c.height = img.height;
+          const ctx = c.getContext('2d')!;
+          ctx.drawImage(img, 0, 0);
+          const px = ctx.getImageData(0, 0, img.width, img.height).data;
+          _ubUserMaskPx = new Uint8Array(img.width * img.height);
+          _ubUserMaskW  = img.width;
+          _ubUserMaskH  = img.height;
+          for (let i = 0; i < _ubUserMaskPx.length; i++) _ubUserMaskPx[i] = px[i * 4];
+          resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = underbaseMaskData;
+      });
+    }
+
     // ── Underbase builder (white ink, all visible masks combined + choke) ──────
     const buildUnderbaseCanvas = (chokePx: number): HTMLCanvasElement => {
       const combined = new Uint8Array(artScaleW * artScaleH);
       for (const pl of visibleLayers) {
         const [r, g, b] = pl.color;
         if (!underbaseIncludeShadows && isShadowColor(r, g, b)) continue;
-        for (let i = 0; i < pl.mask.length; i++) {
-          if (pl.mask[i] === 255) combined[i] = 255;
+        const lm = layerUnderbaseMasks[pl.id] ?? null;
+        for (let ay = 0; ay < artScaleH; ay++) {
+          for (let ax = 0; ax < artScaleW; ax++) {
+            if (pl.mask[ay * artScaleW + ax] !== 255) continue;
+            if (lm) {
+              const sx = Math.min(pmW - 1, Math.floor(ax / pmScaleX));
+              const sy = Math.min(pmH - 1, Math.floor(ay / pmScaleY));
+              if (lm[sy * pmW + sx] === 2) continue;
+            }
+            combined[ay * artScaleW + ax] = 255;
+          }
         }
       }
       let mask = combined;
@@ -851,6 +909,18 @@ function App() {
               }
             }
             if (erase) mask[y * artScaleW + x] = 0;
+          }
+        }
+      }
+      // Apply user mask exclusions
+      if (_ubUserMaskPx) {
+        for (let ay = 0; ay < artScaleH; ay++) {
+          for (let ax = 0; ax < artScaleW; ax++) {
+            const si = ay * artScaleW + ax;
+            if (mask[si] !== 255) continue;
+            const mx = Math.round(ax / Math.max(1, artScaleW - 1) * (_ubUserMaskW - 1));
+            const my = Math.round(ay / Math.max(1, artScaleH - 1) * (_ubUserMaskH - 1));
+            if (_ubUserMaskPx[my * _ubUserMaskW + mx] < 128) mask[si] = 0;
           }
         }
       }

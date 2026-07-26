@@ -349,6 +349,13 @@ function ChatPanel({ session }: { session: Session }) {
   const [hoverMsgId, setHoverMsgId]   = useState<number | null>(null);
   const [editingId, setEditingId]     = useState<number | null>(null);
   const [editText, setEditText]       = useState('');
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightboxUrl(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [lightboxUrl]);
   const [userTyping, setUserTyping]   = useState(false);
   const bottomRef                     = useRef<HTMLDivElement>(null);
   const lastTypingSentRef             = useRef(0);
@@ -505,6 +512,18 @@ function ChatPanel({ session }: { session: Session }) {
 
   return (
     <div style={{ display: 'flex', gap: 0, height: mobile ? '100%' : 560, border: '1px solid var(--border)', overflow: 'hidden' }}>
+
+      {/* Lightbox overlay */}
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          onKeyDown={e => { if (e.key === 'Escape') setLightboxUrl(null); }}
+          tabIndex={-1}
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}
+        >
+          <img src={lightboxUrl} alt="full size" style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 4, boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }} />
+        </div>
+      )}
 
       {/* Ticket list — hidden on mobile when a ticket is active */}
       <div style={{ width: mobile ? '100%' : 240, flexShrink: 0, borderRight: mobile ? 'none' : '1px solid var(--border)', display: mobile && active ? 'none' : 'flex', flexDirection: 'column' }}>
@@ -686,11 +705,11 @@ function ChatPanel({ session }: { session: Session }) {
                         }}>
                           {(() => {
                             const m = msg.message;
-                            if (m.startsWith('[img]:')) return <img src={m.slice(6)} alt="attachment" style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} />;
+                            if (m.startsWith('[img]:')) return <img src={m.slice(6)} alt="attachment" onClick={() => setLightboxUrl(m.slice(6))} style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain', cursor: 'zoom-in' }} />;
                             const urlMatch = m.match(/(https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?)/i);
                             if (urlMatch) {
                               const text = m.replace(urlMatch[0], '').trim();
-                              return <>{text && <div style={{ marginBottom: 4 }}>{text}</div>}<img src={urlMatch[0]} alt="attachment" style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} /></>;
+                              return <>{text && <div style={{ marginBottom: 4 }}>{text}</div>}<img src={urlMatch[0]} alt="attachment" onClick={() => setLightboxUrl(urlMatch[0])} style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain', cursor: 'zoom-in' }} /></>;
                             }
                             return m;
                           })()}

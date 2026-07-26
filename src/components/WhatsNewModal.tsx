@@ -15,6 +15,16 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-07-25',
+    label: 'Bottom Nav Masking & Solo Layer Button',
+    added: [
+      'Solo button on each color layer card — click to isolate a single layer so brush masking only affects that ink. Works for all color layers including the underbase layer.',
+    ],
+    improved: [
+      'Remove BG and Brush Mask tools are now available in the bottom toolbar across Threshold, Dither, and Color Separation modes — one consistent masking location regardless of which mode you are using.',
+    ],
+  },
+  {
     date: '2026-07-20',
     label: 'CMYK Pro Improvements & Toolbar Masking',
     added: [

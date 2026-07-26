@@ -175,9 +175,12 @@ export function CanvasView() {
   const fileInputRef     = useRef<HTMLInputElement>(null);
   const artboardStageRef = useRef<HTMLDivElement>(null);
   const dimTimerRef      = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const paintDraftRef    = useRef<Uint8Array | null>(null);
-  const paintDraftDimsRef = useRef({ w: 0, h: 0 });
-  const isPaintingRef    = useRef(false);
+  const paintDraftRef      = useRef<Uint8Array | null>(null);
+  const paintDraftDimsRef  = useRef({ w: 0, h: 0 });
+  const isPaintingRef      = useRef(false);
+  // Underbase paint draft — values: 1=include(white) 2=exclude(black)
+  const ubPaintDraftRef    = useRef<Uint8Array | null>(null);
+  const ubPaintDraftDimsRef = useRef({ w: 0, h: 0 });
   const bgPaintDraftRef     = useRef<Uint8Array | null>(null);
   const bgPaintDraftDimsRef = useRef({ w: 0, h: 0 });
   const isBgPaintingRef     = useRef(false);
@@ -186,6 +189,8 @@ export function CanvasView() {
   const isDtgPaintingRef     = useRef(false);
   const spaceHeldRef     = useRef(false);
   const undoStackRef     = useRef<Record<string, Array<Uint8Array | null>>>({});
+  const ubUserMaskRef    = useRef<Uint8Array | null>(null);
+  const ubUserMaskDims   = useRef({ w: 0, h: 0 });
   // Cache K-means base colors (from unadjusted image) for color-sep.
   // K-means only reruns when image / numColors / colorPriority / bg settings change.
   // Image adjustments are applied mathematically to the cached base colors — no K-means rerun.
@@ -225,7 +230,7 @@ export function CanvasView() {
   const grainOverlayImagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
 
   const {
-    originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
+    originalImage, previewImage, layers, knockoutEnabled, underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, underbaseMaskData, pantonePreviewActive,
     globalPattern,
     bgRemovalEnabled, bgTolerance, bgSeedColors, bgEyedropperActive, setBgSeedColors, setBgEyedropperActive, setBgRemovalEnabled, setBgTolerance,
     bgPaintMask, bgPaintMaskDims, bgPaintMode, setBgPaintMask, setBgPaintMode,
@@ -259,7 +264,34 @@ export function CanvasView() {
     dtgPaintMask, dtgPaintMaskDims, dtgPaintMode, setDtgPaintMask, pushHistory,
     thresholdPreBlur,
     xeroxEnabled, xeroxSettings,
+    setUnderbasePreviewImage,
+    setUnderbaseMaskData,
+    layerUnderbaseMasks, setLayerUnderbaseMask, clearAllLayerUnderbaseMasks, clearAllPaintMasks,
   } = useStore();
+
+  // underbasePaintMode = true only in threshold mode when masking globally (no solo) or soloing
+  // the underbase itself. Color-sep/palette modes use paintMasks per layer via selectedLayerId.
+  const underbasePaintMode = paintMode !== 'off' && separationMode === 'threshold' && (!soloLayerId || soloLayerId === '__underbase__');
+
+  const [ubMaskReady, setUbMaskReady] = useState(0);
+  // Decode underbase user mask whenever the stored data URL changes
+  useEffect(() => {
+    if (!underbaseMaskData) { ubUserMaskRef.current = null; setUbMaskReady(v => v + 1); return; }
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width; c.height = img.height;
+      const ctx = c.getContext('2d')!;
+      ctx.drawImage(img, 0, 0);
+      const px = ctx.getImageData(0, 0, img.width, img.height).data;
+      const gray = new Uint8Array(img.width * img.height);
+      for (let i = 0; i < gray.length; i++) gray[i] = px[i * 4]; // R = grayscale value
+      ubUserMaskRef.current  = gray;
+      ubUserMaskDims.current = { w: img.width, h: img.height };
+      setUbMaskReady(v => v + 1); // trigger render effect re-run after async decode
+    };
+    img.src = underbaseMaskData;
+  }, [underbaseMaskData]);
 
   // Raw ICC planes cache — keyed by image+profile+adjustments only.
   // Density/GCR/TAC changes skip re-separation and run applyPostIcc on these.
@@ -665,8 +697,8 @@ export function CanvasView() {
                 mask[i] = 255;
               }
             }
-          } else if (separationMode !== 'cmyk' && separationMode !== 'cmyk-pro') {
-            // Non-CMYK modes: always respect PNG alpha so transparent areas stay transparent
+          } else {
+            // Remove BG is off — only respect existing PNG alpha; never auto-flood-fill
             const d = artScaled.data;
             for (let i = 0; i < n; i++) {
               if (d[i * 4 + 3] < 16) {
@@ -675,7 +707,6 @@ export function CanvasView() {
               }
             }
           }
-          // CMYK + Remove BG off → no mask at all; ICC compositor handles everything.
 
           // Brush Mask strokes always apply — user-driven, independent of BG removal
           if (bgPaintMask && bgPaintMaskDims &&
@@ -1022,9 +1053,7 @@ export function CanvasView() {
             palettePattern, effectiveTileSize, imageAdjustments,
             paletteDensity, paletteAngle, paletteSoftness, importanceMap,
           );
-          const visiblePlateLayers = plateLayers.filter(l => paletteVisibility[l.id] !== false);
-          setProcessedLayers(visiblePlateLayers);
-          underbaseLayers = plateLayers; // all layers regardless of visibility
+          underbaseLayers = plateLayers;
 
           const renderPaletteColors = pantonePreviewActive
             ? paletteColors.map(([r, g, b]) => nearestPantoneRgb(r, g, b))
@@ -1073,6 +1102,35 @@ export function CanvasView() {
             for (let i = 0; i < texMask.length; i++) {
               if (texMask[i] === 0) artComposite.data[i * 4 + 3] = 0;
             }
+          }
+
+          // Apply paint masks after texture so user overrides take priority
+          for (const layer of plateLayers) {
+            const pm = paintMasks[layer.id];
+            if (!pm) continue;
+            for (let i = 0; i < layer.mask.length; i++) {
+              if (pm[i] === 1) layer.mask[i] = 255;
+              else if (pm[i] === 2) layer.mask[i] = 0;
+            }
+          }
+
+          // Solo + paint masks: re-render from modified layer data
+          const isSoloPaletteLayer = soloLayerId != null && plateLayers.some(l => l.id === soloLayerId);
+          const hasPalettePaintMasks = plateLayers.some(l => !!paintMasks[l.id]);
+          if (isSoloPaletteLayer || hasPalettePaintMasks) {
+            const displayPlateLayers = isSoloPaletteLayer
+              ? plateLayers.filter(l => l.id === soloLayerId)
+              : plateLayers.filter(l => paletteVisibility[l.id] !== false);
+            const coloredPlateLayers = pantonePreviewActive
+              ? displayPlateLayers.map(l => {
+                  const ci = parseInt(l.id.split('-')[1]);
+                  return { ...l, color: renderPaletteColors[ci] as [number, number, number] };
+                })
+              : displayPlateLayers;
+            artComposite = renderComposite(coloredPlateLayers, artPrevW, artPrevH, true, '#ffffff', false);
+            setProcessedLayers(displayPlateLayers);
+          } else {
+            setProcessedLayers(plateLayers.filter(l => paletteVisibility[l.id] !== false));
           }
 
           // Store final composite for mockup (before split view alters it)
@@ -1127,15 +1185,32 @@ export function CanvasView() {
             adjScaled, colorSepSettings, localBgMask, lockedForSep!, importanceMap,
           );
           setColorSepColors(csColors);
-          const visibleCsLayers = csLayers.filter(l => colorSepVisibility[l.id] !== false);
+          underbaseLayers = csLayers;
+
+          // Apply paint masks to csLayers so they're reflected in the composite
+          for (const layer of csLayers) {
+            const pm = paintMasks[layer.id];
+            if (!pm) continue;
+            for (let i = 0; i < layer.mask.length; i++) {
+              if (pm[i] === 1) layer.mask[i] = 255;
+              else if (pm[i] === 2) layer.mask[i] = 0;
+            }
+          }
+
+          // Solo support: filter visibility to just the soloed layer
+          const isSoloColorSepLayer = soloLayerId != null && csLayers.some(l => l.id === soloLayerId);
+          const effectiveCsVis = isSoloColorSepLayer
+            ? Object.fromEntries(csLayers.map(l => [l.id, l.id === soloLayerId] as [string, boolean]))
+            : colorSepVisibility;
+
+          const visibleCsLayers = csLayers.filter(l => effectiveCsVis[l.id] !== false);
           setProcessedLayers(visibleCsLayers);
-          underbaseLayers = csLayers; // all layers regardless of visibility
 
           // Use pre-computed layer masks — avoids a second colorSeparate call.
           const renderCsColors = pantonePreviewActive
             ? csColors.map(([r, g, b]) => nearestPantoneRgb(r, g, b))
             : csColors;
-          artComposite = renderColorSepCompositeFromLayers(csLayers, renderCsColors, colorSepVisibility, artPrevW, artPrevH);
+          artComposite = renderColorSepCompositeFromLayers(csLayers, renderCsColors, effectiveCsVis, artPrevW, artPrevH);
 
 
           if (textureEnabled) {
@@ -1535,18 +1610,26 @@ export function CanvasView() {
         }
 
         // Build underbase mask (shared for both normal draw and solo view)
-        const underbaseSolo = soloLayerId === '__underbase__';
+        // Treat per-layer mask edit the same as underbase solo: show only the
+        // underbase (no color art on top), so erasing creates visible holes.
+        const underbaseSolo = soloLayerId === '__underbase__' || underbasePaintMode;
         const shouldDrawUnderbase = underbaseEnabled && separationMode !== 'cmyk' && separationMode !== 'cmyk-pro'
-          && (!soloLayerId || underbaseSolo);
+          && (!soloLayerId || underbaseSolo || underbasePaintMode);
 
         let ubCanvas: HTMLCanvasElement | null = null;
         if (shouldDrawUnderbase) {
+          // When editing a specific layer's underbase mask, only show that layer's
+          // contribution so the mask effect is immediately visible.
+          const ubEditLayerId = underbasePaintMode && soloLayerId && soloLayerId !== '__underbase__' ? soloLayerId : null;
           const combined = new Uint8Array(artPrevW * artPrevH);
-          for (const pl of underbaseLayers) {
+          for (const pl of (ubEditLayerId ? underbaseLayers.filter(l => l.id === ubEditLayerId) : underbaseLayers)) {
             const [r, g, b] = pl.color;
             if (!underbaseIncludeShadows && isShadowColor(r, g, b)) continue;
+            const lm = layerUnderbaseMasks[pl.id] ?? null;
             for (let i = 0; i < pl.mask.length; i++) {
-              if (pl.mask[i] === 255) combined[i] = 255;
+              if (pl.mask[i] !== 255) continue;
+              if (lm && i < lm.length && lm[i] === 2) continue; // excluded by per-layer mask
+              combined[i] = 255;
             }
           }
           let ubMask = combined;
@@ -1567,6 +1650,32 @@ export function CanvasView() {
                   }
                 }
                 if (erase) ubMask[y * artPrevW + x] = 0;
+              }
+            }
+          }
+          // Store clean underbase preview (before user mask) for the mask editor
+          const ubPreviewClean = new ImageData(artPrevW, artPrevH);
+          for (let i = 0; i < ubMask.length; i++) {
+            if (ubMask[i] === 255) {
+              ubPreviewClean.data[i * 4]     = 255;
+              ubPreviewClean.data[i * 4 + 1] = 255;
+              ubPreviewClean.data[i * 4 + 2] = 255;
+              ubPreviewClean.data[i * 4 + 3] = 255;
+            }
+          }
+          setUnderbasePreviewImage(ubPreviewClean);
+
+          // Apply user mask exclusions (painted in the mask editor)
+          const umPx = ubUserMaskRef.current;
+          if (umPx) {
+            const { w: umW, h: umH } = ubUserMaskDims.current;
+            for (let ay = 0; ay < artPrevH; ay++) {
+              for (let ax = 0; ax < artPrevW; ax++) {
+                const si = ay * artPrevW + ax;
+                if (ubMask[si] !== 255) continue;
+                const mx = Math.round(ax / Math.max(1, artPrevW - 1) * (umW - 1));
+                const my = Math.round(ay / Math.max(1, artPrevH - 1) * (umH - 1));
+                if (umPx[my * umW + mx] < 128) ubMask[si] = 0;
               }
             }
           }
@@ -1627,7 +1736,7 @@ export function CanvasView() {
     bgEdgeSoftness,
     printSettings,
     dtgPaintMask, dtgPaintMaskDims,
-    underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, pantonePreviewActive,
+    underbaseEnabled, underbaseChoke, underbaseIncludeShadows, underbaseDensity, underbaseMaskData, ubMaskReady, pantonePreviewActive, layerUnderbaseMasks, underbasePaintMode,
     proCmykSettings,
     fabricTexture, fabricBlendStrength, fabricTextureDepth, fabricVersion,
     // printSimActive excluded — handled by separate composite-rebuild effect (no API re-call)
@@ -1766,38 +1875,12 @@ export function CanvasView() {
     return () => obs.disconnect();
   }, [documentWidthIn, documentHeightIn]);
 
-  // Re-draw paint overlay from committed masks whenever they change.
+  // Keep the paint overlay canvas clear — no persistent mask preview shown.
   useEffect(() => {
     const octx = paintOverlayRef.current?.getContext('2d');
-    if (!octx || canvasDims.w === 0 || !artworkBounds) return;
+    if (!octx || canvasDims.w === 0) return;
     octx.clearRect(0, 0, canvasDims.w, canvasDims.h);
-    const { w, h, x, y } = artworkBounds;
-    const layerMask = selectedLayerId ? paintMasks[selectedLayerId] : null;
-    const hasBgPaint = bgPaintMode !== 'off' && !!(bgPaintMask && bgPaintMaskDims && bgPaintMaskDims.w === w && bgPaintMaskDims.h === h);
-    if (!layerMask && !hasBgPaint) return;
-    const imgData = new ImageData(w, h);
-    // BG paint drawn first (lower z-order)
-    if (hasBgPaint && bgPaintMask) {
-      for (let i = 0; i < bgPaintMask.length; i++) {
-        if (bgPaintMask[i] === 1) {
-          imgData.data[i * 4] = 40; imgData.data[i * 4 + 1] = 140; imgData.data[i * 4 + 2] = 255; imgData.data[i * 4 + 3] = 110;
-        } else if (bgPaintMask[i] === 2) {
-          imgData.data[i * 4] = 255; imgData.data[i * 4 + 1] = 120; imgData.data[i * 4 + 2] = 0; imgData.data[i * 4 + 3] = 110;
-        }
-      }
-    }
-    // Layer paint drawn on top
-    if (layerMask) {
-      for (let i = 0; i < layerMask.length; i++) {
-        if (layerMask[i] === 1) {
-          imgData.data[i * 4] = 80; imgData.data[i * 4 + 1] = 200; imgData.data[i * 4 + 2] = 80; imgData.data[i * 4 + 3] = 110;
-        } else if (layerMask[i] === 2) {
-          imgData.data[i * 4] = 200; imgData.data[i * 4 + 1] = 60; imgData.data[i * 4 + 2] = 60; imgData.data[i * 4 + 3] = 110;
-        }
-      }
-    }
-    octx.putImageData(imgData, x, y);
-  }, [paintMasks, selectedLayerId, artworkBounds, canvasDims, bgPaintMask, bgPaintMaskDims, bgPaintMode, dtgPaintMask]);
+  }, [paintMasks, canvasDims, bgPaintMask, layerUnderbaseMasks, underbaseMaskData]);
 
   // Keep brushSizeRef in sync so the key handler always has the latest value.
   brushSizeRef.current = brushSize;
@@ -1932,31 +2015,56 @@ export function CanvasView() {
 
   const applyPaintPoint = (e: React.PointerEvent) => {
     const coords = getArtworkCoords(e);
-    if (!coords || !isPaintingRef.current || !paintDraftRef.current) return;
+    if (!coords || !isPaintingRef.current) return;
     const { cx, cy } = coords;
-    const { w, h } = paintDraftDimsRef.current;
     const val: 1 | 2 = paintMode === 'paint' ? 1 : 2;
-    paintCircleOnMask(paintDraftRef.current, w, h, cx, cy, brushSize, val);
-    const octx = paintOverlayRef.current?.getContext('2d');
-    if (octx) {
-      octx.beginPath();
-      octx.arc(cx + (artworkBounds?.x ?? 0), cy + (artworkBounds?.y ?? 0), brushSize, 0, Math.PI * 2);
-      octx.fillStyle = paintMode === 'paint' ? 'rgba(80, 200, 80, 0.45)' : 'rgba(200, 60, 60, 0.45)';
-      octx.fill();
+
+    if (underbasePaintMode) {
+      if (!ubPaintDraftRef.current) return;
+      const { w, h } = ubPaintDraftDimsRef.current;
+      // erase=remove from underbase(2), paint=restore to underbase(1)
+      paintCircleOnMask(ubPaintDraftRef.current, w, h, cx, cy, brushSize, val);
+    } else {
+      if (!paintDraftRef.current) return;
+      const { w, h } = paintDraftDimsRef.current;
+      paintCircleOnMask(paintDraftRef.current, w, h, cx, cy, brushSize, val);
     }
+
   };
 
   const handlePaintMouseDown = (e: React.PointerEvent) => {
-    if (paintMode === 'off' || !selectedLayerId || !artworkBounds) return;
+    if (paintMode === 'off' || !artworkBounds) return;
+    // When a color layer is soloed, use it as the paint target; otherwise need selectedLayerId
+    const paintTargetId = (soloLayerId && soloLayerId !== '__underbase__') ? soloLayerId : selectedLayerId;
+    if (!underbasePaintMode && !paintTargetId) return;
     e.stopPropagation();
     isPaintingRef.current = true;
     const dims = { w: artworkBounds.w, h: artworkBounds.h };
     paintDraftDimsRef.current = dims;
-    const existing = paintMasks[selectedLayerId] ?? null;
-    // Save current mask to undo stack before this stroke
-    const prevStack = undoStackRef.current[selectedLayerId] ?? [];
-    undoStackRef.current[selectedLayerId] = [...prevStack.slice(-19), existing ? new Uint8Array(existing) : null];
-    paintDraftRef.current = existing ? new Uint8Array(existing) : new Uint8Array(dims.w * dims.h);
+
+    if (underbasePaintMode) {
+      // Global underbase mask (no solo or underbase solo)
+      const draft = new Uint8Array(dims.w * dims.h).fill(1);
+      const umPx = ubUserMaskRef.current;
+      if (umPx) {
+        const { w: umW, h: umH } = ubUserMaskDims.current;
+        for (let ay = 0; ay < dims.h; ay++) {
+          for (let ax = 0; ax < dims.w; ax++) {
+            const mx = Math.round(ax / Math.max(1, dims.w - 1) * (umW - 1));
+            const my = Math.round(ay / Math.max(1, dims.h - 1) * (umH - 1));
+            if (umPx[my * umW + mx] < 128) draft[ay * dims.w + ax] = 2;
+          }
+        }
+      }
+      ubPaintDraftRef.current    = draft;
+      ubPaintDraftDimsRef.current = dims;
+    } else {
+      // Per-layer color mask (color layer is soloed)
+      const existing = paintMasks[paintTargetId!] ?? null;
+      const prevStack = undoStackRef.current[paintTargetId!] ?? [];
+      undoStackRef.current[paintTargetId!] = [...prevStack.slice(-19), existing ? new Uint8Array(existing) : null];
+      paintDraftRef.current = existing ? new Uint8Array(existing) : new Uint8Array(dims.w * dims.h);
+    }
     applyPaintPoint(e);
   };
 
@@ -1966,11 +2074,41 @@ export function CanvasView() {
   };
 
   const handlePaintMouseUp = () => {
-    if (!isPaintingRef.current || !selectedLayerId || !paintDraftRef.current) return;
+    if (!isPaintingRef.current) return;
     isPaintingRef.current = false;
-    // Commit to store — the overlay useEffect will redraw from the committed mask
-    setPaintMask(selectedLayerId, new Uint8Array(paintDraftRef.current));
-    paintDraftRef.current = null;
+
+    if (underbasePaintMode && ubPaintDraftRef.current) {
+      // Commit to global underbase mask as PNG
+      const { w, h } = ubPaintDraftDimsRef.current;
+      const draft = ubPaintDraftRef.current;
+      ubPaintDraftRef.current = null;
+      let hasExclusions = false;
+      for (let i = 0; i < draft.length; i++) {
+        if (draft[i] === 2) { hasExclusions = true; break; }
+      }
+      if (!hasExclusions) {
+        setUnderbaseMaskData(null);
+        return;
+      }
+      const out = document.createElement('canvas');
+      out.width = w; out.height = h;
+      const outCtx = out.getContext('2d')!;
+      const outImg = outCtx.createImageData(w, h);
+      for (let i = 0; i < w * h; i++) {
+        const v = draft[i] === 2 ? 0 : 255;
+        outImg.data[i * 4] = outImg.data[i * 4 + 1] = outImg.data[i * 4 + 2] = v;
+        outImg.data[i * 4 + 3] = 255;
+      }
+      outCtx.putImageData(outImg, 0, 0);
+      setUnderbaseMaskData(out.toDataURL('image/png'));
+    } else if (!underbasePaintMode && paintDraftRef.current) {
+      // Commit to per-layer color mask (uses soloed layer or selected layer)
+      const paintTargetId = (soloLayerId && soloLayerId !== '__underbase__') ? soloLayerId : selectedLayerId;
+      if (paintTargetId) {
+        setPaintMask(paintTargetId, new Uint8Array(paintDraftRef.current));
+      }
+      paintDraftRef.current = null;
+    }
   };
 
   const handleInvertMask = () => {
@@ -2626,55 +2764,59 @@ export function CanvasView() {
                     </>
                   )}
                 </div>
-                <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
-                <button
-                  className="btn btn-ghost"
-                  style={{
-                    fontSize: 10, padding: '0 8px', height: 26,
-                    color: bgPaintMode === 'restore' ? '#288cff' : 'var(--text-muted)',
-                    background: bgPaintMode === 'restore' ? 'rgba(40,140,255,0.12)' : undefined,
-                    border: bgPaintMode === 'restore' ? '1px solid rgba(40,140,255,0.35)' : '1px solid transparent',
-                  }}
-                  onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
-                >Restore</button>
-                <button
-                  className="btn btn-ghost"
-                  style={{
-                    fontSize: 10, padding: '0 8px', height: 26,
-                    color: bgPaintMode === 'remove' ? '#ff7800' : 'var(--text-muted)',
-                    background: bgPaintMode === 'remove' ? 'rgba(255,120,0,0.12)' : undefined,
-                    border: bgPaintMode === 'remove' ? '1px solid rgba(255,120,0,0.35)' : '1px solid transparent',
-                  }}
-                  onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
-                >Remove</button>
-                {bgPaintMode !== 'off' && (
-                  <>
-                    <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
-                    <input
-                      type="range" min={2} max={120} value={brushSize}
-                      style={{ width: 60 }}
-                      onChange={(e) => setBrushSize(Number(e.target.value))}
-                      title={`Brush: ${brushSize}px  ·  [ to shrink  ] to grow`}
-                    />
-                    <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 20 }}>{brushSize}</span>
-                  </>
-                )}
-                {bgPaintMask && (
+                {separationMode !== 'threshold' && separationMode !== 'color-sep' && separationMode !== 'palette' && (
                   <>
                     <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
                     <button
                       className="btn btn-ghost"
-                      style={{ fontSize: 10, padding: '0 7px', height: 26, color: 'var(--text-dim)' }}
-                      onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
-                    >Clear</button>
+                      style={{
+                        fontSize: 10, padding: '0 8px', height: 26,
+                        color: bgPaintMode === 'restore' ? '#288cff' : 'var(--text-muted)',
+                        background: bgPaintMode === 'restore' ? 'rgba(40,140,255,0.12)' : undefined,
+                        border: bgPaintMode === 'restore' ? '1px solid rgba(40,140,255,0.35)' : '1px solid transparent',
+                      }}
+                      onClick={() => setBgPaintMode(bgPaintMode === 'restore' ? 'off' : 'restore')}
+                    >Restore</button>
+                    <button
+                      className="btn btn-ghost"
+                      style={{
+                        fontSize: 10, padding: '0 8px', height: 26,
+                        color: bgPaintMode === 'remove' ? '#ff7800' : 'var(--text-muted)',
+                        background: bgPaintMode === 'remove' ? 'rgba(255,120,0,0.12)' : undefined,
+                        border: bgPaintMode === 'remove' ? '1px solid rgba(255,120,0,0.35)' : '1px solid transparent',
+                      }}
+                      onClick={() => setBgPaintMode(bgPaintMode === 'remove' ? 'off' : 'remove')}
+                    >Remove</button>
+                    {bgPaintMode !== 'off' && (
+                      <>
+                        <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                        <input
+                          type="range" min={2} max={120} value={brushSize}
+                          style={{ width: 60 }}
+                          onChange={(e) => setBrushSize(Number(e.target.value))}
+                          title={`Brush: ${brushSize}px  ·  [ to shrink  ] to grow`}
+                        />
+                        <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', minWidth: 20 }}>{brushSize}</span>
+                      </>
+                    )}
+                    {bgPaintMask && (
+                      <>
+                        <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                        <button
+                          className="btn btn-ghost"
+                          style={{ fontSize: 10, padding: '0 7px', height: 26, color: 'var(--text-dim)' }}
+                          onClick={() => { setBgPaintMask(null, null); setBgPaintMode('off'); }}
+                        >Clear</button>
+                      </>
+                    )}
                   </>
                 )}
               </>
             )}
-            {originalImage && separationMode === 'threshold' && (
+            {originalImage && (separationMode === 'threshold' || separationMode === 'color-sep' || separationMode === 'palette') && (
               <>
                 <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
-                {/* Paint button */}
+                {/* Restore button */}
                 <button
                   className="btn btn-ghost"
                   style={{
@@ -2683,15 +2825,10 @@ export function CanvasView() {
                     background: paintMode === 'paint' ? 'rgba(80,200,80,0.12)' : undefined,
                     border: paintMode === 'paint' ? '1px solid rgba(80,200,80,0.3)' : '1px solid transparent',
                   }}
-                  title="Paint — add pixels to the selected layer  ·  hold Space to pan"
+                  title="Restore — add pixels back to the layer  ·  hold Space to pan"
                   onClick={() => setPaintMode(paintMode === 'paint' ? 'off' : 'paint')}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
-                    <path d="M2 22l7-7"/><path d="M12.5 2.5l9 9-7 7-9-9z"/>
-                  </svg>
-                  Paint
-                </button>
-                {/* Erase button */}
+                >Restore</button>
+                {/* Mask button */}
                 <button
                   className="btn btn-ghost"
                   style={{
@@ -2700,14 +2837,9 @@ export function CanvasView() {
                     background: paintMode === 'erase' ? 'rgba(200,60,60,0.12)' : undefined,
                     border: paintMode === 'erase' ? '1px solid rgba(200,60,60,0.3)' : '1px solid transparent',
                   }}
-                  title="Erase — remove pixels from the selected layer  ·  hold Space to pan"
+                  title="Mask — remove pixels from the layer  ·  hold Space to pan"
                   onClick={() => setPaintMode(paintMode === 'erase' ? 'off' : 'erase')}
-                >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 3 }}>
-                    <path d="M20 20H7L3 16l11-11 7 7-1 8z"/><line x1="6" y1="14" x2="14" y2="6"/>
-                  </svg>
-                  Erase
-                </button>
+                >Mask</button>
                 {paintMode !== 'off' && (
                   <>
                     <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
@@ -2726,26 +2858,17 @@ export function CanvasView() {
                       [ ]
                     </span>
                     <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
-                    {selectedLayerId && (
+                    {(underbaseMaskData || Object.values(layerUnderbaseMasks).some(m => m !== null) || Object.values(paintMasks).some(m => m !== null)) && (
                       <button
                         className="btn btn-ghost"
                         style={{ fontSize: 10, padding: '0 7px', height: 26, color: 'var(--text-dim)' }}
-                        title="Invert mask — hides entire layer so you can paint back the areas you want  ·  ⌘Z / Ctrl+Z to undo"
-                        onClick={handleInvertMask}
-                      >Invert</button>
-                    )}
-                    {selectedLayerId && paintMasks[selectedLayerId] && (
-                      <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: 10, padding: '0 7px', height: 26, color: 'var(--text-dim)' }}
-                        title="Clear all paint on this layer  ·  ⌘Z / Ctrl+Z to undo"
+                        title="Clear all masks"
                         onClick={() => {
-                          const existing = paintMasks[selectedLayerId] ?? null;
-                          const prevStack = undoStackRef.current[selectedLayerId] ?? [];
-                          undoStackRef.current[selectedLayerId] = [...prevStack.slice(-19), existing ? new Uint8Array(existing) : null];
-                          clearPaintMask(selectedLayerId);
+                          setUnderbaseMaskData(null);
+                          clearAllLayerUnderbaseMasks();
+                          clearAllPaintMasks();
                         }}
-                      >Clear</button>
+                      >Clear All</button>
                     )}
                   </>
                 )}

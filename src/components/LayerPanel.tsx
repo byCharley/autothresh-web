@@ -304,6 +304,8 @@ function InksSection() {
     paletteNumColors, setPaletteNumColors, setPaletteColors,
     paletteNames, setPaletteNames,
     previewImage,
+    selectedLayerId, selectLayer,
+    soloLayerId, setSoloLayerId,
   } = useStore();
 
   const sampleFromArtwork = () => {
@@ -429,20 +431,29 @@ function InksSection() {
                 const id = `palette-${ci}`;
                 const vis = paletteVisibility[id] !== false;
                 const hex = rgbToHex([r, g, b]);
+                const selected = selectedLayerId === id;
+                const solo = soloLayerId === id;
                 return (
-                  <div key={id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '3px 12px',
-                    opacity: vis ? 1 : 0.45,
-                    transition: 'opacity 0.15s',
-                  }}>
-                    {/* Swatch — click opens color picker */}
-                    <div style={{
-                      position: 'relative', flexShrink: 0,
-                      width: 32, height: 20, borderRadius: 4,
-                      background: hex, border: '1px solid rgba(255,255,255,0.1)',
+                  <div key={id}
+                    onClick={() => selectLayer(selected ? null : id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '4px 8px 4px 10px',
                       cursor: 'pointer',
+                      borderLeft: `2px solid ${solo ? 'var(--accent)' : selected ? 'rgba(255,107,26,0.45)' : 'transparent'}`,
+                      background: solo ? 'var(--accent-dim)' : selected ? 'rgba(255,107,26,0.06)' : 'transparent',
+                      opacity: vis ? 1 : 0.45,
+                      transition: 'background 0.1s, border-color 0.1s, opacity 0.15s',
                     }}>
+                    {/* Swatch — click opens color picker */}
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        position: 'relative', flexShrink: 0,
+                        width: 32, height: 20, borderRadius: 4,
+                        background: hex, border: '1px solid rgba(255,255,255,0.1)',
+                        cursor: 'pointer',
+                      }}>
                       <input type="color" value={hex}
                         title={`Ink ${ci + 1}: ${hex.toUpperCase()}`}
                         onChange={(e) => setPaletteColor(ci, hexToRgb(e.target.value))}
@@ -481,10 +492,17 @@ function InksSection() {
                       fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
                       letterSpacing: '0.03em', userSelect: 'all',
                     }}>{hex.toUpperCase()}</span>
+                    {/* Solo / Isolate */}
+                    <button
+                      title={solo ? 'Exit isolate' : 'Isolate this ink'}
+                      onClick={(e) => { e.stopPropagation(); setSoloLayerId(solo ? null : id); selectLayer(id); }}
+                      style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 4, padding: 0, border: 'none', cursor: 'pointer', background: 'transparent', color: solo ? 'var(--accent)' : 'var(--text-dim)', opacity: solo ? 1 : 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <SoloIcon active={solo} />
+                    </button>
                     {/* Eye toggle */}
                     <button
                       title={vis ? 'Hide ink' : 'Show ink'}
-                      onClick={() => setPaletteVisibility(id, !vis)}
+                      onClick={(e) => { e.stopPropagation(); setPaletteVisibility(id, !vis); }}
                       style={{
                         flexShrink: 0, width: 20, height: 20, borderRadius: 4, padding: 0,
                         border: 'none', cursor: 'pointer', background: 'transparent',
@@ -1562,7 +1580,7 @@ function ColorSepLayerSection({
   colors, visibility, onVisibilityChange,
   numColors, onNumColors, colorPriority, onColorPriority,
   lockedColors, onLockedColors, onColorChange,
-  names, onNameChange,
+  names, onNameChange, selectedId, onSelectLayer, soloId, onSoloLayer,
 }: {
   colors: RGB[];
   visibility: Record<string, boolean>;
@@ -1576,49 +1594,36 @@ function ColorSepLayerSection({
   onColorChange: (ci: number, hex: string) => void;
   names?: string[];
   onNameChange?: (ci: number, name: string) => void;
+  selectedId?: string | null;
+  onSelectLayer?: (id: string | null) => void;
+  soloId?: string | null;
+  onSoloLayer?: (id: string | null) => void;
 }) {
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [editingCi, setEditingCi] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
   return (
     <div style={{ borderBottom: '1px solid var(--border)' }}>
       {/* Controls */}
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              Colors
-            </span>
+      <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+            <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Colors</span>
             <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', fontWeight: 700 }}>{numColors}</span>
           </div>
-          <input
-            type="range" min={2} max={30} step={1} value={numColors}
+          <input type="range" min={2} max={30} step={1} value={numColors}
             onChange={e => onNumColors(Number(e.target.value))}
-            style={{ width: '100%', accentColor: 'var(--accent)' }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>2</span>
-            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>30</span>
-          </div>
+            style={{ width: '100%', accentColor: 'var(--accent)' }} />
         </div>
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Color Priority
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+            <span style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>Priority</span>
             <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
               {colorPriority < 30 ? 'Tonal' : colorPriority < 70 ? 'Balanced' : 'Color'}
             </span>
           </div>
-          <input
-            type="range" min={0} max={100} value={colorPriority}
+          <input type="range" min={0} max={100} value={colorPriority}
             onChange={e => onColorPriority(Number(e.target.value))}
-            style={{ width: '100%', accentColor: 'var(--accent)' }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Tone</span>
-            <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>Hue</span>
-          </div>
+            style={{ width: '100%', accentColor: 'var(--accent)' }} />
         </div>
       </div>
 
@@ -1630,85 +1635,80 @@ function ColorSepLayerSection({
         currentColors={colors}
       />
 
-      {/* Color strips */}
+      {/* Color rows */}
       {colors.length === 0 ? (
-        <div style={{ padding: '8px 12px', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.6 }}>
+        <div style={{ padding: '12px', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', opacity: 0.6 }}>
           Upload an image to auto-detect colors.
         </div>
       ) : (
-        <div style={{ padding: '4px 8px 6px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3 }}>
+        <div style={{ paddingBottom: 4 }}>
           {colors.map((color, ci) => {
             const id = `colorsep-${ci}`;
             const visible = visibility[id] !== false;
+            const selected = selectedId === id;
+            const solo = soloId === id;
             const hex = '#' + color.map(v => v.toString(16).padStart(2, '0')).join('');
-            const hovered = hoveredId === id;
             return (
               <div
                 key={id}
-                onMouseEnter={() => setHoveredId(id)}
-                onMouseLeave={() => setHoveredId(null)}
+                onClick={() => onSelectLayer?.(selected ? null : id)}
                 style={{
-                  position: 'relative', overflow: 'hidden',
-                  border: `1px solid ${hovered ? 'var(--border-2)' : 'var(--border)'}`,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '4px 8px 4px 10px',
+                  cursor: 'pointer',
+                  borderLeft: `2px solid ${solo ? 'var(--accent)' : selected ? 'rgba(255,107,26,0.45)' : 'transparent'}`,
+                  background: solo ? 'var(--accent-dim)' : selected ? 'rgba(255,107,26,0.06)' : 'transparent',
                   opacity: visible ? 1 : 0.4,
-                  transition: 'opacity 0.1s, border-color 0.1s',
+                  transition: 'background 0.1s, border-color 0.1s, opacity 0.12s',
                 }}
               >
-                {/* Swatch — click to open color picker */}
-                <div style={{ position: 'relative', height: 30, background: hex, cursor: 'pointer' }}>
-                  <input
-                    type="color"
-                    value={hex}
+                {/* Swatch */}
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ position: 'relative', flexShrink: 0, width: 28, height: 18, borderRadius: 4, background: hex, border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer' }}>
+                  <input type="color" value={hex}
                     onChange={(e) => onColorChange(ci, e.target.value)}
-                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-                  />
+                    style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
                 </div>
-                {/* Info bar */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  height: 18, paddingLeft: 4, paddingRight: 0,
-                  background: 'var(--surface-2)', borderTop: '1px solid var(--border)',
-                }}>
-                  {editingCi === ci ? (
-                    <input
-                      autoFocus
-                      value={editDraft}
-                      style={{
-                        flex: 1, background: 'none', border: 'none',
-                        outline: '1px solid var(--accent)', color: 'var(--text)',
-                        fontSize: 9, fontFamily: 'var(--font-mono)',
-                        padding: 0, borderRadius: 1, width: '100%',
-                      }}
-                      onChange={(e) => setEditDraft(e.target.value)}
-                      onBlur={() => { onNameChange?.(ci, editDraft.trim()); setEditingCi(null); }}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === 'Enter') { onNameChange?.(ci, editDraft.trim()); setEditingCi(null); }
-                        if (e.key === 'Escape') setEditingCi(null);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
+                {/* Name */}
+                {editingCi === ci ? (
+                  <input autoFocus value={editDraft}
+                    style={{ flex: 1, background: 'none', border: 'none', outline: '1px solid var(--accent)', color: 'var(--text)', fontSize: 11, fontFamily: 'var(--font-mono)', padding: '0 2px', borderRadius: 2 }}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    onBlur={() => { onNameChange?.(ci, editDraft.trim()); setEditingCi(null); }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') { onNameChange?.(ci, editDraft.trim()); setEditingCi(null); }
+                      if (e.key === 'Escape') setEditingCi(null);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
                   <span
                     onDoubleClick={(e) => { e.stopPropagation(); setEditingCi(ci); setEditDraft(names?.[ci] || ''); }}
                     title="Double-click to rename"
-                    style={{
-                      flex: 1, fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: hovered ? 400 : 600,
-                      color: hovered ? 'var(--text-muted)' : 'var(--text)',
-                      letterSpacing: '0.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                      transition: 'color 0.1s', cursor: 'text',
-                    }}>
-                    {hovered ? hex.slice(1).toUpperCase() : (names?.[ci] || `C${ci + 1}`)}
+                    style={{ flex: 1, fontSize: 11, color: solo || selected ? 'var(--text)' : 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}>
+                    {names?.[ci] || `Color ${ci + 1}`}
                   </span>
-                  )}
-                  <button
-                    className={`vis-btn ${!visible ? 'hidden-layer' : ''}`}
-                    style={{ width: 18, height: 18, flexShrink: 0 }}
-                    onClick={(e) => { e.stopPropagation(); onVisibilityChange(id, !visible); }}
-                  >
-                    <EyeIcon visible={visible} />
-                  </button>
-                </div>
+                )}
+                {/* Hex */}
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: '0.03em', userSelect: 'all' }}>
+                  {hex.slice(1).toUpperCase()}
+                </span>
+                {/* Solo / Isolate */}
+                <button
+                  title={solo ? 'Exit isolate' : 'Isolate this color'}
+                  onClick={(e) => { e.stopPropagation(); onSoloLayer?.(solo ? null : id); onSelectLayer?.(id); }}
+                  style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 4, padding: 0, border: 'none', cursor: 'pointer', background: 'transparent', color: solo ? 'var(--accent)' : 'var(--text-dim)', opacity: solo ? 1 : 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <SoloIcon active={solo} />
+                </button>
+                {/* Eye */}
+                <button
+                  title={visible ? 'Hide' : 'Show'}
+                  onClick={(e) => { e.stopPropagation(); onVisibilityChange(id, !visible); }}
+                  style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 4, padding: 0, border: 'none', cursor: 'pointer', background: 'transparent', color: 'var(--text-dim)', opacity: visible ? 0.65 : 0.3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <EyeIcon visible={visible} />
+                </button>
               </div>
             );
           })}
@@ -1915,6 +1915,8 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
     underbaseEnabled, underbaseChoke, setUnderbaseEnabled, setUnderbaseChoke,
     underbaseIncludeShadows, setUnderbaseIncludeShadows,
     underbaseDensity, setUnderbaseDensity,
+    underbaseMaskData, setUnderbaseMaskData,
+    layerUnderbaseMasks, setLayerUnderbaseMask,
     pantonePreviewActive, setPantonePreviewActive,
     processedLayers,
     bgRemovalEnabled, setBgRemovalEnabled,
@@ -1932,49 +1934,84 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
 
   function UnderbaseSection() {
     return (
-      <div style={{ borderTop: '1px solid var(--border)', padding: '8px 8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: underbaseEnabled ? 8 : 0 }}>
-          <div style={{ width: 22, height: 22, flexShrink: 0, background: '#ffffff', border: `1.5px solid ${underbaseEnabled ? 'var(--accent)' : 'var(--border-2)'}`, borderRadius: 2, boxShadow: underbaseEnabled ? '0 0 0 1px var(--accent)' : 'none' }} />
+      <div style={{ borderTop: '1px solid var(--border)', padding: '10px 10px 8px' }}>
+        {/* Header row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: underbaseEnabled ? 10 : 0 }}>
+          {/* White swatch */}
+          <div style={{ width: 20, height: 20, flexShrink: 0, background: '#ffffff', border: `1.5px solid ${underbaseEnabled ? 'var(--accent)' : 'var(--border-2)'}`, borderRadius: 3, boxShadow: underbaseEnabled ? '0 0 0 2px var(--accent-dim)' : 'none', transition: 'border-color 0.15s, box-shadow 0.15s' }} />
+          {/* Labels */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', color: underbaseEnabled ? 'var(--text)' : 'var(--text-dim)', letterSpacing: '0.04em' }}>Underbase</div>
-            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>White · Bottom layer</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--font-mono)', color: underbaseEnabled ? 'var(--text)' : 'var(--text-dim)', letterSpacing: '0.05em' }}>UNDERBASE</span>
+              {underbaseMaskData && underbaseEnabled && (
+                <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-dim)', padding: '1px 5px', borderRadius: 10, letterSpacing: '0.05em' }}>MASKED</span>
+              )}
+            </div>
+            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 1 }}>White · Bottom layer</div>
           </div>
+          {/* Solo */}
           {underbaseEnabled && (
             <button className="vis-btn" onClick={() => setSoloLayerId(soloLayerId === '__underbase__' ? null : '__underbase__')} title="Solo underbase"
-              style={{ color: soloLayerId === '__underbase__' ? 'var(--accent)' : 'var(--text-dim)', opacity: soloLayerId && soloLayerId !== '__underbase__' ? 0.35 : 0.7 }}
+              style={{ color: soloLayerId === '__underbase__' ? 'var(--accent)' : 'var(--text-dim)', opacity: soloLayerId && soloLayerId !== '__underbase__' ? 0.3 : 0.7 }}
               onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = soloLayerId === '__underbase__' ? '0.9' : soloLayerId ? '0.35' : '0.7')}>
+              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = soloLayerId === '__underbase__' ? '0.9' : soloLayerId ? '0.3' : '0.7')}>
               <SoloIcon active={soloLayerId === '__underbase__'} />
             </button>
           )}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', flexShrink: 0 }}>
-            <input type="checkbox" checked={underbaseEnabled}
-              onChange={e => { setUnderbaseEnabled(e.target.checked); if (!e.target.checked && soloLayerId === '__underbase__') setSoloLayerId(null); }}
-              style={{ accentColor: 'var(--accent)', width: 13, height: 13, cursor: 'pointer' }} />
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: underbaseEnabled ? 'var(--accent)' : 'var(--text-dim)' }}>{underbaseEnabled ? 'On' : 'Off'}</span>
-          </label>
+          {/* Toggle switch */}
+          <div
+            onClick={() => { setUnderbaseEnabled(!underbaseEnabled); if (underbaseEnabled && soloLayerId === '__underbase__') setSoloLayerId(null); }}
+            title={underbaseEnabled ? 'Disable underbase' : 'Enable underbase'}
+            style={{ position: 'relative', width: 34, height: 19, borderRadius: 10, background: underbaseEnabled ? 'var(--accent)' : 'var(--border-2)', cursor: 'pointer', transition: 'background 0.18s', flexShrink: 0 }}
+          >
+            <div style={{ position: 'absolute', top: 2.5, left: underbaseEnabled ? 17 : 2.5, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left 0.15s', boxShadow: '0 1px 3px rgba(0,0,0,0.35)' }} />
+          </div>
         </div>
+
         {underbaseEnabled && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', gap: 3 }}>
-              {[0, 1, 2, 3, 4].map((n) => (
-                <button key={n} onClick={() => setUnderbaseChoke(n)} style={{ flex: 1, padding: '4px 2px', border: `1px solid ${underbaseChoke === n ? 'var(--accent)' : 'var(--border)'}`, background: underbaseChoke === n ? 'var(--accent-dim)' : 'var(--surface-2)', cursor: 'pointer', textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: underbaseChoke === n ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>{n === 0 ? 'Off' : `${n}px`}</div>
-                </button>
-              ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Choke */}
+            <div>
+              <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 5, textTransform: 'uppercase' }}>Choke</div>
+              <div style={{ display: 'flex', gap: 3 }}>
+                {[0, 1, 2, 3, 4].map((n) => (
+                  <button key={n} onClick={() => setUnderbaseChoke(n)}
+                    style={{ flex: 1, padding: '4px 0', border: `1px solid ${underbaseChoke === n ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 5, background: underbaseChoke === n ? 'var(--accent-dim)' : 'transparent', cursor: 'pointer', textAlign: 'center', transition: 'all 0.12s' }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: underbaseChoke === n ? 'var(--accent)' : 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{n === 0 ? 'Off' : `${n}px`}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>Density</span>
-              <input type="range" min={0} max={100} step={5} value={underbaseDensity}
-                onChange={e => setUnderbaseDensity(Number(e.target.value))}
-                style={{ flex: 1, accentColor: 'var(--accent)' }} />
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text)', minWidth: 28, textAlign: 'right' }}>{underbaseDensity}%</span>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', paddingTop: 2 }}>
+
+            {/* Density — CMYK Pro only */}
+            {separationMode === 'cmyk-pro' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>Density</span>
+                <input type="range" min={0} max={100} step={5} value={underbaseDensity}
+                  onChange={e => setUnderbaseDensity(Number(e.target.value))}
+                  style={{ flex: 1, accentColor: 'var(--accent)' }} />
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text)', minWidth: 28, textAlign: 'right' }}>{underbaseDensity}%</span>
+              </div>
+            )}
+
+            {/* Include shadows */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
               <input type="checkbox" checked={underbaseIncludeShadows} onChange={e => setUnderbaseIncludeShadows(e.target.checked)}
                 style={{ accentColor: 'var(--accent)', width: 12, height: 12, cursor: 'pointer', flexShrink: 0 }} />
-              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Include shadows in underbase</span>
+              <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Include shadows</span>
             </label>
+
+            {/* Mask is controlled via the taskbar paint/erase tool while underbase is soloed */}
+            {underbaseMaskData && (
+              <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', flex: 1 }}>Mask active — solo underbase + paint/erase to edit</span>
+                <button onClick={() => { setUnderbaseMaskData(null); setSoloLayerId(null); }}
+                  title="Clear mask"
+                  style={{ padding: '5px 7px', border: '1px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -2321,6 +2358,10 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
                 next[ci] = name;
                 setColorSepNames(next);
               }}
+              selectedId={selectedLayerId}
+              onSelectLayer={selectLayer}
+              soloId={soloLayerId}
+              onSoloLayer={setSoloLayerId}
             />
             <UnderbaseSection />
             <PantonePreviewSection />
@@ -2412,62 +2453,86 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
             <div style={{ padding: '6px 8px 4px' }}>
               {/* Underbase card — appears at top (bottom of stack, renders first in reverse order) */}
               {(() => {
-                const isUndExpanded = underbaseEnabled;
                 return (
                   <div
                     className={`layer-card ${underbaseEnabled ? 'selected' : ''}`}
                     style={{ marginBottom: 4, flexDirection: 'column', alignItems: 'stretch', gap: 0, cursor: 'default' }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'default', padding: '1px 0' }}>
+                    {/* Header row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'default', padding: '2px 0' }}>
                       <div className="layer-swatch" style={{ flexShrink: 0, cursor: 'default' }}>
                         <div className="layer-swatch-inner" style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.15)' }} />
                       </div>
                       <div className="layer-card-info" style={{ flex: 1, minWidth: 0 }}>
-                        <div className="layer-card-name">Underbase</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span className="layer-card-name">Underbase</span>
+                          {underbaseMaskData && underbaseEnabled && (
+                            <span style={{ fontSize: 7, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-dim)', padding: '1px 4px', borderRadius: 8, letterSpacing: '0.04em' }}>MASKED</span>
+                          )}
+                        </div>
                         <div className="layer-card-sub">White · Bottom layer</div>
                       </div>
                       <div className="layer-card-actions">
                         {underbaseEnabled && (
                           <button className="vis-btn" onClick={(e) => { e.stopPropagation(); setSoloLayerId(soloLayerId === '__underbase__' ? null : '__underbase__'); }}
                             title={soloLayerId === '__underbase__' ? 'Exit solo' : 'Solo underbase'}
-                            style={{ color: soloLayerId === '__underbase__' ? 'var(--accent)' : 'var(--text-dim)', opacity: soloLayerId && soloLayerId !== '__underbase__' ? 0.35 : 0.7 }}
+                            style={{ color: soloLayerId === '__underbase__' ? 'var(--accent)' : 'var(--text-dim)', opacity: soloLayerId && soloLayerId !== '__underbase__' ? 0.3 : 0.7 }}
                             onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
-                            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = soloLayerId === '__underbase__' ? '0.9' : soloLayerId ? '0.35' : '0.7')}>
+                            onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = soloLayerId === '__underbase__' ? '0.9' : soloLayerId ? '0.3' : '0.7')}>
                             <SoloIcon active={soloLayerId === '__underbase__'} />
                           </button>
                         )}
-                        <button
-                          className="vis-btn"
+                        {/* Toggle switch */}
+                        <div
                           onClick={(e) => { e.stopPropagation(); setUnderbaseEnabled(!underbaseEnabled); if (underbaseEnabled && soloLayerId === '__underbase__') setSoloLayerId(null); }}
-                          style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: underbaseEnabled ? 'var(--accent)' : 'var(--text-dim)', opacity: underbaseEnabled ? 1 : 0.55, letterSpacing: '0.04em', fontWeight: underbaseEnabled ? 700 : 400 }}
                           title={underbaseEnabled ? 'Disable underbase' : 'Enable underbase'}
+                          style={{ position: 'relative', width: 32, height: 18, borderRadius: 9, background: underbaseEnabled ? 'var(--accent)' : 'var(--border-2)', cursor: 'pointer', transition: 'background 0.18s', flexShrink: 0 }}
                         >
-                          {underbaseEnabled ? 'ON' : 'OFF'}
-                        </button>
+                          <div style={{ position: 'absolute', top: 2, left: underbaseEnabled ? 14 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left 0.15s', boxShadow: '0 1px 3px rgba(0,0,0,0.35)' }} />
+                        </div>
                       </div>
                     </div>
-                    {isUndExpanded && (
-                      <div style={{ padding: '8px 4px 4px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--border)' }}>
-                        <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginBottom: 2, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Choke</div>
-                        <div style={{ display: 'flex', gap: 3 }}>
-                          {[0, 1, 2, 3, 4].map((n) => (
-                            <button key={n} onClick={() => setUnderbaseChoke(n)} style={{ flex: 1, padding: '4px 2px', border: `1px solid ${underbaseChoke === n ? 'var(--accent)' : 'var(--border)'}`, background: underbaseChoke === n ? 'var(--accent-dim)' : 'var(--surface-2)', cursor: 'pointer', textAlign: 'center' }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: underbaseChoke === n ? 'var(--accent)' : 'var(--text)', fontFamily: 'var(--font-mono)' }}>{n === 0 ? 'Off' : `${n}px`}</div>
-                            </button>
-                          ))}
+                    {/* Expanded controls */}
+                    {underbaseEnabled && (
+                      <div style={{ padding: '8px 4px 4px', display: 'flex', flexDirection: 'column', gap: 7, borderTop: '1px solid var(--border)', marginTop: 4 }}>
+                        {/* Choke */}
+                        <div>
+                          <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 4, textTransform: 'uppercase' }}>Choke</div>
+                          <div style={{ display: 'flex', gap: 3 }}>
+                            {[0, 1, 2, 3, 4].map((n) => (
+                              <button key={n} onClick={() => setUnderbaseChoke(n)}
+                                style={{ flex: 1, padding: '4px 0', border: `1px solid ${underbaseChoke === n ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 4, background: underbaseChoke === n ? 'var(--accent-dim)' : 'transparent', cursor: 'pointer', textAlign: 'center', transition: 'all 0.12s' }}>
+                                <span style={{ fontSize: 9, fontWeight: 700, color: underbaseChoke === n ? 'var(--accent)' : 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>{n === 0 ? 'Off' : `${n}px`}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>Density</span>
-                          <input type="range" min={0} max={100} step={5} value={underbaseDensity}
-                            onChange={e => setUnderbaseDensity(Number(e.target.value))}
-                            style={{ flex: 1, accentColor: 'var(--accent)' }} />
-                          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text)', minWidth: 28, textAlign: 'right' }}>{underbaseDensity}%</span>
-                        </div>
+                        {/* Density — CMYK Pro only */}
+                        {separationMode === 'cmyk-pro' && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', flexShrink: 0 }}>Density</span>
+                            <input type="range" min={0} max={100} step={5} value={underbaseDensity}
+                              onChange={e => setUnderbaseDensity(Number(e.target.value))}
+                              style={{ flex: 1, accentColor: 'var(--accent)' }} />
+                            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text)', minWidth: 28, textAlign: 'right' }}>{underbaseDensity}%</span>
+                          </div>
+                        )}
+                        {/* Include shadows */}
                         <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
                           <input type="checkbox" checked={underbaseIncludeShadows} onChange={e => setUnderbaseIncludeShadows(e.target.checked)}
                             style={{ accentColor: 'var(--accent)', width: 12, height: 12, cursor: 'pointer', flexShrink: 0 }} />
                           <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Include shadows</span>
                         </label>
+                        {/* Mask is controlled via the taskbar paint/erase tool while underbase is soloed */}
+                        {underbaseMaskData && (
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', flex: 1 }}>Mask active</span>
+                            <button onClick={() => { setUnderbaseMaskData(null); setSoloLayerId(null); }} title="Clear mask"
+                              style={{ padding: '5px 6px', border: '1px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', fontSize: 9, color: 'var(--text-dim)' }}>
+                              ✕
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2608,6 +2673,19 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
                           </>
                         )}
                       </div>
+
+                      {/* Underbase mask indicator — solo this layer + paint/erase to edit */}
+                      {layerUnderbaseMasks[layer.id] && (
+                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', gap: 5, alignItems: 'center' }}>
+                          <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', flex: 1 }}>Mask active</span>
+                          <button
+                            onClick={() => setLayerUnderbaseMask(layer.id, null)}
+                            title="Clear layer mask"
+                            style={{ padding: '5px 7px', border: '1px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', fontSize: 9, color: 'var(--text-dim)' }}>
+                            ✕
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2838,6 +2916,6 @@ export function LayerPanel({ hideModeSwitch = false }: { hideModeSwitch?: boolea
           </div>
         </div>
       )}
-    </aside>
+  </aside>
   );
 }

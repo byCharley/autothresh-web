@@ -51,6 +51,13 @@ export function ChatWidget({ session }: { session: Session }) {
   const [editingId, setEditingId]     = useState<number | null>(null);
   const [editText, setEditText]       = useState('');
   const [creatorTyping, setCreatorTyping] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightboxUrl(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [lightboxUrl]);
   const bottomRef                     = useRef<HTMLDivElement>(null);
   const replyRef                      = useRef<HTMLTextAreaElement>(null);
   const isMobile                      = useRef(window.innerWidth < 640);
@@ -478,11 +485,11 @@ export function ChatWidget({ session }: { session: Session }) {
                         }}>
                           {(() => {
                             const m = msg.message;
-                            if (m.startsWith('[img]:')) return <img src={m.slice(6)} alt="attachment" style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} />;
+                            if (m.startsWith('[img]:')) return <img src={m.slice(6)} alt="attachment" onClick={() => setLightboxUrl(m.slice(6))} style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain', cursor: 'zoom-in' }} />;
                             const urlMatch = m.match(/(https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?)/i);
                             if (urlMatch) {
                               const text = m.replace(urlMatch[0], '').trim();
-                              return <>{text && <div style={{ marginBottom: 4 }}>{text}</div>}<img src={urlMatch[0]} alt="attachment" style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} /></>;
+                              return <>{text && <div style={{ marginBottom: 4 }}>{text}</div>}<img src={urlMatch[0]} alt="attachment" onClick={() => setLightboxUrl(urlMatch[0])} style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain', cursor: 'zoom-in' }} /></>;
                             }
                             return m;
                           })()}
@@ -635,6 +642,16 @@ export function ChatWidget({ session }: { session: Session }) {
   return (
     <>
       {open && panel}
+
+      {/* Lightbox overlay */}
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.88)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}
+        >
+          <img src={lightboxUrl} alt="full size" style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 4, boxShadow: '0 8px 40px rgba(0,0,0,0.6)' }} />
+        </div>
+      )}
 
       {/* Floating bubble */}
       <button

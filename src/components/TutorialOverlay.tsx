@@ -17,22 +17,22 @@ const STEPS: Step[] = [
   {
     key: 'tutorial-modes',
     title: 'Separation Mode',
-    desc: 'Choose how to split your image. Thresh separates by tone into spot color layers. Dither simulates colors with halftone patterns. Color clusters by hue. CMYK runs a full ICC-based process separation. Vector traces to SVG.',
+    desc: 'Choose how to split your image. Thresh separates by tone into spot color layers. Dither simulates colors with halftone patterns. Color clusters by hue. CMYK Pro runs a full ICC-based process separation with per-channel halftone screening. Vector traces to SVG.',
   },
   {
     key: 'tutorial-layers',
     title: 'Layers Panel',
-    desc: 'Each layer is one ink color. Double-click any layer name to rename it — custom names carry through to every export format. Select a layer to adjust its tonal range, change its color, or paint and erase areas manually.',
+    desc: 'Each layer is one ink color. Double-click any layer name to rename it — custom names carry through to every export format. Select a layer to adjust its tonal range, change its color, or paint and erase areas manually. Use the Solo button on any layer to isolate it — masking tools then only affect that ink, including the underbase layer.',
   },
   {
     key: 'tutorial-canvas',
     title: 'Live Preview',
-    desc: 'Your artwork updates in real time. Drag to pan, scroll or pinch to zoom. The paint tools let you manually add or erase areas on any layer.',
+    desc: 'Your artwork updates in real time. Drag to pan, scroll or pinch to zoom. The bottom toolbar has Remove BG and Brush Mask tools available across Threshold, Dither, and Color Separation modes — one consistent spot for masking no matter which mode you are in.',
   },
   {
     key: 'tutorial-controls',
     title: 'Controls Panel',
-    desc: 'Fine-tune image adjustments (brightness, contrast, curves), set document size and DPI, and control background removal. In CMYK Pro mode, this panel also exposes ICC profile selection, dot gain, and halftone settings.',
+    desc: 'Fine-tune image adjustments (brightness, contrast, curves), set document size and DPI, and control background removal. In CMYK Pro mode this panel exposes ICC profile, GCR, dot gain, and per-channel halftone settings. For designs with a solid background, use Remove BG to clip the CMYK ink to your artwork — transparent PNGs are handled automatically.',
   },
   {
     key: 'tutorial-presets',
