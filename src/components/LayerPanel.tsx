@@ -1046,18 +1046,55 @@ function GrainOverlaysSection() {
 // ─── Texture Background (color wheel only) ────────────────────────────────────
 
 function TextureBgSection() {
-  const { canvasColor, setCanvasColor } = useStore();
+  const [open, setOpen] = useState(true);
+  const {
+    showFabricBg, setShowFabricBg,
+    fabricTexture, setFabricTexture,
+    fabricBlendStrength, setFabricBlendStrength,
+    fabricTextureDepth, setFabricTextureDepth,
+  } = useStore();
+  const realisticOn = fabricTexture !== 'none';
   return (
     <>
-      <SectionHeader title="BG Color" open={true} onToggle={() => {}} />
-      <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input type="color" value={canvasColor} onChange={e => setCanvasColor(e.target.value)}
-          style={{ width: 32, height: 32, border: 'none', padding: 0, cursor: 'pointer',
-            borderRadius: 6, background: 'none', flexShrink: 0 }} />
-        <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-          {canvasColor.toUpperCase()}
-        </span>
-      </div>
+      <SectionHeader title="BG Color" open={open} onToggle={() => setOpen(o => !o)} />
+      {open && (
+        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ opacity: showFabricBg ? 1 : 0.45, pointerEvents: showFabricBg ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
+            <GarmentColorPicker />
+          </div>
+          <div style={{ height: 1, background: 'var(--border)' }} />
+          <SwitchRow label="Show Background" checked={showFabricBg} onChange={setShowFabricBg} />
+          <SwitchRow
+            label="Fabric View"
+            checked={realisticOn}
+            onChange={(v) => {
+              if (!v) { setFabricTexture('none'); return; }
+              setFabricTexture('light');
+              if (!showFabricBg) setShowFabricBg(true);
+            }}
+          />
+          {realisticOn && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                {(['light', 'dark'] as const).map((t) => (
+                  <button key={t} onClick={() => setFabricTexture(t)} style={{
+                    padding: '4px', fontSize: 9, fontFamily: 'var(--font-mono)',
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                    background: fabricTexture === t ? 'var(--accent)' : 'var(--surface-2)',
+                    color: fabricTexture === t ? '#000' : 'var(--text-dim)',
+                    border: `1px solid ${fabricTexture === t ? 'var(--accent)' : 'var(--border)'}`,
+                    cursor: 'pointer', fontWeight: fabricTexture === t ? 700 : 400,
+                  }}>
+                    {t === 'light' ? 'Light Shirt' : 'Dark Shirt'}
+                  </button>
+                ))}
+              </div>
+              <Slider label="Blend Strength" value={Math.round(fabricBlendStrength * 100)} min={0} max={100} step={1} unit="%" onChange={(v) => setFabricBlendStrength(v / 100)} />
+              <Slider label="Texture Depth"  value={Math.round(fabricTextureDepth  * 100)} min={0} max={100} step={1} unit="%" onChange={(v) => setFabricTextureDepth(v / 100)} />
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }
