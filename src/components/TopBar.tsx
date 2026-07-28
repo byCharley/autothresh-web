@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { AppIcon } from './AppIcon';
+import { useAppVersion } from '../hooks/useAppVersion';
 
 import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewModal';
 import { ACCENTS, applyAccentByHex } from '../lib/accent';
@@ -31,6 +32,7 @@ interface TopBarProps {
 
 export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onWhatsNew, onLogout, onUpdateName, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0 }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
+  const appVersion = useAppVersion();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
@@ -82,7 +84,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
     <header className="topbar">
       <div className="topbar-logo" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <AppIcon size={22} color="var(--accent)" />
-        <span>AutoThresh Web </span><span style={{ color: 'var(--accent)' }}>Beta 1.0.2</span>
+        <span>AutoThresh Web </span><span style={{ color: 'var(--accent)' }}>Beta {appVersion}</span>
       </div>
 
       <div className="topbar-divider" />

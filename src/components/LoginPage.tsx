@@ -4,6 +4,7 @@ import { ContactModal } from './ContactModal';
 import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
+import { useAppVersion } from '../hooks/useAppVersion';
 
 interface Props {
   onLogin: () => void;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function LoginPage({ onLogin, onSwitchAccount }: Props) {
+  const appVersion = useAppVersion();
   const [loading, setLoading]               = useState(false);
   const [showContact, setShowContact]       = useState(false);
   const [showEula, setShowEula]             = useState(false);
@@ -55,7 +57,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
             />
           </div>
           <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-            AutoThresh™ Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.2</span>
+            AutoThresh™ Web <span style={{ color: 'var(--accent)' }}>Beta {appVersion}</span>
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 7, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', lineHeight: 1.9 }}>
             Professional Color Separation App<br />Trusted By Pros Worldwide<br />Community Led Improvements Weekly
