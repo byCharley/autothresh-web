@@ -2310,6 +2310,15 @@ export function CanvasView() {
         // Don't intercept clicks on toolbar buttons or interactive children
         if ((e.target as Element).closest('.canvas-toolbar, button, input[type="range"]')) return;
 
+        // Stylus (Apple Pencil) — only paint, never pinch/drag tracking
+        if (e.pointerType === 'pen') {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          if (separationMode === 'dtg' && dtgPaintMode !== 'off' && !spaceHeldRef.current) { handleDtgPaintMouseDown(e); return; }
+          if (bgPaintMode !== 'off' && !spaceHeldRef.current) { handleBgPaintMouseDown(e); return; }
+          if (paintMode !== 'off' && !spaceHeldRef.current) { handlePaintMouseDown(e); return; }
+          return;
+        }
+
         activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
         // Two fingers → start pinch, cancel any drag/paint
@@ -2351,6 +2360,28 @@ export function CanvasView() {
         setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
       }}
       onPointerMove={(e) => {
+        // Stylus — route straight to paint handlers, skip pinch/drag tracking
+        if (e.pointerType === 'pen') {
+          if (separationMode === 'dtg' && dtgPaintMode !== 'off' && !spaceHeldRef.current) {
+            handleDtgPaintMouseMove(e);
+            const rect = containerRef.current?.getBoundingClientRect();
+            if (rect) setBrushPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+            return;
+          }
+          if (bgPaintMode !== 'off' && !spaceHeldRef.current) {
+            handleBgPaintMouseMove(e);
+            const rect = containerRef.current?.getBoundingClientRect();
+            if (rect) setBrushPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+            return;
+          }
+          if (paintMode !== 'off' && !spaceHeldRef.current) {
+            handlePaintMouseMove(e);
+            const rect = containerRef.current?.getBoundingClientRect();
+            if (rect) setBrushPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+            return;
+          }
+          return;
+        }
         activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
         // Two-finger pinch
@@ -2397,7 +2428,7 @@ export function CanvasView() {
         if (isDragging) setOffset({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
       }}
       onPointerUp={(e) => {
-        activePointersRef.current.delete(e.pointerId);
+        if (e.pointerType !== 'pen') activePointersRef.current.delete(e.pointerId);
         e.currentTarget.releasePointerCapture(e.pointerId);
         if (activePointersRef.current.size < 2) pinchRef.current = null;
         if (isDtgPaintingRef.current) handleDtgPaintMouseUp();
@@ -2406,7 +2437,7 @@ export function CanvasView() {
         setIsDragging(false);
       }}
       onPointerCancel={(e) => {
-        activePointersRef.current.delete(e.pointerId);
+        if (e.pointerType !== 'pen') activePointersRef.current.delete(e.pointerId);
         e.currentTarget.releasePointerCapture(e.pointerId);
         pinchRef.current = null;
         if (isDtgPaintingRef.current) handleDtgPaintMouseUp();

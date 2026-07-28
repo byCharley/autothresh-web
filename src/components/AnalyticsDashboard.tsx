@@ -1070,6 +1070,106 @@ function VideosPanel({ session }: { session: Session }) {
   );
 }
 
+// ── Version / Settings panel ────────────────────────────────────────────────
+
+function VersionPanel({ session }: { session: Session }) {
+  const [version, setVersion]   = useState('');
+  const [saved,   setSaved]     = useState('');
+  const [saving,  setSaving]    = useState(false);
+  const [status,  setStatus]    = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/app-settings', { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(r => r.ok ? r.json() : {})
+      .then((d: Record<string, string>) => {
+        const v = d.app_version ?? '';
+        setVersion(v);
+        setSaved(v);
+      })
+      .catch(() => {});
+  }, [session.token]);
+
+  async function save() {
+    if (!version.trim() || saving) return;
+    setSaving(true);
+    setStatus(null);
+    try {
+      const r = await fetch('/api/app-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ key: 'app_version', value: version.trim() }),
+      });
+      const d = await r.json() as { ok?: boolean; error?: string };
+      if (d.ok) { setSaved(version.trim()); setStatus('Saved'); }
+      else setStatus(d.error ?? 'Failed');
+    } catch {
+      setStatus('Request failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const dirty = version.trim() !== saved;
+
+  return (
+    <div style={{ maxWidth: 420 }}>
+      <Panel title="App Version">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <p style={{ margin: 0, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            Set the current app version string shown to users (e.g. <span style={{ color: 'var(--accent)' }}>1.3.0</span>).
+            Requires an <code style={{ fontSize: 10 }}>app_settings</code> table in Supabase:
+          </p>
+          <pre style={{ margin: 0, fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', background: 'var(--surface-2)', padding: '8px 10px', overflowX: 'auto', lineHeight: 1.6 }}>{`CREATE TABLE IF NOT EXISTS app_settings (
+  key  text PRIMARY KEY,
+  value text NOT NULL,
+  updated_at timestamptz DEFAULT now()
+);
+INSERT INTO app_settings (key, value)
+  VALUES ('app_version', '1.0.0')
+  ON CONFLICT (key) DO NOTHING;`}</pre>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              value={version}
+              onChange={e => { setVersion(e.target.value); setStatus(null); }}
+              onKeyDown={e => { if (e.key === 'Enter') save(); }}
+              placeholder="e.g. 1.3.0"
+              style={{
+                flex: 1, height: 32, padding: '0 10px',
+                fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700,
+                background: 'var(--surface-2)', border: `1px solid ${dirty ? 'var(--accent)' : 'var(--border)'}`,
+                color: 'var(--text)',
+              }}
+            />
+            <button
+              onClick={save}
+              disabled={!dirty || saving}
+              style={{
+                height: 32, padding: '0 16px',
+                background: dirty ? 'var(--accent)' : 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                color: dirty ? '#000' : 'var(--text-dim)',
+                fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
+                cursor: dirty ? 'pointer' : 'default',
+                opacity: saving ? 0.6 : 1,
+              }}
+            >{saving ? 'Saving…' : 'Save'}</button>
+          </div>
+          {status && (
+            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: status === 'Saved' ? '#4ade80' : '#f87171' }}>
+              {status === 'Saved' ? '✓ ' : '✗ '}{status}
+            </span>
+          )}
+          {saved && (
+            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+              Current: <span style={{ color: 'var(--accent)', fontWeight: 700 }}>v{saved}</span>
+            </div>
+          )}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
 // ── Security panel ──────────────────────────────────────────────────────────
 
 interface SecurityFlag {
@@ -1843,7 +1943,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     setPreset('custom');
   }
 
-  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'access' | 'videos' | 'chat'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'access' | 'videos' | 'chat' | 'settings'>('stats');
   const [securityUnreviewed, setSecurityUnreviewed] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
 
@@ -2009,7 +2109,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
         {/* Tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px' }}>
-          {(['stats', 'security', 'access', 'videos', 'chat'] as const).map(tab => (
+          {(['stats', 'security', 'access', 'videos', 'chat', 'settings'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -2029,7 +2129,8 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                 : tab === 'security' ? (securityUnreviewed > 0 ? `Security (${securityUnreviewed > 99 ? '99+' : securityUnreviewed})` : 'Security')
                 : tab === 'access' ? 'Access'
                 : tab === 'videos' ? 'Videos'
-                : chatUnread > 0 ? `Chat (${chatUnread > 99 ? '99+' : chatUnread})` : 'Chat'}
+                : tab === 'chat' ? (chatUnread > 0 ? `Chat (${chatUnread > 99 ? '99+' : chatUnread})` : 'Chat')
+                : 'Settings'}
             </button>
           ))}
         </div>
@@ -2050,6 +2151,10 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
           {activeTab === 'chat' && (
             <ChatPanel session={session} />
+          )}
+
+          {activeTab === 'settings' && (
+            <VersionPanel session={session} />
           )}
 
           {activeTab === 'stats' && loading && (
