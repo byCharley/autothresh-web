@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import { invalidateAppVersion } from '../hooks/useAppVersion';
 
 function useMobile(bp = 640) {
   const [m, setM] = useState(false);
@@ -1100,7 +1101,7 @@ function VersionPanel({ session }: { session: Session }) {
         body: JSON.stringify({ key: 'app_version', value: version.trim() }),
       });
       const d = await r.json() as { ok?: boolean; error?: string };
-      if (d.ok) { setSaved(version.trim()); setStatus('Saved'); }
+      if (d.ok) { setSaved(version.trim()); setStatus('Saved'); invalidateAppVersion(); }
       else setStatus(d.error ?? 'Failed');
     } catch {
       setStatus('Request failed');

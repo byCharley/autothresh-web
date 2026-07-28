@@ -8,14 +8,14 @@ const CREATOR_EMAILS = new Set(
   (process.env.CREATOR_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
 );
 
-function sb(path: string, method = 'GET', body?: unknown) {
+function sb(path: string, method = 'GET', body?: unknown, extraHeaders?: Record<string, string>) {
   return fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${SERVICE_KEY}`,
       'apikey': SERVICE_KEY,
-      'Prefer': method === 'POST' ? 'return=representation' : '',
+      ...extraHeaders,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -68,11 +68,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!allowed.includes(key)) return res.status(400).json({ error: `Unknown setting key: ${key}` });
 
     try {
-      await sb('app_settings', 'POST', {
-        key, value, updated_at: new Date().toISOString(),
-      });
+      const r = await sb(
+        'app_settings',
+        'POST',
+        { key, value, updated_at: new Date().toISOString() },
+        { 'Prefer': 'resolution=merge-duplicates' },  // upsert on primary key conflict
+      );
+      if (!r.ok) {
+        const body = await r.text();
+        console.error('app_settings upsert failed:', r.status, body);
+        return res.status(500).json({ error: `DB error ${r.status}` });
+      }
       return res.status(200).json({ ok: true });
-    } catch {
+    } catch (e) {
+      console.error('app_settings PATCH error:', e);
       return res.status(500).json({ error: 'Failed to save setting' });
     }
   }
