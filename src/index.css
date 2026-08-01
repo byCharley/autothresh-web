@@ -156,6 +156,14 @@ html, body, #root {
   background: var(--border);
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
 .topbar-spacer { flex: 1; min-width: 0; }
 
 /* ─── Topbar responsive collapse ──────────────────────────────────────────── */
