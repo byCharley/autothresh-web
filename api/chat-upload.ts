@@ -8,13 +8,22 @@ const CREATOR_EMAILS = new Set(
   (process.env.CREATOR_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
 );
 const BUCKET = 'chat-images';
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
 
 const ALLOWED_TYPES: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png':  'png',
-  'image/gif':  'gif',
-  'image/webp': 'webp',
+  'image/jpeg':                       'jpg',
+  'image/png':                        'png',
+  'image/gif':                        'gif',
+  'image/webp':                       'webp',
+  'image/tiff':                       'tiff',
+  'image/vnd.adobe.photoshop':        'psd',
+  'application/photoshop':            'psd',
+  'application/psd':                  'psd',
+  'image/photoshop':                  'psd',
+  'application/postscript':           'ai',
+  'application/illustrator':          'ai',
+  'application/vnd.adobe.illustrator':'ai',
+  'image/x-eps':                      'ai',
 };
 
 async function identify(token: string): Promise<{ email: string; isCreator: boolean } | null> {

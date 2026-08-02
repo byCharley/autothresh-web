@@ -237,6 +237,8 @@ export function ChatWidget({ session }: { session: Session }) {
     await fetch(`/api/chat?resource=message&id=${id}`, { method: 'DELETE', headers: authH() });
   }
 
+  const IMAGE_MIME_TYPES = new Set(['image/jpeg','image/png','image/gif','image/webp']);
+
   async function uploadImage(file: File) {
     if (!activeTicket) return;
     setImageUploading(true);
@@ -254,10 +256,12 @@ export function ChatWidget({ session }: { session: Session }) {
       });
       const data = await r.json() as { url?: string; error?: string };
       if (data.url) {
+        const isImg = IMAGE_MIME_TYPES.has(file.type);
+        const message = isImg ? `[img]:${data.url}` : `[file]:${file.name}|${data.url}`;
         await fetch('/api/chat', {
           method: 'POST',
           headers: authH(),
-          body: JSON.stringify({ resource: 'message', ticket_id: activeTicket.id, message: `[img]:${data.url}` }),
+          body: JSON.stringify({ resource: 'message', ticket_id: activeTicket.id, message }),
         });
         loadMessages(activeTicket.id);
       }
@@ -495,6 +499,16 @@ export function ChatWidget({ session }: { session: Session }) {
                           {(() => {
                             const m = msg.message;
                             if (m.startsWith('[img]:')) return <img src={m.slice(6)} alt="attachment" onClick={() => setLightboxUrl(m.slice(6))} style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain', cursor: 'zoom-in' }} />;
+                            if (m.startsWith('[file]:')) {
+                              const rest = m.slice(7);
+                              const sep = rest.indexOf('|');
+                              const name = sep >= 0 ? rest.slice(0, sep) : rest;
+                              const url  = sep >= 0 ? rest.slice(sep + 1) : rest;
+                              return <a href={url} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--accent)', fontSize: 11, fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                                {name}
+                              </a>;
+                            }
                             const urlMatch = m.match(/(https?:\/\/\S+\.(?:jpg|jpeg|png|gif|webp)(?:\?\S*)?)/i);
                             if (urlMatch) {
                               const text = m.replace(urlMatch[0], '').trim();
@@ -607,7 +621,7 @@ export function ChatWidget({ session }: { session: Session }) {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={imageUploading}
-                  title="Attach image"
+                  title="Attach file (JPG, PNG, TIFF, PSD, AI)"
                   style={{ width: 36, flexShrink: 0, background: 'var(--surface-2)', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: imageUploading ? 0.4 : 0.7 }}
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -626,7 +640,7 @@ export function ChatWidget({ session }: { session: Session }) {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
               </div>
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ''; }} />
+              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/tiff,.tif,.tiff,image/vnd.adobe.photoshop,.psd,application/photoshop,application/postscript,.ai,application/illustrator,application/vnd.adobe.illustrator" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ''; }} />
               <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 4 }}>⌘↵ to send</div>
             </div>
           )}
