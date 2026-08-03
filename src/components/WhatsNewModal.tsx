@@ -15,6 +15,17 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-08-03',
+    label: 'DTG/DTF Solid Output Mode',
+    added: [
+      'Solid output mode in DTG/DTF — switch from Halftone to Solid to remove the background and export a clean transparent PNG without any halftone screen applied. Ideal for artwork that uses solid colours and doesn\'t need halftoning, like the "Don\'t Panic" design shown in the example.',
+    ],
+    improved: [
+      'Solid mode automatically removes dark fringe and shadow edges around artwork. Edge pixels that were blended against the background are mathematically deblended back to their true colour — a grey anti-aliased edge pixel on a black background is recovered as pure white, not printed as a dark halo.',
+      'Soft edges on transparent-background PNGs are sharpened to 100% opacity in Solid mode — semi-transparent edge pixels below 50% coverage are cut, solid pixels above are output at full opacity.',
+    ],
+  },
+  {
     date: '2026-08-02',
     label: 'DTG/DTF Edge Cleanup & Chat File Attachments',
     added: [

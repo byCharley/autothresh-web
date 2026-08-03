@@ -1109,7 +1109,7 @@ function DtgSection() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Slider label="Shadow Cutoff" value={Math.round(printSettings.shadow * 100)} min={0} max={80} step={1}
               onChange={v => updatePrintSettings({ shadow: v / 100 })} unit="%"
-              hint="Distance below this = no ink. Raise to remove faint edge fringing." />
+              hint={isHalftone ? "Distance below this = no ink. Raise to remove faint edge fringing." : "Raise to remove more of the background — pixels below this threshold become transparent."} />
             <Slider label="Highlight" value={Math.round(printSettings.highlight * 100)} min={20} max={100} step={1}
               onChange={v => updatePrintSettings({ highlight: v / 100 })} unit="%"
               hint="Distance above this = full ink. Lower to boost coverage of midtones." />
@@ -1187,7 +1187,7 @@ function DtgSection() {
           )}
           {!isHalftone && (
             <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 6 }}>
-              Background removed. Exports a solid transparent PNG — no halftone screen applied.
+              Background removed. Ink pixels output at 100% opacity — soft edges and dark fringe are cut automatically. Raise Shadow Cutoff to remove more background.
             </div>
           )}
         </div>

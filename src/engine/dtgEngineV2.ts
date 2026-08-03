@@ -170,11 +170,29 @@ export function runV2Halftone(
       if (u <= 0) continue;
 
       if (settings.halftone === false) {
-        // Solid mode: background removed, ink pixels output at full opacity.
-        outData[i]     = data[i];
-        outData[i + 1] = data[i + 1];
-        outData[i + 2] = data[i + 2];
-        outData[i + 3] = 255;
+        // Solid mode: hard threshold at coverage midpoint.
+        // u > 0.5 means this pixel is more "ink" than "background" — prints at full opacity.
+        // Pixels below 0.5 are transparent. This removes dark fringe (near-bg pixels have low
+        // rawDist → low u) and sharpens soft transparent-bg edges (low alpha → low dist → cut).
+        //
+        // Edge pixels that pass (rawDist > 0.5) are deblended: we reverse the background mix
+        // to recover the true artwork color. A grey (128,128,128) edge pixel on black bg with
+        // rawDist=0.5 deblends to white (255,255,255) — eliminates the dark shadow/halo.
+        if (u > 0.5) {
+          const pr = data[i], pg = data[i + 1], pb = data[i + 2];
+          // Max-channel alpha: the most-dominant channel relative to background
+          // gives the true compositing alpha — correct for all hues including
+          // white/grey on black (where Euclidean distance clamps to 1 and fails).
+          const aChanR = br < 255 ? Math.max(0, pr - br) / (255 - br) : 0;
+          const aChanG = bg < 255 ? Math.max(0, pg - bg) / (255 - bg) : 0;
+          const aChanB = bb < 255 ? Math.max(0, pb - bb) / (255 - bb) : 0;
+          const estAlpha = Math.max(0.5, aChanR, aChanG, aChanB);
+          const inv = 1 / estAlpha;
+          outData[i]     = Math.max(0, Math.min(255, Math.round(br + (pr - br) * inv)));
+          outData[i + 1] = Math.max(0, Math.min(255, Math.round(bg + (pg - bg) * inv)));
+          outData[i + 2] = Math.max(0, Math.min(255, Math.round(bb + (pb - bb) * inv)));
+          outData[i + 3] = 255;
+        }
       } else {
         const sx = x * cosA + y * sinA;
         const sy = -x * sinA + y * cosA;
