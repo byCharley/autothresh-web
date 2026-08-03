@@ -22,8 +22,9 @@ export interface V2Settings {
   highlight:     number;   // distance ceiling 0–1 (above = full ink), default 1
   gamma:         number;   // midtone gamma 0.25–4.0, default 1.0
   alphaClip:     number;   // 0–255: pixels with alpha ≤ this are transparent (internal prefilter, default 4)
-  alphaChoke:    number;   // 0–8: morphological erosion radius in pixels (pulls edge inward, helps transparent-bg PNGs)
+  alphaChoke:    number;   // 0–8: morphological erosion radius in pixels (pulls edge inward)
   minBrightness: number;   // 0–1: pixels with luminance below this are skipped — removes dark fringe on solid-bg images
+  halftone:      boolean;  // true = sine-wave halftone screen; false = solid output (bg removal only)
 }
 
 export const DEFAULT_V2_SETTINGS: V2Settings = {
@@ -36,6 +37,7 @@ export const DEFAULT_V2_SETTINGS: V2Settings = {
   alphaClip:     4,
   alphaChoke:    0,
   minBrightness: 0,
+  halftone:      true,
 };
 
 // Sample the 4 corners to auto-detect the background color.
@@ -167,15 +169,23 @@ export function runV2Halftone(
       const u = levelsMap(dist, settings.shadow, settings.highlight, settings.gamma);
       if (u <= 0) continue;
 
-      const sx = x * cosA + y * sinA;
-      const sy = -x * sinA + y * cosA;
-      const threshold = 0.5 * (1 + Math.sin(freq * sx) * Math.sin(freq * sy));
-
-      if (u > threshold) {
+      if (settings.halftone === false) {
+        // Solid mode: background removed, ink pixels output at full opacity.
         outData[i]     = data[i];
         outData[i + 1] = data[i + 1];
         outData[i + 2] = data[i + 2];
         outData[i + 3] = 255;
+      } else {
+        const sx = x * cosA + y * sinA;
+        const sy = -x * sinA + y * cosA;
+        const threshold = 0.5 * (1 + Math.sin(freq * sx) * Math.sin(freq * sy));
+
+        if (u > threshold) {
+          outData[i]     = data[i];
+          outData[i + 1] = data[i + 1];
+          outData[i + 2] = data[i + 2];
+          outData[i + 3] = 255;
+        }
       }
     }
   }

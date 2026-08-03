@@ -1015,6 +1015,8 @@ function DtgSection() {
     transition: 'all 0.12s', minWidth: 0,
   });
 
+  const isHalftone = printSettings.halftone !== false;
+
   const isChanged = (
     printSettings.lpi       !== DEFAULT_V2_SETTINGS.lpi       ||
     printSettings.angle     !== DEFAULT_V2_SETTINGS.angle     ||
@@ -1023,7 +1025,8 @@ function DtgSection() {
     printSettings.gamma     !== DEFAULT_V2_SETTINGS.gamma     ||
     printSettings.bgColor   !== DEFAULT_V2_SETTINGS.bgColor   ||
     (printSettings.alphaChoke    ?? 0) !== DEFAULT_V2_SETTINGS.alphaChoke ||
-    (printSettings.minBrightness ?? 0) !== DEFAULT_V2_SETTINGS.minBrightness
+    (printSettings.minBrightness ?? 0) !== DEFAULT_V2_SETTINGS.minBrightness ||
+    (printSettings.halftone ?? true)   !== DEFAULT_V2_SETTINGS.halftone
   );
 
   const bgColor = printSettings.bgColor;
@@ -1039,7 +1042,7 @@ function DtgSection() {
           border: '1px solid var(--border)', borderRadius: 4,
           padding: '7px 9px', marginBottom: 10,
         }}>
-          <strong style={{ color: 'var(--text)' }}>How it works:</strong> Each pixel's colour distance from the background drives dot size. Use the eyedropper to pick your background, or leave on Auto to sample the image corners.
+          <strong style={{ color: 'var(--text)' }}>How it works:</strong> Colour distance from the background drives ink coverage. Use <strong style={{ color: 'var(--text)' }}>Screen</strong> for halftone DTG output, or <strong style={{ color: 'var(--text)' }}>Solid</strong> to remove the background only — perfect for artwork that doesn't need halftoning.
         </div>
 
         {/* ── Background ── */}
@@ -1122,31 +1125,71 @@ function DtgSection() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <Slider label="Min Brightness" value={Math.round((printSettings.minBrightness ?? 0) * 100)} min={0} max={80} step={1}
               onChange={v => updatePrintSettings({ minBrightness: v / 100 })} unit="%"
-              hint="Pixels darker than this are skipped — cuts dark fringe on solid-background images. Try 10–30%." />
+              hint="Pixels darker than this are excluded — removes dark fringe on black-background artwork. Try 5–20%." />
             <Slider label="Edge Choke" value={printSettings.alphaChoke ?? 0} min={0} max={8} step={1}
               onChange={v => updatePrintSettings({ alphaChoke: v })} unit="px"
-              hint="Erodes edges inward by N pixels — removes anti-aliased fringe on transparent-background PNGs." />
+              hint="Shrinks the ink boundary inward by N pixels — removes anti-aliased fringe on all image types." />
           </div>
         </div>
 
-        {/* ── Screen ── */}
+        {/* ── Output ── */}
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={labelStyle}>Screen</span>
+            <span style={labelStyle}>Output</span>
             {isChanged && (
               <button className="btn btn-ghost" style={{ fontSize: 9, padding: '2px 8px', height: 20 }}
                 onClick={resetPrintSettings}>Reset All</button>
             )}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Slider label="Frequency" value={printSettings.lpi} min={10} max={85} step={1}
-              onChange={v => updatePrintSettings({ lpi: v })} unit=" LPI" />
-            <Slider label="Angle" value={printSettings.angle} min={0} max={180} step={0.5}
-              onChange={v => updatePrintSettings({ angle: v })} unit="°" />
+          {/* Screen / Solid toggle */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: isHalftone ? 12 : 0 }}>
+            <button
+              onClick={() => updatePrintSettings({ halftone: true })}
+              title="Apply sine-wave halftone screen — standard DTG output"
+              style={{
+                flex: 1, height: 30, fontSize: 10, fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.05em',
+                border: isHalftone ? '1.5px solid var(--accent)' : '1px solid var(--border-2)',
+                borderRadius: 4, cursor: 'pointer',
+                background: isHalftone ? 'color-mix(in srgb, var(--accent) 15%, var(--surface-2))' : 'var(--surface-2)',
+                color: isHalftone ? 'var(--accent)' : 'var(--text-dim)',
+                transition: 'all 0.12s',
+              }}
+            >
+              Halftone
+            </button>
+            <button
+              onClick={() => updatePrintSettings({ halftone: false })}
+              title="Remove background only — outputs solid transparent PNG with no halftone screen"
+              style={{
+                flex: 1, height: 30, fontSize: 10, fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.05em',
+                border: !isHalftone ? '1.5px solid var(--accent)' : '1px solid var(--border-2)',
+                borderRadius: 4, cursor: 'pointer',
+                background: !isHalftone ? 'color-mix(in srgb, var(--accent) 15%, var(--surface-2))' : 'var(--surface-2)',
+                color: !isHalftone ? 'var(--accent)' : 'var(--text-dim)',
+                transition: 'all 0.12s',
+              }}
+            >
+              Solid
+            </button>
           </div>
-          <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 8 }}>
-            Sine-wave screen. 45 LPI · 22.5° is a standard DTG target.
-          </div>
+          {isHalftone && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Slider label="Frequency" value={printSettings.lpi} min={10} max={85} step={1}
+                onChange={v => updatePrintSettings({ lpi: v })} unit=" LPI" />
+              <Slider label="Angle" value={printSettings.angle} min={0} max={180} step={0.5}
+                onChange={v => updatePrintSettings({ angle: v })} unit="°" />
+              <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7 }}>
+                Sine-wave screen. 45 LPI · 22.5° is a standard DTG target.
+              </div>
+            </div>
+          )}
+          {!isHalftone && (
+            <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7, marginTop: 6 }}>
+              Background removed. Exports a solid transparent PNG — no halftone screen applied.
+            </div>
+          )}
         </div>
 
         {/* ── Touch Up ── */}
