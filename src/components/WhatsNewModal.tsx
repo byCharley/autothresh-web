@@ -15,6 +15,18 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-08-02',
+    label: 'DTG/DTF Edge Cleanup & Chat File Attachments',
+    added: [
+      'Min Brightness slider in DTG/DTF Edge Cleanup — pixels darker than the threshold are excluded from halftone output. Eliminates the dark anti-aliased fringe that appears around white or light artwork on solid-colored backgrounds. Start around 10–30% if you\'re seeing a black border around your design.',
+      'Edge Choke slider in DTG/DTF Edge Cleanup — shrinks the ink boundary inward by the selected number of pixels before halftoning. Removes soft-edge fringe on all artwork types, including solid-background images where the old control had no effect.',
+      'Chat support now accepts design file attachments — attach JPG, PNG, PSD, AI, or TIFF files (up to 20 MB) directly to a support message so the team can see exactly what you\'re working with.',
+    ],
+    improved: [
+      'Edge Choke now applies to the ink coverage signal rather than the alpha channel, making it effective for solid-background images as well as transparent-background PNGs.',
+    ],
+  },
+  {
     date: '2026-07-25',
     label: 'Bottom Nav Masking & Solo Layer Button',
     added: [

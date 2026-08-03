@@ -15,21 +15,27 @@
 //   V2: per-pixel, color-distance-driven, direct ImageData math.
 
 export interface V2Settings {
-  bgColor: [number, number, number] | null; // null = auto-detect from corners
-  lpi: number;       // lines per inch → drives cellSizePx via dpi/lpi
-  angle: number;     // screen angle in degrees, default 22.5
-  shadow: number;    // distance floor 0–1 (below = no ink), default 0
-  highlight: number; // distance ceiling 0–1 (above = full ink), default 1
-  gamma: number;     // midtone gamma 0.25–4.0, default 1.0
+  bgColor:       [number, number, number] | null; // null = auto-detect from corners
+  lpi:           number;   // lines per inch → drives cellSizePx via dpi/lpi
+  angle:         number;   // screen angle in degrees, default 22.5
+  shadow:        number;   // distance floor 0–1 (below = no ink), default 0
+  highlight:     number;   // distance ceiling 0–1 (above = full ink), default 1
+  gamma:         number;   // midtone gamma 0.25–4.0, default 1.0
+  alphaClip:     number;   // 0–255: pixels with alpha ≤ this are transparent (internal prefilter, default 4)
+  alphaChoke:    number;   // 0–8: morphological erosion radius in pixels (pulls edge inward, helps transparent-bg PNGs)
+  minBrightness: number;   // 0–1: pixels with luminance below this are skipped — removes dark fringe on solid-bg images
 }
 
 export const DEFAULT_V2_SETTINGS: V2Settings = {
-  bgColor: null,
-  lpi: 45,
-  angle: 22.5,
-  shadow: 0,
-  highlight: 1,
-  gamma: 1.0,
+  bgColor:       null,
+  lpi:           45,
+  angle:         22.5,
+  shadow:        0,
+  highlight:     1,
+  gamma:         1.0,
+  alphaClip:     4,
+  alphaChoke:    0,
+  minBrightness: 0,
 };
 
 // Sample the 4 corners to auto-detect the background color.
@@ -83,61 +89,94 @@ export function runV2Halftone(
   const cosA = Math.cos(rad);
   const sinA = Math.sin(rad);
 
+  const alphaClipThresh = settings.alphaClip  ?? 4;
+  const minBrightThresh = (settings.minBrightness ?? 0) * 255;
+
+  // Pass 1: build a distMap — ink coverage signal (0–1) per pixel.
+  // Pixels that are transparent, too dark, or indistinguishable from background get 0.
+  // Semi-transparent pixels are weighted by their opacity so edge fringe fades naturally.
+  const distMap = new Float32Array(count);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const pidx = y * w + x;
+      const i    = pidx * 4;
+      const a    = data[i + 3];
+      if (a <= alphaClipThresh) continue;                              // transparent
+      const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      if (lum < minBrightThresh) continue;                             // too dark
+      const dr = data[i] - br, dg = data[i + 1] - bg, db = data[i + 2] - bb;
+      const rawDist = Math.min(1, Math.sqrt(dr * dr + dg * dg + db * db) / 255);
+      distMap[pidx] = rawDist * (a / 255);                            // alpha-weighted coverage
+    }
+  }
+
+  // Edge Choke: separable min filter on the distMap.
+  // Background/transparent pixels have distMap=0. The min filter propagates those zeros
+  // inward by chokeRadius pixels, eating away the design edge — works for both
+  // transparent-bg PNGs AND solid-bg images (bg pixels always have rawDist≈0).
+  const chokeRadius = Math.round(settings.alphaChoke ?? 0);
+  if (chokeRadius > 0) {
+    const tmp = new Float32Array(count);
+    for (let y = 0; y < h; y++) {
+      const off = y * w;
+      for (let x = 0; x < w; x++) {
+        let m = 1;
+        const x0 = Math.max(0, x - chokeRadius), x1 = Math.min(w - 1, x + chokeRadius);
+        for (let dx = x0; dx <= x1; dx++) { const v = distMap[off + dx]; if (v < m) m = v; }
+        tmp[off + x] = m;
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        let m = 1;
+        const y0 = Math.max(0, y - chokeRadius), y1 = Math.min(h - 1, y + chokeRadius);
+        for (let dy = y0; dy <= y1; dy++) { const v = tmp[dy * w + x]; if (v < m) m = v; }
+        distMap[y * w + x] = m;
+      }
+    }
+  }
+
+  // Pass 2: render halftone using the pre-computed (and possibly choked) distMap.
   const outData  = new Uint8ClampedArray(count * 4);
   const maskData = new Uint8ClampedArray(count * 4);
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
+      const pidx = y * w + x;
+      const i    = pidx * 4;
 
-      // BG mask visualization is always fully opaque so it previews correctly.
       maskData[i + 3] = 255;
 
-      if (data[i + 3] < 4) {
-        // Already transparent: show as dark checkerboard in the mask view.
+      const a = data[i + 3];
+      if (a <= alphaClipThresh) {
         const c = ((x >> 3) + (y >> 3)) & 1;
         maskData[i] = maskData[i + 1] = maskData[i + 2] = c ? 60 : 40;
         continue;
       }
 
-      // Color distance from background, normalized 0–1.
-      // Uses the same normalization as the reference (/ 255, clamped to 1),
-      // which means highly saturated colors can have distance up to ~1.73
-      // but are clamped to 1.0 — this ensures bright artwork is always fully printed.
-      const dr = data[i] - br;
-      const dg = data[i + 1] - bg;
-      const db = data[i + 2] - bb;
-      const rawDist = Math.min(1, Math.sqrt(dr * dr + dg * dg + db * db) / 255);
+      const dist = distMap[pidx];
 
-      // BG mask: near-bg pixels show as checkerboard, ink-area pixels show original color.
-      const isNearBg = rawDist < 0.10;
-      if (isNearBg) {
+      // BG mask visualization: near-zero dist = near-background = checkerboard
+      if (dist < 0.10) {
         const c = ((x >> 3) + (y >> 3)) & 1;
         maskData[i] = maskData[i + 1] = maskData[i + 2] = c ? 210 : 170;
       } else {
         maskData[i] = data[i]; maskData[i + 1] = data[i + 1]; maskData[i + 2] = data[i + 2];
       }
 
-      // Apply levels to the distance signal.
-      const u = levelsMap(rawDist, settings.shadow, settings.highlight, settings.gamma);
-      if (u <= 0) continue; // pure bg pixel — leave transparent
+      const u = levelsMap(dist, settings.shadow, settings.highlight, settings.gamma);
+      if (u <= 0) continue;
 
-      // Rotate pixel coordinates to screen space.
       const sx = x * cosA + y * sinA;
       const sy = -x * sinA + y * cosA;
-
-      // Sine-wave halftone threshold oscillates 0→1 at the screen frequency.
-      // The product of two shifted sines creates a smooth dot-grid pattern.
       const threshold = 0.5 * (1 + Math.sin(freq * sx) * Math.sin(freq * sy));
 
-      // Binary halftone: original color or transparent.
       if (u > threshold) {
         outData[i]     = data[i];
         outData[i + 1] = data[i + 1];
         outData[i + 2] = data[i + 2];
         outData[i + 3] = 255;
       }
-      // else: stays 0 (transparent)
     }
   }
 

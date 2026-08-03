@@ -1016,12 +1016,14 @@ function DtgSection() {
   });
 
   const isChanged = (
-    printSettings.lpi     !== DEFAULT_V2_SETTINGS.lpi     ||
-    printSettings.angle   !== DEFAULT_V2_SETTINGS.angle   ||
-    printSettings.shadow  !== DEFAULT_V2_SETTINGS.shadow  ||
+    printSettings.lpi       !== DEFAULT_V2_SETTINGS.lpi       ||
+    printSettings.angle     !== DEFAULT_V2_SETTINGS.angle     ||
+    printSettings.shadow    !== DEFAULT_V2_SETTINGS.shadow    ||
     printSettings.highlight !== DEFAULT_V2_SETTINGS.highlight ||
-    printSettings.gamma   !== DEFAULT_V2_SETTINGS.gamma   ||
-    printSettings.bgColor !== DEFAULT_V2_SETTINGS.bgColor
+    printSettings.gamma     !== DEFAULT_V2_SETTINGS.gamma     ||
+    printSettings.bgColor   !== DEFAULT_V2_SETTINGS.bgColor   ||
+    (printSettings.alphaChoke    ?? 0) !== DEFAULT_V2_SETTINGS.alphaChoke ||
+    (printSettings.minBrightness ?? 0) !== DEFAULT_V2_SETTINGS.minBrightness
   );
 
   const bgColor = printSettings.bgColor;
@@ -1111,6 +1113,19 @@ function DtgSection() {
             <Slider label="Gamma" value={printSettings.gamma} min={0.25} max={4} step={0.05}
               onChange={v => updatePrintSettings({ gamma: Math.round(v * 100) / 100 })}
               hint="Midtone curve. >1 opens up shadows; <1 compresses them." />
+          </div>
+        </div>
+
+        {/* ── Edge Cleanup ── */}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10, marginBottom: 4 }}>
+          <div style={subheadStyle}><span>Edge Cleanup</span></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Slider label="Min Brightness" value={Math.round((printSettings.minBrightness ?? 0) * 100)} min={0} max={80} step={1}
+              onChange={v => updatePrintSettings({ minBrightness: v / 100 })} unit="%"
+              hint="Pixels darker than this are skipped — cuts dark fringe on solid-background images. Try 10–30%." />
+            <Slider label="Edge Choke" value={printSettings.alphaChoke ?? 0} min={0} max={8} step={1}
+              onChange={v => updatePrintSettings({ alphaChoke: v })} unit="px"
+              hint="Erodes edges inward by N pixels — removes anti-aliased fringe on transparent-background PNGs." />
           </div>
         </div>
 
