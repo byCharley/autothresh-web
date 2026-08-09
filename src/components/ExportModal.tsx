@@ -653,7 +653,7 @@ export function ExportModal({ onClose, onExport, onGenerateSheet, generatingShee
         </div>
 
         {/* Color info toggle */}
-        {(
+        {!isTexture && (
           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
@@ -680,7 +680,7 @@ export function ExportModal({ onClose, onExport, onGenerateSheet, generatingShee
         {/* Pantone names toggle hidden pending licensing */}
 
         {/* Underbase */}
-        {(
+        {!isTexture && (
           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: includeUnderbase ? 10 : 0 }}>
               <div>

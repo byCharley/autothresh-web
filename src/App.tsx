@@ -716,6 +716,7 @@ function App() {
         const overlayImages = await Promise.all(visibleOverlays.map(ov =>
           new Promise<HTMLImageElement | null>(resolve => {
             const img = new Image();
+            img.crossOrigin = 'anonymous';
             img.onload = () => resolve(img);
             img.onerror = () => resolve(null);
             img.src = ov.path;
