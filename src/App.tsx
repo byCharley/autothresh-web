@@ -721,6 +721,10 @@ function App() {
             img.src = ov.path;
           })
         ));
+        // Save alpha before compositing — restored after to prevent texture bleeding
+        // into transparent areas (canvas blend modes pass source through when backdrop alpha=0).
+        const savedAlpha = new Uint8Array(textureComposite.data.length >> 2);
+        for (let i = 0; i < savedAlpha.length; i++) savedAlpha[i] = textureComposite.data[i * 4 + 3];
         const overlayCanvas = document.createElement('canvas');
         overlayCanvas.width = artScaleW; overlayCanvas.height = artScaleH;
         const oCtx = overlayCanvas.getContext('2d')!;
@@ -763,6 +767,7 @@ function App() {
           oCtx.globalCompositeOperation = 'source-over';
         }
         textureComposite = oCtx.getImageData(0, 0, artScaleW, artScaleH);
+        for (let i = 0; i < savedAlpha.length; i++) textureComposite.data[i * 4 + 3] = savedAlpha[i];
       }
       // 5. Distress texture mask
       if (textureEnabled) {

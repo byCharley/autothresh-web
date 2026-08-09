@@ -1354,6 +1354,14 @@ export function CanvasView() {
 
           // Composite surface layers (overlays) — pure canvas ops, GPU-accelerated
           if (grainOverlays.length > 0) {
+            // Save alpha before any overlay compositing. Canvas blend modes do not preserve
+            // the backdrop alpha — when backdrop is transparent (alpha=0), the blend formula
+            // reduces to just the source pixel, making textures appear on the background.
+            // Restoring alpha after all overlays ensures blend modes only affect colour on
+            // existing artwork pixels, matching Photoshop's behaviour.
+            const savedAlpha = new Uint8Array(artComposite.data.length >> 2);
+            for (let i = 0; i < savedAlpha.length; i++) savedAlpha[i] = artComposite.data[i * 4 + 3];
+
             const overlayCanvas = document.createElement('canvas');
             overlayCanvas.width = artPrevW; overlayCanvas.height = artPrevH;
             const oCtx = overlayCanvas.getContext('2d')!;
@@ -1411,6 +1419,8 @@ export function CanvasView() {
               oCtx.globalCompositeOperation = 'source-over';
             }
             artComposite = oCtx.getImageData(0, 0, artPrevW, artPrevH);
+            // Restore original alpha — blend modes affect colour only, not shape.
+            for (let i = 0; i < savedAlpha.length; i++) artComposite.data[i * 4 + 3] = savedAlpha[i];
           }
 
           // Distressed texture overlay (same as other modes)
