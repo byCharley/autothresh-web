@@ -15,6 +15,13 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-08-09',
+    label: 'Texture Mode Export Fix',
+    fixed: [
+      'Texture mode exports now match the preview exactly — colour blend, grain overlays, Xerox effect, and distress texture are all applied to the exported file. Previously the export was ignoring all texture settings and producing a plain threshold separation instead.',
+    ],
+  },
+  {
     date: '2026-08-03',
     label: 'DTG/DTF Solid Output Mode',
     added: [
