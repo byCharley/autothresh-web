@@ -16,9 +16,12 @@ interface Entry {
 export const CHANGELOG: Entry[] = [
   {
     date: '2026-08-09',
-    label: 'Texture Mode Export Fix',
+    label: 'Texture Mode Fixes',
     fixed: [
       'Texture mode exports now match the preview exactly — colour blend, grain overlays, Xerox effect, and distress texture are all applied to the exported file. Previously the export was ignoring all texture settings and producing a plain threshold separation instead.',
+      'Grain overlay blend modes (Multiply, Screen, Overlay, etc.) now work correctly — textures only affect artwork pixels and no longer bleed into the transparent background area. Matches standard Photoshop blend mode behaviour.',
+      'Texture export no longer throws a canvas security error when grain overlays are active.',
+      'Export modal in Texture mode simplified — Color Reference and White Underbase options hidden since they do not apply to a flat composite export.',
     ],
   },
   {
