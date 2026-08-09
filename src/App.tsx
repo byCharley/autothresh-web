@@ -27,7 +27,8 @@ import { useStore } from './store/useStore';
 import { useHistorySync } from './hooks/useHistorySync';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { paletteSeparate, renderPaletteComposite, bayerOrder } from './engine/colorSeparation';
-import { colorSeparate, renderColorSepComposite } from './engine/colorSeparator';
+import { colorSeparate, renderColorSepComposite, detectColorSepColors, renderColorSepCompositeFromLayers } from './engine/colorSeparator';
+import { runXerox } from './engine/xeroxEngine';
 import type { RGB } from './engine/colorSeparation';
 import {
   processImage, applyKnockout, renderComposite, renderCmykSmooth, garmentRgbFromParam,
@@ -196,6 +197,10 @@ function App() {
     bgRemovalEnabled, bgTolerance, regMarkPadding, documentBleed, imageAdjustments, canvasColor, showFabricBg,
     documentDpi, documentWidthIn, documentHeightIn, showRegistrationMarks, imageFileName,
     textureEnabled, textureType, textureIntensity, textureScale, textureWidth, textureSeed,
+    grainColorBlend, grainColorCount, grainBlur,
+    grainPattern, grainPatternScale, grainPatternDensity, grainPatternAngle,
+    grainOverlays,
+    xeroxEnabled, xeroxSettings,
     separationMode, cmykLpi, cmykAngles, cmykParams, cmykQuality,
     proCmykSettings,
     paletteColors, paletteVisibility, palettePattern, palettePatternScale,
@@ -668,6 +673,110 @@ function App() {
         }
       }
       artLayers = [];
+    } else if (separationMode === 'texture') {
+      // Replicate the CanvasView texture pipeline at export resolution.
+      // 1. Optional pre-blur (scale radius by exportScaleFactor to match preview appearance)
+      let blurredImage = artImageData;
+      if (grainBlur > 0) {
+        const srcC = document.createElement('canvas');
+        srcC.width = artScaleW; srcC.height = artScaleH;
+        srcC.getContext('2d')!.putImageData(artImageData, 0, 0);
+        const blurC = document.createElement('canvas');
+        blurC.width = artScaleW; blurC.height = artScaleH;
+        const blurCtx = blurC.getContext('2d')!;
+        blurCtx.filter = `blur(${grainBlur * exportScaleFactor}px)`;
+        blurCtx.drawImage(srcC, 0, 0);
+        blurCtx.filter = 'none';
+        blurredImage = blurCtx.getImageData(0, 0, artScaleW, artScaleH);
+      }
+      // 2. Adjustments → color sep
+      const adjGrain = applyAdjToImageData(blurredImage);
+      const baseColors = detectColorSepColors(adjGrain, grainColorCount, 0.7, artBgMask, importanceMap);
+      const grainSettings = {
+        numColors: grainColorCount, colorPriority: 0.7,
+        pattern: grainPattern, patternScale: grainPatternScale,
+        patternDensity: grainPatternDensity, patternAngle: grainPatternAngle,
+      };
+      const { layers: grainLayers } = colorSeparate(adjGrain, grainSettings, artBgMask, baseColors, importanceMap);
+      // 3. Color blend (grainColorBlend 0=B/W, 100=full color)
+      const t = grainColorBlend / 100;
+      const blendedColors: typeof baseColors = baseColors.map(([r, g, b]) => {
+        const lum = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+        return [Math.round(lum + (r - lum) * t), Math.round(lum + (g - lum) * t), Math.round(lum + (b - lum) * t)];
+      });
+      let textureComposite = renderColorSepCompositeFromLayers(grainLayers, blendedColors, {}, artScaleW, artScaleH);
+      if (artBgMask) {
+        for (let i = 0; i < artBgMask.length; i++) {
+          if (artBgMask[i] === 255) textureComposite.data[i * 4 + 3] = 0;
+        }
+      }
+      // 4. Grain overlays — load images, then composite with blend modes
+      const visibleOverlays = grainOverlays.filter(ov => ov.visible !== false);
+      if (visibleOverlays.length > 0) {
+        const overlayImages = await Promise.all(visibleOverlays.map(ov =>
+          new Promise<HTMLImageElement | null>(resolve => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => resolve(null);
+            img.src = ov.path;
+          })
+        ));
+        const overlayCanvas = document.createElement('canvas');
+        overlayCanvas.width = artScaleW; overlayCanvas.height = artScaleH;
+        const oCtx = overlayCanvas.getContext('2d')!;
+        oCtx.putImageData(textureComposite, 0, 0);
+        for (let oi = 0; oi < visibleOverlays.length; oi++) {
+          const ov = visibleOverlays[oi];
+          const img = overlayImages[oi];
+          if (!img) continue;
+          const scale = ov.scale ?? 1;
+          const tw = Math.max(1, Math.round(artScaleW * scale));
+          const th = Math.max(1, Math.round(artScaleH * scale));
+          const hasLevels = ov.levelsIn && (ov.levelsIn[0] !== 0 || ov.levelsIn[1] !== 255);
+          const needsTemp = (ov.clipToArtwork && artBgMask) || hasLevels || ov.invert || ov.grayscale;
+          if (needsTemp) {
+            const tmpC = document.createElement('canvas');
+            tmpC.width = artScaleW; tmpC.height = artScaleH;
+            const tCtx = tmpC.getContext('2d')!;
+            if (scale <= 1) { for (let y = 0; y < artScaleH; y += th) for (let x = 0; x < artScaleW; x += tw) tCtx.drawImage(img, x, y, tw, th); }
+            else             { tCtx.drawImage(img, 0, 0, tw, th); }
+            const td = tCtx.getImageData(0, 0, artScaleW, artScaleH);
+            const [inBlack, inWhite] = ov.levelsIn ?? [0, 255];
+            const range = Math.max(1, inWhite - inBlack);
+            for (let pi = 0; pi < td.data.length; pi += 4) {
+              if (ov.invert)    { td.data[pi] = 255-td.data[pi]; td.data[pi+1] = 255-td.data[pi+1]; td.data[pi+2] = 255-td.data[pi+2]; }
+              if (ov.grayscale) { const lum = Math.round(td.data[pi]*0.299+td.data[pi+1]*0.587+td.data[pi+2]*0.114); td.data[pi]=td.data[pi+1]=td.data[pi+2]=lum; }
+              if (hasLevels)    { for (let c = 0; c < 3; c++) td.data[pi+c] = Math.round(Math.max(0,Math.min(1,(td.data[pi+c]-inBlack)/range))*255); }
+              if (ov.clipToArtwork && artBgMask && artBgMask[pi>>2] === 255) td.data[pi+3] = 0;
+            }
+            tCtx.putImageData(td, 0, 0);
+            oCtx.globalAlpha = ov.opacity / 100;
+            oCtx.globalCompositeOperation = ov.blendMode as GlobalCompositeOperation;
+            oCtx.drawImage(tmpC, 0, 0);
+          } else {
+            oCtx.globalAlpha = ov.opacity / 100;
+            oCtx.globalCompositeOperation = ov.blendMode as GlobalCompositeOperation;
+            if (scale <= 1) { for (let y = 0; y < artScaleH; y += th) for (let x = 0; x < artScaleW; x += tw) oCtx.drawImage(img, x, y, tw, th); }
+            else             { oCtx.drawImage(img, 0, 0, tw, th); }
+          }
+          oCtx.globalAlpha = 1;
+          oCtx.globalCompositeOperation = 'source-over';
+        }
+        textureComposite = oCtx.getImageData(0, 0, artScaleW, artScaleH);
+      }
+      // 5. Distress texture mask
+      if (textureEnabled) {
+        const texMask = generateTextureMask(artScaleW, artScaleH, textureType, textureIntensity, textureScale * exportScaleFactor, textureWidth, textureSeed);
+        for (let i = 0; i < texMask.length; i++) {
+          if (texMask[i] === 0) textureComposite.data[i * 4 + 3] = 0;
+        }
+      }
+      // 6. Xerox post-process
+      if (xeroxEnabled) {
+        textureComposite = runXerox(textureComposite, xeroxSettings);
+      }
+      dtgExportImageData = textureComposite;
+      artLayers = [];
     } else {
       const resolved = resolvePatterns(layers, globalPattern);
       artLayers = processImage(artImageData, resolved, false, artBgMask, imageAdjustments, exportScaleFactor, importanceMap);
@@ -801,7 +910,7 @@ function App() {
           paletteDensity, paletteAngle, paletteSoftness, importanceMap);
       } else if (separationMode === 'color-sep' && csExportImageData && csExportSettings) {
         artComposite = renderColorSepComposite(csExportImageData, csExportColors, colorSepVisibility, csExportSettings, artBgMask, importanceMap);
-      } else if (separationMode === 'dtg' && dtgExportImageData) {
+      } else if ((separationMode === 'dtg' || separationMode === 'texture') && dtgExportImageData) {
         artComposite = dtgExportImageData;
       } else {
         artComposite = renderComposite(artLayers, artScaleW, artScaleH, true, '#ffffff', !knockoutEnabled);
