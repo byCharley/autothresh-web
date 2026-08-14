@@ -15,6 +15,13 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-08-13',
+    label: 'Mobile Export Fix',
+    fixed: [
+      'Exporting on iPhone or iPad (Chrome or Safari) no longer wipes your work. Previously, tapping Export would show "Verifying…" and clear all edits because iOS does not support browser-based file downloads — the app was navigating away from itself. Exports on mobile now use the iOS Share Sheet so you can save directly to Files, Photos, or any app.',
+    ],
+  },
+  {
     date: '2026-08-09',
     label: 'Texture Mode Fixes',
     fixed: [

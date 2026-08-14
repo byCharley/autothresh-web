@@ -404,6 +404,33 @@ function App() {
     }
     const [{ default: JSZip }, { saveAs }, { writePsd }, { PDFDocument }] = modResult;
 
+    // iOS (Chrome/Safari on iPhone/iPad) does not support the `download` attribute:
+    // clicking a blob URL navigates the current page away, wiping React state.
+    // Use Web Share API (iOS 14+) so the user gets the native share sheet to save
+    // to Files/Photos. Fall back to opening in a new tab for older iOS.
+    const saveFile = async (blob: Blob, filename: string) => {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        const file = new File([blob], filename, { type: blob.type });
+        if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+          try { await navigator.share({ files: [file] }); return; } catch (e) {
+            if ((e as Error).name === 'AbortError') return; // user dismissed share sheet
+          }
+        }
+        // Fallback: open in new tab — user can long-press to save without leaving the app
+        const url = URL.createObjectURL(blob);
+        const win = window.open(url, '_blank');
+        if (!win) { // popup blocked — try anchor with target=_blank
+          const a = document.createElement('a');
+          a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click();
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        return;
+      }
+      saveFile(blob, filename);
+    };
+
     const mode = _mode;
 
     // ── Document geometry ────────────────────────────────────────────────────
@@ -529,7 +556,7 @@ function App() {
         }
       }
       flatCanvas.toBlob(blob => {
-        if (blob) saveAs(blob, `${fileName || 'autothresh'}.png`);
+        if (blob) saveFile(blob, `${fileName || 'autothresh'}.png`);
       }, 'image/png');
       return;
     }
@@ -1083,7 +1110,7 @@ function App() {
       fCtx.fillRect(0, 0, flat.width, flat.height);
       fCtx.drawImage(c, 0, 0);
       const jpegBlob = await new Promise<Blob>((res) => flat.toBlob((b) => res(b!), 'image/jpeg', 0.95));
-      saveAs(jpegBlob, `${baseName}-texture.jpg`);
+      saveFile(jpegBlob, `${baseName}-texture.jpg`);
       return;
     }
 
@@ -1157,7 +1184,7 @@ function App() {
               cropCanvas.width = W; cropCanvas.height = H;
               cropCanvas.getContext('2d')!.drawImage(artCanvas, 0, 0);
             }
-            saveAs(await pngOf(cropCanvas), `${baseName}-${suffix}.png`);
+            saveFile(await pngOf(cropCanvas), `${baseName}-${suffix}.png`);
           } else {
             // Full doc canvas — place artwork at its document position
             const docCanvas = document.createElement('canvas');
@@ -1165,10 +1192,10 @@ function App() {
             const dCtx = docCanvas.getContext('2d')!;
             if (withFabricView) { dCtx.fillStyle = canvasColor; dCtx.fillRect(0, 0, docPxW, docPxH); }
             dCtx.drawImage(artCanvas, artOffX, artOffY);
-            saveAs(await pngOf(docCanvas), `${baseName}-${suffix}.png`);
+            saveFile(await pngOf(docCanvas), `${baseName}-${suffix}.png`);
           }
         } else {
-          saveAs(await pngOf(buildCompositeCanvas(separationMode !== 'texture' && separationMode !== 'dtg')), `${baseName}-${suffix}.png`);
+          saveFile(await pngOf(buildCompositeCanvas(separationMode !== 'texture' && separationMode !== 'dtg')), `${baseName}-${suffix}.png`);
         }
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         // Plates (grayscale positives) + proofs on white and on garment
@@ -1180,15 +1207,15 @@ function App() {
         zip.file('proof-on-garment.png', await pngOf(buildCompositeCanvas(false)));
         zip.file('proof-on-white.png',   await pngOf(buildCompositeCanvas(false, '#ffffff')));
         const suffix = separationMode === 'cmyk-pro' ? 'cmyk-pro-plates' : 'cmyk-plates';
-        saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-${suffix}.zip`);
+        saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-${suffix}.zip`);
       } else if (separationMode === 'palette') {
         if (underbase) {
           const zip = new JSZip();
           zip.file('underbase.png',  await pngOf(buildUnderbaseCanvas(underbaseChoke)));
           zip.file('composite.png',  await pngOf(buildCompositeCanvas(false)));
-          saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-dither.zip`);
+          saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-dither.zip`);
         } else {
-          saveAs(await pngOf(buildCompositeCanvas(false)), `${baseName}-dither.png`);
+          saveFile(await pngOf(buildCompositeCanvas(false)), `${baseName}-dither.png`);
         }
       } else {
         const zip    = new JSZip();
@@ -1203,7 +1230,7 @@ function App() {
             : artLayers.map(l => l.color as RGB);
           if (refColors.length > 0) folder.file('color-reference.png', await pngOf(buildColorRefCanvas(refColors, documentDpi)));
         }
-        saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen.zip`);
+        saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen.zip`);
       }
       return;
     }
@@ -1230,7 +1257,7 @@ function App() {
             { name: 'Composite', canvas: buildCompositeCanvas(true), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
           ],
         });
-        saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-dtg.psd`);
+        saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-dtg.psd`);
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         if (separationMode === 'cmyk-pro') {
           // CMYK Pro PSD layer order (bottom → top): Garment Substrate, plate layers (hidden), Color Proof.
@@ -1270,7 +1297,7 @@ function App() {
               { name: 'Color Proof', canvas: proofCanvas, top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
             ],
           });
-          saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk-pro.psd`);
+          saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk-pro.psd`);
         } else {
           // Legacy CMYK mode PSD
           const substrateCanvas = document.createElement('canvas');
@@ -1290,7 +1317,7 @@ function App() {
               ...plateLayers,
             ],
           });
-          saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk.psd`);
+          saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk.psd`);
         }
       } else if (separationMode === 'palette') {
         // PSD: White background + colored dithered ink layers
@@ -1312,7 +1339,7 @@ function App() {
             ...plateLayers,
           ],
         });
-        saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-color-match.psd`);
+        saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-color-match.psd`);
       } else {
         const psdLayers = visibleLayers.map((pl) => ({
           name:      layerNameHex(pl),
@@ -1331,7 +1358,7 @@ function App() {
           opacity: 1,
         }] : [];
         const buffer = writePsd({ width: docPxW, height: docPxH, ...psdRes, children: [bgLayer, ...ubPsdLayer, ...psdLayers, ...colorRefLayer] });
-        saveAs(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-screen.psd`);
+        saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-screen.psd`);
       }
       return;
     }
@@ -1362,7 +1389,7 @@ function App() {
 
       const suffix = separationMode === 'palette' ? 'dither' : mode;
       const pdfBytes = await pdfDoc.save();
-      saveAs(new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }), `${baseName}-${suffix}.pdf`);
+      saveFile(new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' }), `${baseName}-${suffix}.pdf`);
       return;
     }
 
@@ -1373,7 +1400,7 @@ function App() {
 
       if (mode === 'dtg') {
         const buf = encodeTiff(getPixels(buildCompositeCanvas(true)), documentDpi);
-        saveAs(new Blob([buf], { type: 'image/tiff' }), `${baseName}-dtg.tiff`);
+        saveFile(new Blob([buf], { type: 'image/tiff' }), `${baseName}-dtg.tiff`);
       } else {
         const zip    = new JSZip();
         const folder = zip.folder(baseName)!;
@@ -1388,7 +1415,7 @@ function App() {
             : artLayers.map(l => l.color as RGB);
           if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors, documentDpi)));
         }
-        saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-tiff.zip`);
+        saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-tiff.zip`);
       }
     }
 
@@ -1405,7 +1432,7 @@ function App() {
       if (mode === 'dtg' || separationMode === 'palette') {
         // Single composite RGB EPS
         const eps = encodeEps(buildCompositeCanvas(false), { dpi: documentDpi, title: baseName, grayscale: false });
-        saveAs(new Blob([eps.buffer as ArrayBuffer], { type: 'application/postscript' }), `${baseName}-composite.eps`);
+        saveFile(new Blob([eps.buffer as ArrayBuffer], { type: 'application/postscript' }), `${baseName}-composite.eps`);
 
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         // One grayscale plate EPS per CMYK channel
@@ -1416,7 +1443,7 @@ function App() {
           folder.file(`${name}.eps`, epsOf(buildCmykPlateCanvas(pl), layerName(pl)));
         }
         const suffix = separationMode === 'cmyk-pro' ? 'cmyk-pro-eps' : 'cmyk-eps';
-        saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-${suffix}.zip`);
+        saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-${suffix}.zip`);
 
       } else {
         // Screen-print separation modes: one EPS per color layer + optional underbase
@@ -1433,7 +1460,7 @@ function App() {
           const refColors: RGB[] = separationMode === 'color-sep' ? csExportColors : artLayers.map(l => l.color as RGB);
           if (refColors.length > 0) folder.file('color-reference.png', await canvasToBlob(buildColorRefCanvas(refColors, documentDpi)));
         }
-        saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-eps.zip`);
+        saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-screen-eps.zip`);
       }
       return;
     }
@@ -1536,7 +1563,7 @@ function App() {
       ].join('\n');
 
       folder.file('README-CorelDRAW.txt', readme);
-      saveAs(await zip.generateAsync({ type: 'blob' }), `${baseName}-corel.zip`);
+      saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-corel.zip`);
       return;
     }
   };
