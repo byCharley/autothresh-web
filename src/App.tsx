@@ -428,7 +428,7 @@ function App() {
         setTimeout(() => URL.revokeObjectURL(url), 60_000);
         return;
       }
-      saveFile(blob, filename);
+      saveAs(blob, filename);
     };
 
     const mode = _mode;
