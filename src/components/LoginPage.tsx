@@ -78,16 +78,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
               Sign In to AutoThresh™ Web
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.65 }}>
-              Use your{' '}
-              <a
-                href="https://www.charleypangus.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: 'var(--text)', fontWeight: 600, textDecoration: 'none' }}
-              >
-                Charley Pangus
-              </a>
-              {' '}account email — you'll receive a one-time sign-in code.
+              Use the email you subscribed with — you'll receive a one-time sign-in code.
             </div>
           </div>
 
