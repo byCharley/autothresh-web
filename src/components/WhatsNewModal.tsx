@@ -20,6 +20,9 @@ export const CHANGELOG: Entry[] = [
     added: [
       'Pause, resume, or cancel your subscription from your name in the top bar — open the menu and tap Manage subscription. Cancelling turns off auto-renew — you keep access through the end of your current period. Purchases are final and are not refunded.',
     ],
+    fixed: [
+      'Annual trial and subscription accounts were sometimes shown as Lifetime. Your badge now follows the plan you actually bought.',
+    ],
   },
   {
     date: '2026-08-20',

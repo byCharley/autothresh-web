@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { checkLdtLifetime, checkTesterStatus, sealCheckSubscription, resolveMembership } from './_lib/membership';
 
 const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
@@ -31,20 +32,6 @@ function sbPost(table: string, data: Record<string, unknown>) {
 
 function logEvent(data: Record<string, unknown>) {
   sbPost('analytics_events', data);
-}
-
-async function checkTesterStatus(email: string): Promise<'active' | 'paused' | null> {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
-  try {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/testers?email=eq.${encodeURIComponent(email)}&select=status&limit=1`,
-      { headers: { 'Authorization': `Bearer ${SUPABASE_KEY}`, 'apikey': SUPABASE_KEY } }
-    );
-    if (!r.ok) return null;
-    const rows = await r.json() as Array<{ status: string }>;
-    if (!rows.length) return null;
-    return rows[0].status === 'paused' ? 'paused' : 'active';
-  } catch { return null; }
 }
 
 async function checkSecurityFlag(email: string): Promise<boolean> {
@@ -106,122 +93,6 @@ function runFraudCheck(email: string, ip: string, firstName: string, subscriptio
 
 // Customer Account API
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
-
-const SEAL_TOKEN   = process.env.SEAL_API_TOKEN ?? process.env.SEAL_TOKEN ?? '';
-const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
-const LDT_ACCESS   = process.env.LDT_ACCESS ?? '';
-const LDT_API_URL  = 'https://digital.ldtsoft.work/api/integrate';
-
-async function checkLdtLicense(email: string): Promise<boolean> {
-  if (!LDT_ACCESS) return false;
-  try {
-    const r = await fetch(`${LDT_API_URL}/order/search?email=${encodeURIComponent(email)}&page=1&pageSize=20`, {
-      headers: { 'LDT-X-Access-Token': LDT_ACCESS },
-    });
-    if (!r.ok) return false;
-    const raw = JSON.parse(await r.text()) as unknown;
-    let orders: unknown[] = [];
-    if (Array.isArray(raw)) { orders = raw; }
-    else if (raw && typeof raw === 'object') {
-      const obj = raw as Record<string, unknown>;
-      for (const key of ['data', 'orders', 'items', 'result', 'list']) {
-        if (Array.isArray(obj[key])) { orders = obj[key] as unknown[]; break; }
-      }
-    }
-    const isWebOrder = (o: unknown) => {
-      const json = JSON.stringify(o).toLowerCase().replace(/™/g, '');
-      return json.includes('autothresh web') && !json.includes('autothresh pro') && !json.includes('autothresh lite');
-    };
-    return orders.filter(isWebOrder).length > 0;
-  } catch { return false; }
-}
-
-async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; activeSubs: number; everInSeal: boolean; subscriptionStatus?: string; nextBillingDate?: string; planTitle?: string }> {
-  try {
-    const url = `${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`;
-    const r = await fetch(url, { headers: { 'X-Seal-Token': SEAL_TOKEN } });
-    const rawText = await r.text();
-    console.log('Seal HTTP status:', r.status);
-    if (!r.ok) return { hasSub: false, activeSubs: 0, everInSeal: false };
-
-    const raw = JSON.parse(rawText) as unknown;
-    let subs: Array<Record<string, unknown>> = [];
-    if (Array.isArray(raw)) {
-      subs = raw as Array<Record<string, unknown>>;
-    } else if (raw && typeof raw === 'object') {
-      const obj = raw as Record<string, unknown>;
-      const payload = obj.payload as Record<string, unknown> | undefined;
-      if (payload && Array.isArray(payload.subscriptions)) {
-        subs = payload.subscriptions as Array<Record<string, unknown>>;
-      } else {
-        for (const key of ['subscriptions', 'data', 'result', 'subscription_contracts']) {
-          if (Array.isArray(obj[key])) { subs = obj[key] as Array<Record<string, unknown>>; break; }
-        }
-      }
-    }
-
-    const everInSeal = subs.length > 0;
-    let nextBillingDate: string | undefined;
-    let planTitle: string | undefined;
-    let subscriptionStatus: string | undefined;
-    let hasSub = false;
-    let activeSubs = 0;
-    const TRIAL_DAYS = parseInt(process.env.SEAL_TRIAL_DAYS ?? '3');
-
-    for (const s of subs) {
-      const st = String(s.status ?? '').toUpperCase();
-      // Trial only applies to annual plans — monthly subscribers pay immediately
-      const billingInterval = String(s.billing_interval ?? '').toLowerCase();
-      const isAnnualPlan = billingInterval.includes('year') || billingInterval.includes('annual');
-      const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
-      const isTrialType = Number(s.subscription_type) === 2 && isAnnualPlan;
-      const orderPlaced = s.order_placed as string | undefined;
-      const trialEndInferred = isTrialType && orderPlaced
-        ? new Date(new Date(orderPlaced).getTime() + TRIAL_DAYS * 86_400_000).toISOString()
-        : undefined;
-      const trialEndRaw = trialEndExplicit ?? trialEndInferred;
-      const trialStillActive = !!trialEndRaw && new Date(trialEndRaw) > new Date();
-      const valid = st === 'ACTIVE' || st === 'TRIAL';
-      const isInTrial = (st === 'TRIAL' || (st === 'ACTIVE' && trialStillActive)) && isAnnualPlan;
-
-      const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
-      const itemPlanName = items[0]?.selling_plan_name ?? items[0]?.title;
-
-      if (valid) {
-        activeSubs++;
-        hasSub = true;
-        if (!subscriptionStatus) {
-          subscriptionStatus = isInTrial ? 'trial' : st.toLowerCase();
-          nextBillingDate = isInTrial
-            ? trialEndRaw
-            : (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
-          planTitle = (s.plan_title ?? s.product_title ?? s.plan_name ?? itemPlanName) as string | undefined;
-        }
-      }
-    }
-    if (!hasSub) {
-      for (const s of subs) {
-        const st = String(s.status ?? '').toUpperCase();
-        if (st !== 'PAUSED') continue;
-        const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
-        subscriptionStatus = 'paused';
-        planTitle = (s.plan_title ?? s.product_title ?? s.plan_name ?? items[0]?.selling_plan_name ?? items[0]?.title) as string | undefined;
-        nextBillingDate = (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at) as string | undefined;
-        break;
-      }
-      if (!subscriptionStatus) {
-        for (const s of subs) {
-          const st = String(s.status ?? '').toUpperCase();
-          if (st === 'CANCELLED' || st === 'CANCELED') { subscriptionStatus = 'cancelled'; break; }
-        }
-      }
-    }
-    return { hasSub, activeSubs, everInSeal, subscriptionStatus, nextBillingDate, planTitle };
-  } catch (e) {
-    console.error('Seal check error:', e);
-    return { hasSub: false, activeSubs: 0, everInSeal: false };
-  }
-}
 
 function flagDuplicateSubs(email: string, ip: string, count: number) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return;
@@ -333,24 +204,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const emailLower = custEmail.toLowerCase();
   const isCreator  = CREATOR_EMAILS.has(emailLower);
 
-  const [sealResult, ldtResult, testerStatus, isSecurityExpired] = await Promise.all([
+  const [sealResult, ldtLifetime, testerRecord, isSecurityExpired] = await Promise.all([
     sealCheckSubscription(custEmail),
-    (!isCreator) ? checkLdtLicense(emailLower) : Promise.resolve(false),
-    (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve<'active' | 'paused' | null>(null),
+    (!isCreator) ? checkLdtLifetime(emailLower) : Promise.resolve(false),
+    (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve(null),
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
   ]);
 
-  const { hasSub, activeSubs, everInSeal, subscriptionStatus, nextBillingDate, planTitle } = sealResult;
-  const hasLifetime = !everInSeal && ldtResult;
-  const envTester  = !isCreator && TESTER_EMAILS.has(emailLower);
-  const isTester   = envTester || (!isCreator && testerStatus === 'active');
-  const finalHasSub = hasSub || isCreator || isTester || hasLifetime;
+  const envTester = !isCreator && TESTER_EMAILS.has(emailLower);
+  const membership = resolveMembership({
+    isCreator,
+    envTester,
+    testerRecord,
+    ldtLifetime,
+    seal: sealResult,
+  });
 
-  const finalStatus  = isCreator ? 'creator' : isTester ? 'tester' : hasLifetime ? 'lifetime' : subscriptionStatus;
-  const finalPlan    = isCreator ? 'Creator' : isTester ? 'Tester Access' : hasLifetime ? 'Access' : planTitle;
-  const finalExpiry  = (isCreator || isTester || hasLifetime) ? undefined : nextBillingDate;
+  const { activeSubs } = sealResult;
+  const isTester = membership.isTester;
+  const finalHasSub = membership.hasSubscription;
+  const finalStatus = membership.subscriptionStatus;
+  const finalPlan = membership.planTitle;
+  const finalExpiry = membership.subscriptionExpiresAt;
 
-  console.log('Auth result:', { custEmail, hasSub, isCreator, isTester, testerStatus, finalHasSub, nextBillingDate });
+  console.log('Auth result:', { custEmail, hasSub: sealResult.hasSub, isCreator, isTester, testerRecord, ldtLifetime, finalHasSub, finalStatus, planTitle: finalPlan });
 
   // ── Log login + security events (fire-and-forget) ────────────────────────
   const ua = String(req.headers['user-agent'] ?? '');
