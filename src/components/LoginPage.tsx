@@ -78,7 +78,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
               Sign In to AutoThresh™ Web
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.65 }}>
-              Use the email you subscribed with — you'll receive a one-time sign-in code.
+              Use the email you subscribed with. You can sign in with Google or a one-time code.
             </div>
           </div>
 
