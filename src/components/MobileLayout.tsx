@@ -7,7 +7,7 @@ import { AppIcon } from './AppIcon';
 import { renderComposite } from '../engine/imageProcessor';
 import { compositeHalftonePlates, buildNeugebauerPrimaries } from '../engine/inkSimulator';
 import { applyFabricBlend } from '../engine/fabricBlend';
-import { BillingPanel } from './BillingPanel';
+import { ManageSubscriptionPage } from './ManageSubscriptionPage';
 
 interface Session {
   token?: string;
@@ -33,6 +33,7 @@ type Sheet = 'layers' | 'controls' | null;
 export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBillingChanged, session, children }: Props) {
   const [activeSheet, setActiveSheet] = useState<Sheet>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showBilling, setShowBilling] = useState(false);
   const [previewCenter, setPreviewCenter] = useState({ x: 0.5, y: 0.5 });
   const menuRef = useRef<HTMLDivElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -328,15 +329,17 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
                 </div>
               )}
               {subStatus !== 'creator' && subStatus !== 'tester' && subStatus !== 'lifetime' && session?.token && (
-                <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)' }}>
-                  <BillingPanel
-                    token={session.token}
-                    planTitle={session.planTitle}
-                    nextBillingDate={session.subscriptionExpiresAt}
-                    subscriptionStatus={subStatus}
-                    compact
-                    onChanged={() => { setMenuOpen(false); onBillingChanged?.(); }}
-                  />
+                <div style={{ padding: '8px 14px 0', borderTop: '1px solid var(--border)' }}>
+                  <button
+                    onClick={() => { setMenuOpen(false); setShowBilling(true); }}
+                    style={{
+                      width: '100%', background: 'none', border: '1px solid var(--border)',
+                      cursor: 'pointer', padding: '7px 10px', fontSize: 11,
+                      color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    Manage subscription
+                  </button>
                 </div>
               )}
               <div style={{ padding: '10px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -701,6 +704,16 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
 
       {/* Modals (passed from App.tsx) */}
       {children}
+      {showBilling && (
+        <ManageSubscriptionPage
+          onBack={() => setShowBilling(false)}
+          token={session?.token}
+          planTitle={session?.planTitle}
+          nextBillingDate={session?.subscriptionExpiresAt}
+          subscriptionStatus={subStatus}
+          onChanged={onBillingChanged}
+        />
+      )}
     </div>
   );
 }

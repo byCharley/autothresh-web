@@ -5,7 +5,7 @@ import { useAppVersion } from '../hooks/useAppVersion';
 
 import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewModal';
 import { ACCENTS, applyAccentByHex } from '../lib/accent';
-import { BillingPanel } from './BillingPanel';
+import { ManageSubscriptionPage } from './ManageSubscriptionPage';
 
 function getSeenDate(): string {
   return localStorage.getItem('at-changelog-seen') ?? '';
@@ -44,6 +44,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
   const [gearOpen, setGearOpen] = useState(false);
   const gearRef = useRef<HTMLDivElement>(null);
   const [activeAccent, setActiveAccent] = useState(accentColor ?? '#FF6B1A');
+  const [showBilling, setShowBilling] = useState(false);
 
   useEffect(() => { if (accentColor) { applyAccentByHex(accentColor); setActiveAccent(accentColor); } }, [accentColor]);
 
@@ -83,6 +84,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
   }, [gearOpen]);
 
   return (
+    <>
     <header className="topbar">
       <div className="topbar-left">
         <div className="topbar-logo" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -367,22 +369,22 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                       Sign out
                     </button>
                   )}
-                  <a
-                    href="https://www.charleypangus.com/login"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setMenuOpen(false)}
-                    style={{
-                      border: '1px solid var(--border)', cursor: 'pointer',
-                      padding: '4px 10px', fontSize: 10,
-                      color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-                      textDecoration: 'none', transition: 'border-color 0.12s, color 0.12s',
-                    }}
-                    onMouseEnter={(e) => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = 'var(--accent)'; a.style.color = 'var(--accent)'; }}
-                    onMouseLeave={(e) => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = 'var(--border)'; a.style.color = 'var(--text-muted)'; }}
-                  >
-                    Store account
-                  </a>
+                  {subscriptionStatus !== 'creator' && subscriptionStatus !== 'tester' && subscriptionStatus !== 'lifetime' && (
+                    <button
+                      onClick={() => { setMenuOpen(false); setShowBilling(true); }}
+                      style={{
+                        border: '1px solid var(--border)', cursor: 'pointer',
+                        padding: '4px 10px', fontSize: 10,
+                        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                        background: 'transparent',
+                        transition: 'border-color 0.12s, color 0.12s',
+                      }}
+                      onMouseEnter={(e) => { const b = e.currentTarget; b.style.borderColor = 'var(--accent)'; b.style.color = 'var(--accent)'; }}
+                      onMouseLeave={(e) => { const b = e.currentTarget; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text-muted)'; }}
+                    >
+                      Manage subscription
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -417,7 +419,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
       <div ref={gearRef} style={{ position: 'relative' }}>
         <button
           className="btn btn-ghost btn-icon"
-          title="Account settings"
+          title="Theme color"
           onClick={() => setGearOpen(v => !v)}
           style={{ height: 26, width: 30 }}
           data-tutorial="tutorial-theme"
@@ -433,7 +435,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
             position: 'absolute', top: 'calc(100% + 6px)', right: 0,
             background: 'var(--surface)', border: '1px solid var(--border)',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
-            padding: '14px 16px', zIndex: 200, width: 280, maxWidth: 'calc(100vw - 24px)',
+            padding: '14px 16px', zIndex: 200, minWidth: 180,
           }}>
             <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 12 }}>
               Accent Color
@@ -445,6 +447,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                   onClick={() => {
                     applyAccentByHex(a.accent);
                     setActiveAccent(a.accent);
+                    setGearOpen(false);
                     if (sessionToken) {
                       fetch('/api/presets?type=prefs', {
                         method: 'PATCH',
@@ -476,18 +479,6 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                 </button>
               ))}
             </div>
-            {sessionToken && subscriptionStatus !== 'creator' && subscriptionStatus !== 'tester' && subscriptionStatus !== 'lifetime' && (
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-                <BillingPanel
-                  token={sessionToken}
-                  planTitle={planTitle}
-                  nextBillingDate={subscriptionExpiresAt}
-                  subscriptionStatus={subscriptionStatus}
-                  compact
-                  onChanged={onBillingChanged}
-                />
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -578,5 +569,16 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
         Export
       </button>
     </header>
+    {showBilling && (
+      <ManageSubscriptionPage
+        onBack={() => setShowBilling(false)}
+        token={sessionToken}
+        planTitle={planTitle}
+        nextBillingDate={subscriptionExpiresAt}
+        subscriptionStatus={subscriptionStatus}
+        onChanged={onBillingChanged}
+      />
+    )}
+    </>
   );
 }

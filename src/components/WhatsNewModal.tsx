@@ -18,7 +18,7 @@ export const CHANGELOG: Entry[] = [
     date: '2026-08-21',
     label: 'Manage Billing in the App',
     added: [
-      'Pause, resume, or cancel your subscription from Account settings (the gear icon). Cancelling turns off auto-renew — you keep access through the end of your current period. Purchases are final and are not refunded.',
+      'Pause, resume, or cancel your subscription from your name in the top bar — open the menu and tap Manage subscription. Cancelling turns off auto-renew — you keep access through the end of your current period. Purchases are final and are not refunded.',
     ],
   },
   {

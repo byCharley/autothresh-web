@@ -65,7 +65,7 @@ export function EulaModal({ onClose }: Props) {
           </Section>
 
           <Section title="Cancellation">
-            You can pause or cancel from Account settings (the gear icon) while signed in.
+            You can pause or cancel from your account menu (click your name) while signed in.
             Cancelling turns off auto-renew. Purchases are final and we do not issue refunds
             for time already billed. You keep access through the end of your current billing
             period, then the account will no longer open until you subscribe again. If you
