@@ -15,6 +15,17 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-08-20',
+    label: 'Dither Export, Chat Attachments & Vacation Mode',
+    added: [
+      'Vacation mode for support chat — set yourself Away in Command Center so customers see you are out of office and will get a reply when you are back.',
+    ],
+    fixed: [
+      'Dither export background now matches the canvas. If you designed on a black garment, the exported PNG, PSD, PDF, and EPS stay black — previously transparent or removed-background pixels were flattening to white automatically.',
+      'Chat image attachments — photos from phones (including HEIC) compress and upload instead of failing silently. You can also attach a file when starting a new ticket, and errors now show in the chat.',
+    ],
+  },
+  {
     date: '2026-08-13',
     label: 'Mobile Export Fix',
     fixed: [

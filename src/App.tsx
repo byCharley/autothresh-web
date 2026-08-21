@@ -462,11 +462,24 @@ function App() {
     const artImageData = artExpCtx.getImageData(0, 0, artScaleW, artScaleH);
 
     const artBgMask = (() => {
-      if (bgRemovalEnabled) return computeBackgroundMask(artImageData, bgTolerance);
-      // CMYK modes: auto-detect plain white/black backgrounds even without explicit BG removal.
-      // Without masking, the ICC separator produces ink on background pixels (black bg → full K plate;
-      // near-white → faint CMY dots). Only trigger for clearly plain backgrounds.
-      if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
+      const n = artScaleW * artScaleH;
+      let mask: Uint8Array | null = null;
+      const seeds = bgSeedColors.length > 0 ? bgSeedColors : undefined;
+
+      if (bgRemovalEnabled) {
+        if (separationMode === 'palette') {
+          const d = artImageData.data, w = artImageData.width, h = artImageData.height;
+          const corners = [0, (w - 1) * 4, (h - 1) * w * 4, ((h - 1) * w + w - 1) * 4];
+          const bgLum = corners.reduce((s, p) => s + 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2], 0) / 4;
+          const tol = bgLum > 200 ? 40 : bgTolerance;
+          mask = computeBackgroundMask(artImageData, tol, seeds);
+        } else {
+          mask = computeBackgroundMask(artImageData, bgTolerance, seeds);
+        }
+      } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
+        // Auto-detect plain white/black backgrounds even without explicit BG removal.
+        // Without masking, the ICC separator produces ink on background pixels (black bg → full K plate;
+        // near-white → faint CMY dots). Only trigger for clearly plain backgrounds.
         const d = artImageData.data;
         const w = artImageData.width, h = artImageData.height;
         const patchSz = Math.min(5, w, h);
@@ -481,9 +494,35 @@ function App() {
           }
         }
         const cornerLum = 0.299*(bgSumR/bgCnt) + 0.587*(bgSumG/bgCnt) + 0.114*(bgSumB/bgCnt);
-        if (cornerLum > 228 || cornerLum < 28) return computeBackgroundMask(artImageData, 22);
+        if (cornerLum > 228 || cornerLum < 28) mask = computeBackgroundMask(artImageData, 22);
       }
-      return null;
+
+      // Match the canvas preview: transparent PNG pixels stay holes (canvas color shows through).
+      const d = artImageData.data;
+      for (let i = 0; i < n; i++) {
+        if (d[i * 4 + 3] < 16) {
+          if (!mask) mask = new Uint8Array(n);
+          mask[i] = 255;
+        }
+      }
+
+      if (bgPaintMask && bgPaintMaskDims) {
+        const { w: pmW, h: pmH } = bgPaintMaskDims;
+        const scaleX = artScaleW / pmW;
+        const scaleY = artScaleH / pmH;
+        if (!mask) mask = new Uint8Array(n);
+        for (let y = 0; y < artScaleH; y++) {
+          for (let x = 0; x < artScaleW; x++) {
+            const sx = Math.min(pmW - 1, Math.floor(x / scaleX));
+            const sy = Math.min(pmH - 1, Math.floor(y / scaleY));
+            const pv = bgPaintMask[sy * pmW + sx];
+            if (pv === 1) mask[y * artScaleW + x] = 0;
+            else if (pv === 2) mask[y * artScaleW + x] = 255;
+          }
+        }
+      }
+
+      return mask;
     })();
 
     // ── Passthrough mode: flat PNG export (bypasses all separation) ─────────────
@@ -1117,7 +1156,7 @@ function App() {
     // ── PNG ──────────────────────────────────────────────────────────────────
     const pngOf = (c: HTMLCanvasElement) => canvasToBlobWithDpi(c, documentDpi);
     if (format === 'png') {
-      if (mode === 'dtg' || separationMode === 'texture' || separationMode === 'dtg') {
+      if ((mode === 'dtg' || separationMode === 'texture' || separationMode === 'dtg') && separationMode !== 'palette') {
         const suffix = separationMode === 'texture' ? 'texture' : 'dtg';
         if (separationMode === 'dtg' && dtgExportImageData) {
           // Build an artwork-sized canvas, optionally composited over the garment background.
@@ -1320,11 +1359,11 @@ function App() {
           saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk.psd`);
         }
       } else if (separationMode === 'palette') {
-        // PSD: White background + colored dithered ink layers
-        const whiteBg = document.createElement('canvas');
-        whiteBg.width = docPxW; whiteBg.height = docPxH;
-        whiteBg.getContext('2d')!.fillStyle = '#ffffff';
-        whiteBg.getContext('2d')!.fillRect(0, 0, docPxW, docPxH);
+        // PSD: garment/canvas background + colored dithered ink layers
+        const paperBg = document.createElement('canvas');
+        paperBg.width = docPxW; paperBg.height = docPxH;
+        paperBg.getContext('2d')!.fillStyle = showFabricBg ? canvasColor : '#ffffff';
+        paperBg.getContext('2d')!.fillRect(0, 0, docPxW, docPxH);
         const plateLayers = visibleLayers.map((pl) => ({
           name:    layerName(pl),
           canvas:  buildLayerCanvas(pl, false),
@@ -1333,7 +1372,7 @@ function App() {
         const buffer = writePsd({
           width: docPxW, height: docPxH, ...psdRes,
           children: [
-            { name: 'White Paper', canvas: whiteBg,               top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
+            { name: showFabricBg ? 'Background' : 'White Paper', canvas: paperBg, top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
             ...ubPsdLayer,
             { name: 'Color Proof', canvas: buildCompositeCanvas(false), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
             ...plateLayers,

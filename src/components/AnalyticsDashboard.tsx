@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import { invalidateAppVersion } from '../hooks/useAppVersion';
+import { uploadChatAttachment } from '../lib/chatAttach';
 
 function useMobile(bp = 640) {
   const [m, setM] = useState(false);
@@ -344,7 +345,7 @@ function ChatPanel({ session }: { session: Session }) {
   const [sendError, setSendError]     = useState('');
   const [sending, setSending]         = useState(false);
   const [loading, setLoading]         = useState(true);
-  const [isOnline, setIsOnline]       = useState(false);
+  const [chatStatus, setChatStatus]   = useState<'online' | 'offline' | 'vacation'>('offline');
   const [toggling, setToggling]       = useState(false);
   const [showAll, setShowAll]         = useState(false);
   const [hoverMsgId, setHoverMsgId]   = useState<number | null>(null);
@@ -368,7 +369,12 @@ function ChatPanel({ session }: { session: Session }) {
   const loadPresence = useCallback(() => {
     fetch('/api/chat?resource=status')
       .then(r => r.ok ? r.json() : null)
-      .then((d: { is_online?: boolean } | null) => setIsOnline(!!d?.is_online))
+      .then((d: { is_online?: boolean; status?: 'online' | 'offline' | 'vacation' } | null) => {
+        const status = d?.status === 'vacation' || d?.status === 'online' || d?.status === 'offline'
+          ? d.status
+          : (d?.is_online ? 'online' : 'offline');
+        setChatStatus(status);
+      })
       .catch(() => {});
   }, []);
 
@@ -437,11 +443,14 @@ function ChatPanel({ session }: { session: Session }) {
     return () => clearInterval(id);
   }, [active?.id, active?.status, loadTyping]);
 
-  async function toggleOnline() {
+  async function setPresence(status: 'online' | 'offline' | 'vacation') {
     setToggling(true);
-    const next = !isOnline;
-    setIsOnline(next);
-    await fetch('/api/chat', { method: 'PATCH', headers: H(), body: JSON.stringify({ resource: 'presence', is_online: next }) });
+    setChatStatus(status);
+    await fetch('/api/chat', {
+      method: 'PATCH',
+      headers: H(),
+      body: JSON.stringify({ resource: 'presence', status, is_online: status === 'online' }),
+    });
     setToggling(false);
   }
 
@@ -484,28 +493,20 @@ function ChatPanel({ session }: { session: Session }) {
   async function uploadImage(file: File) {
     if (!active) return;
     setImageUploading(true);
+    setSendError('');
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const r = await fetch('/api/chat-upload', {
+      const { url, isImage, fileName } = await uploadChatAttachment({ file, ticketId: active.id, headers: H() });
+      const message = isImage ? `[img]:${url}` : `[file]:${fileName}|${url}`;
+      const r = await fetch('/api/chat', {
         method: 'POST',
         headers: H(),
-        body: JSON.stringify({ imageData: base64, mimeType: file.type, ticketId: active.id }),
+        body: JSON.stringify({ resource: 'message', ticket_id: active.id, message }),
       });
-      const data = await r.json() as { url?: string; error?: string };
-      if (data.url) {
-        await fetch('/api/chat', {
-          method: 'POST',
-          headers: H(),
-          body: JSON.stringify({ resource: 'message', ticket_id: active.id, message: `[img]:${data.url}` }),
-        });
-        loadMessages(active.id);
-      }
-    } catch {}
+      if (!r.ok) throw new Error('File uploaded but the message failed to send.');
+      loadMessages(active.id);
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : 'Could not attach file.');
+    }
     setImageUploading(false);
   }
 
@@ -568,24 +569,45 @@ function ChatPanel({ session }: { session: Session }) {
           ))}
         </div>
 
-        {/* Online toggle */}
-        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        {/* Presence */}
+        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: isOnline ? '#4ade80' : '#6b7280' }} />
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>{isOnline ? 'Online' : 'Offline'}</span>
+            <div style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: chatStatus === 'online' ? '#4ade80' : chatStatus === 'vacation' ? '#fbbf24' : '#6b7280',
+            }} />
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
+              {chatStatus === 'online' ? 'Online' : chatStatus === 'vacation' ? 'Vacation' : 'Offline'}
+            </span>
           </div>
-          <button
-            onClick={toggleOnline}
-            disabled={toggling}
-            style={{
-              height: 20, padding: '0 8px', fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.05em',
-              background: isOnline ? 'rgba(248,113,113,0.15)' : 'rgba(74,222,128,0.15)',
-              border: `1px solid ${isOnline ? 'rgba(248,113,113,0.3)' : 'rgba(74,222,128,0.3)'}`,
-              color: isOnline ? '#f87171' : '#4ade80', cursor: 'pointer',
-            }}
-          >
-            {isOnline ? 'Go Offline' : 'Go Online'}
-          </button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {([
+              { id: 'online' as const, label: 'Online' },
+              { id: 'offline' as const, label: 'Offline' },
+              { id: 'vacation' as const, label: 'Vacation' },
+            ]).map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setPresence(opt.id)}
+                disabled={toggling}
+                style={{
+                  flex: 1, height: 22, padding: '0 4px', fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
+                  cursor: 'pointer',
+                  background: chatStatus === opt.id
+                    ? (opt.id === 'online' ? 'rgba(74,222,128,0.18)' : opt.id === 'vacation' ? 'rgba(251,191,36,0.18)' : 'rgba(107,114,128,0.2)')
+                    : 'transparent',
+                  border: `1px solid ${chatStatus === opt.id
+                    ? (opt.id === 'online' ? 'rgba(74,222,128,0.45)' : opt.id === 'vacation' ? 'rgba(251,191,36,0.45)' : 'rgba(107,114,128,0.45)')
+                    : 'var(--border)'}`,
+                  color: chatStatus === opt.id
+                    ? (opt.id === 'online' ? '#4ade80' : opt.id === 'vacation' ? '#fbbf24' : 'var(--text-muted)')
+                    : 'var(--text-dim)',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -785,7 +807,13 @@ function ChatPanel({ session }: { session: Session }) {
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                   </button>
                 </div>
-                <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ''; }} />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/tiff,.tif,.tiff,.psd,.ai"
+                  style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ''; }}
+                />
               </>
             )}
           </div>

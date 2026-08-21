@@ -647,6 +647,9 @@ export function computeZones(
     let lums = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       if (bgMask && bgMask[i] === 255) { lums[i] = -1; continue; }
+      // Transparent pixels (common in PNGs from Photoshop: RGB white + alpha 0)
+      // must stay background — otherwise they quantize to the lightest ink.
+      if (data[i * 4 + 3] < 16) { lums[i] = -1; continue; }
       const raw = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
       lums[i] = imageAdj ? applyGlobalAdjustments(raw, imageAdj) : raw;
     }

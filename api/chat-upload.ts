@@ -12,9 +12,12 @@ const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
 
 const ALLOWED_TYPES: Record<string, string> = {
   'image/jpeg':                       'jpg',
+  'image/jpg':                        'jpg',
   'image/png':                        'png',
   'image/gif':                        'gif',
   'image/webp':                       'webp',
+  'image/heic':                       'heic',
+  'image/heif':                       'heif',
   'image/tiff':                       'tiff',
   'image/vnd.adobe.photoshop':        'psd',
   'application/photoshop':            'psd',
@@ -24,6 +27,11 @@ const ALLOWED_TYPES: Record<string, string> = {
   'application/illustrator':          'ai',
   'application/vnd.adobe.illustrator':'ai',
   'image/x-eps':                      'ai',
+};
+
+const EXT_FROM_NAME: Record<string, string> = {
+  jpg: 'jpg', jpeg: 'jpg', png: 'png', gif: 'gif', webp: 'webp',
+  heic: 'heic', heif: 'heif', tif: 'tiff', tiff: 'tiff', psd: 'psd', ai: 'ai',
 };
 
 async function identify(token: string): Promise<{ email: string; isCreator: boolean } | null> {
@@ -41,6 +49,13 @@ async function identify(token: string): Promise<{ email: string; isCreator: bool
   } catch { return null; }
 }
 
+function extFor(mimeType: string, fileName?: string): string | null {
+  const fromMime = ALLOWED_TYPES[mimeType];
+  if (fromMime) return fromMime;
+  const ext = (fileName ?? '').split('.').pop()?.toLowerCase() ?? '';
+  return EXT_FROM_NAME[ext] ?? null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -52,30 +67,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await identify(token);
   if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { imageData, mimeType, ticketId } = req.body as {
-    imageData?: string; // base64
+  const body = (req.body ?? {}) as {
+    action?: string;
+    imageData?: string;
     mimeType?: string;
     ticketId?: string;
+    fileName?: string;
   };
 
-  if (!imageData || !mimeType || !ticketId) {
+  const mimeType = body.mimeType ?? '';
+  const ticketId = body.ticketId;
+  if (!ticketId) return res.status(400).json({ error: 'ticketId is required' });
+
+  const ext = extFor(mimeType, body.fileName);
+  if (!ext) return res.status(400).json({ error: 'Unsupported file type. Use JPG, PNG, GIF, WebP, TIFF, PSD, or AI.' });
+
+  const path = `${ticketId}/${Date.now()}.${ext}`;
+
+  // Direct-to-storage URL for files too large for the Vercel JSON body limit.
+  if (body.action === 'sign') {
+    const sign = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/${BUCKET}/${path}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SERVICE_KEY}`,
+        'apikey': SERVICE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ expiresIn: 180 }),
+    });
+    const signed = await sign.json() as { url?: string; error?: string };
+    if (!sign.ok || !signed.url) {
+      console.error('Supabase signed upload error:', signed);
+      return res.status(500).json({ error: 'Upload failed' });
+    }
+    const uploadUrl = signed.url.startsWith('http')
+      ? signed.url
+      : `${SUPABASE_URL}/storage/v1${signed.url.startsWith('/') ? '' : '/'}${signed.url}`;
+    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`;
+    return res.status(200).json({ uploadUrl, publicUrl, path });
+  }
+
+  const { imageData } = body;
+  if (!imageData) {
     return res.status(400).json({ error: 'imageData, mimeType, and ticketId are required' });
   }
 
-  const ext = ALLOWED_TYPES[mimeType];
-  if (!ext) return res.status(400).json({ error: 'Unsupported image type' });
-
   const buffer = Buffer.from(imageData, 'base64');
-  if (buffer.byteLength > MAX_BYTES) return res.status(400).json({ error: 'Image too large (max 5 MB)' });
-
-  const path = `${ticketId}/${Date.now()}.${ext}`;
+  if (buffer.byteLength > MAX_BYTES) return res.status(400).json({ error: 'File too large (max 20 MB)' });
 
   const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${SERVICE_KEY}`,
       'apikey': SERVICE_KEY,
-      'Content-Type': mimeType,
+      'Content-Type': mimeType || `image/${ext}`,
       'Cache-Control': '3600',
     },
     body: buffer,

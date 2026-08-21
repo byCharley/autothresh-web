@@ -45,13 +45,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Creator status is public — no auth needed
   if (req.method === 'GET' && req.query.resource === 'status') {
+    type Presence = 'online' | 'offline' | 'vacation';
+    let saved: Presence | null = null;
+    try {
+      const sr = await sb('app_settings?key=eq.chat_status&select=value');
+      if (sr.ok) {
+        const srows = await sr.json() as Array<{ value: string }>;
+        const v = srows[0]?.value;
+        if (v === 'online' || v === 'offline' || v === 'vacation') saved = v;
+      }
+    } catch { /* table/key may not exist yet */ }
+
+    if (saved === 'vacation') {
+      return res.status(200).json({ is_online: false, status: 'vacation' });
+    }
+
     const r = await sb('creator_presence?id=eq.1&select=is_online,last_seen');
-    if (!r.ok) return res.status(200).json({ is_online: false });
+    if (!r.ok) return res.status(200).json({ is_online: false, status: saved ?? 'offline' });
     const rows = await r.json() as Array<{ is_online: boolean; last_seen: string }>;
     const row = rows[0];
-    if (!row) return res.status(200).json({ is_online: false });
-    const isOnline = row.is_online && (Date.now() - new Date(row.last_seen).getTime() < 15 * 60_000);
-    return res.status(200).json({ is_online: isOnline });
+    if (!row) return res.status(200).json({ is_online: false, status: saved ?? 'offline' });
+    const isOnline = saved !== 'offline'
+      && row.is_online
+      && (Date.now() - new Date(row.last_seen).getTime() < 15 * 60_000);
+    return res.status(200).json({ is_online: isOnline, status: isOnline ? 'online' : 'offline' });
   }
 
   const token = String(req.headers.authorization ?? '').replace(/^Bearer /, '');
@@ -231,10 +248,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (resource === 'presence') {
       if (!user.isCreator) return res.status(403).json({ error: 'Forbidden' });
-      const update: Record<string, unknown> = { last_seen: new Date().toISOString() };
-      if (typeof body.is_online === 'boolean') update.is_online = body.is_online;
+      const status = body.status as string | undefined;
+      const isVacation = status === 'vacation';
+      const isOnline = isVacation ? false : (typeof body.is_online === 'boolean' ? body.is_online : status === 'online');
+      const chatStatus = isVacation ? 'vacation' : isOnline ? 'online' : 'offline';
+      const update: Record<string, unknown> = { last_seen: new Date().toISOString(), is_online: isOnline };
       await sb('creator_presence?id=eq.1', 'PATCH', update);
-      return res.status(200).json({ ok: true });
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/app_settings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SERVICE_KEY}`,
+            'apikey': SERVICE_KEY,
+            'Prefer': 'resolution=merge-duplicates',
+          },
+          body: JSON.stringify({ key: 'chat_status', value: chatStatus, updated_at: new Date().toISOString() }),
+        });
+      } catch { /* app_settings may not exist yet */ }
+      return res.status(200).json({ ok: true, status: chatStatus, is_online: isOnline });
     }
 
     return res.status(400).json({ error: 'Unknown resource' });

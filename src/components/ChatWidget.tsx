@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Session } from '../auth/useAuth';
+import { uploadChatAttachment } from '../lib/chatAttach';
 
 interface Ticket {
   id: string;
@@ -34,9 +35,11 @@ function fmtDate(iso: string) {
 const STATUS_COLOR = { open: '#4ade80', pending: '#faad14', solved: '#6b7280' } as const;
 const STATUS_LABEL = { open: 'Open', pending: 'Awaiting reply', solved: 'Solved' } as const;
 
+type CreatorStatus = 'online' | 'offline' | 'vacation';
+
 export function ChatWidget({ session }: { session: Session }) {
   const [open, setOpen]               = useState(false);
-  const [creatorOnline, setCreatorOnline] = useState(false);
+  const [creatorStatus, setCreatorStatus] = useState<CreatorStatus>('offline');
   const [tickets, setTickets]         = useState<Ticket[]>([]);
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
   const [messages, setMessages]       = useState<Message[]>([]);
@@ -64,6 +67,8 @@ export function ChatWidget({ session }: { session: Session }) {
   const lastTypingSentRef             = useRef(0);
   const [imageUploading, setImageUploading] = useState(false);
   const fileInputRef                   = useRef<HTMLInputElement>(null);
+  const newFileInputRef                = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile]  = useState<File | null>(null);
 
   // Keep isMobile in sync with resize
   useEffect(() => {
@@ -77,7 +82,13 @@ export function ChatWidget({ session }: { session: Session }) {
   const loadStatus = useCallback(() => {
     fetch('/api/chat?resource=status')
       .then(r => r.ok ? r.json() : null)
-      .then((d: { is_online?: boolean } | null) => setCreatorOnline(!!d?.is_online))
+      .then((d: { is_online?: boolean; status?: CreatorStatus } | null) => {
+        if (d?.status === 'vacation' || d?.status === 'online' || d?.status === 'offline') {
+          setCreatorStatus(d.status);
+        } else {
+          setCreatorStatus(d?.is_online ? 'online' : 'offline');
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -185,6 +196,11 @@ export function ChatWidget({ session }: { session: Session }) {
         setSubject(''); setFirstMsg('');
         setView('chat');
         loadMessages(data.id);
+        if (pendingFile) {
+          const file = pendingFile;
+          setPendingFile(null);
+          await uploadImage(file, data.id);
+        }
       }
     } catch {}
     setSending(false);
@@ -239,33 +255,23 @@ export function ChatWidget({ session }: { session: Session }) {
 
   const IMAGE_MIME_TYPES = new Set(['image/jpeg','image/png','image/gif','image/webp']);
 
-  async function uploadImage(file: File) {
-    if (!activeTicket) return;
+  async function uploadImage(file: File, ticketId = activeTicket?.id) {
+    if (!ticketId) return;
     setImageUploading(true);
+    setSendError('');
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const r = await fetch('/api/chat-upload', {
+      const { url, isImage, fileName } = await uploadChatAttachment({ file, ticketId, headers: authH() });
+      const message = isImage || IMAGE_MIME_TYPES.has(file.type) ? `[img]:${url}` : `[file]:${fileName}|${url}`;
+      const r = await fetch('/api/chat', {
         method: 'POST',
         headers: authH(),
-        body: JSON.stringify({ imageData: base64, mimeType: file.type, ticketId: activeTicket.id }),
+        body: JSON.stringify({ resource: 'message', ticket_id: ticketId, message }),
       });
-      const data = await r.json() as { url?: string; error?: string };
-      if (data.url) {
-        const isImg = IMAGE_MIME_TYPES.has(file.type);
-        const message = isImg ? `[img]:${data.url}` : `[file]:${file.name}|${data.url}`;
-        await fetch('/api/chat', {
-          method: 'POST',
-          headers: authH(),
-          body: JSON.stringify({ resource: 'message', ticket_id: activeTicket.id, message }),
-        });
-        loadMessages(activeTicket.id);
-      }
-    } catch {}
+      if (!r.ok) throw new Error('File uploaded but the message failed to send. Try again.');
+      loadMessages(ticketId);
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : 'Could not attach file.');
+    }
     setImageUploading(false);
   }
 
@@ -294,8 +300,13 @@ export function ChatWidget({ session }: { session: Session }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', letterSpacing: '0.04em' }}>Support</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: creatorOnline ? '#4ade80' : '#6b7280' }} />
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{creatorOnline ? 'Online' : 'Offline'}</span>
+            <div style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: creatorStatus === 'online' ? '#4ade80' : creatorStatus === 'vacation' ? '#fbbf24' : '#6b7280',
+            }} />
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+              {creatorStatus === 'online' ? 'Online' : creatorStatus === 'vacation' ? 'Away' : 'Offline'}
+            </span>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -318,6 +329,11 @@ export function ChatWidget({ session }: { session: Session }) {
       {/* New ticket form */}
       {view === 'new' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0, overflowY: 'auto' }}>
+          {creatorStatus === 'vacation' && (
+            <div style={{ margin: '12px 14px 0', padding: '10px 12px', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.35)', fontSize: 11, fontFamily: 'var(--font-mono)', color: '#fbbf24', lineHeight: 1.5 }}>
+              Support is currently away and will reply when back in the office. You can still send a message.
+            </div>
+          )}
           <div style={{ padding: '16px 14px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div>
               <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Subject</div>
@@ -356,17 +372,47 @@ export function ChatWidget({ session }: { session: Session }) {
             </div>
           </div>
           <div style={{ padding: '10px 14px' }}>
-            <button
-              onClick={submitTicket}
-              disabled={sending || !subject.trim() || !firstMsg.trim()}
-              style={{
-                width: '100%', height: 36, fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700,
-                background: 'var(--accent)', border: 'none', color: '#000', cursor: 'pointer',
-                opacity: (!subject.trim() || !firstMsg.trim() || sending) ? 0.5 : 1,
-              }}
-            >
-              {sending ? 'Sending…' : 'Send Message'}
-            </button>
+            {sendError && (
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: '#f87171', marginBottom: 6 }}>
+                ⚠ {sendError}
+              </div>
+            )}
+            {pendingFile && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📎 {pendingFile.name}</span>
+                <button onClick={() => setPendingFile(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 11 }}>✕</button>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={() => newFileInputRef.current?.click()}
+                disabled={imageUploading}
+                title="Attach file (JPG, PNG, TIFF, PSD, AI)"
+                style={{ height: 36, width: 36, flexShrink: 0, background: 'var(--surface-2)', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: imageUploading ? 0.4 : 0.7 }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                </svg>
+              </button>
+              <button
+                onClick={submitTicket}
+                disabled={sending || !subject.trim() || !firstMsg.trim()}
+                style={{
+                  flex: 1, height: 36, fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                  background: 'var(--accent)', border: 'none', color: '#000', cursor: 'pointer',
+                  opacity: (!subject.trim() || !firstMsg.trim() || sending) ? 0.5 : 1,
+                }}
+              >
+                {sending ? 'Sending…' : 'Send Message'}
+              </button>
+            </div>
+            <input
+              ref={newFileInputRef}
+              type="file"
+              accept="image/*,image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/tiff,.tif,.tiff,.psd,.ai"
+              style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) setPendingFile(f); e.target.value = ''; }}
+            />
           </div>
           {tickets.filter(t => t.status === 'solved').length > 0 && (
             <div style={{ borderTop: '1px solid var(--border)', padding: '8px 14px' }}>
@@ -406,6 +452,12 @@ export function ChatWidget({ session }: { session: Session }) {
               </select>
             )}
           </div>
+
+          {creatorStatus === 'vacation' && (
+            <div style={{ padding: '8px 14px', background: 'rgba(251,191,36,0.1)', borderBottom: '1px solid rgba(251,191,36,0.25)', fontSize: 10, fontFamily: 'var(--font-mono)', color: '#fbbf24', lineHeight: 1.45 }}>
+              Support is currently away and will reply when back in the office.
+            </div>
+          )}
 
           {/* Messages */}
           <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
@@ -640,8 +692,16 @@ export function ChatWidget({ session }: { session: Session }) {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                 </button>
               </div>
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/tiff,.tif,.tiff,image/vnd.adobe.photoshop,.psd,application/photoshop,application/postscript,.ai,application/illustrator,application/vnd.adobe.illustrator" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ''; }} />
-              <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 4 }}>⌘↵ to send</div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/tiff,.tif,.tiff,.psd,.ai"
+                style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) uploadImage(f); e.target.value = ''; }}
+              />
+              <div style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginTop: 4 }}>
+                {imageUploading ? 'Uploading attachment…' : '⌘↵ to send'}
+              </div>
             </div>
           )}
         </>
@@ -697,7 +757,7 @@ export function ChatWidget({ session }: { session: Session }) {
         <div style={{
           position: 'absolute', top: 3, right: 3,
           width: 10, height: 10, borderRadius: '50%',
-          background: creatorOnline ? '#4ade80' : '#6b7280',
+          background: creatorStatus === 'online' ? '#4ade80' : creatorStatus === 'vacation' ? '#fbbf24' : '#6b7280',
           border: '2px solid var(--bg, #111)',
         }} />
 

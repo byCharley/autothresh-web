@@ -69,7 +69,7 @@ const FORMATS_DITHER: { value: ExportFormat; label: string; ext: string }[] = [
   { value: 'eps', label: 'EPS', ext: '.eps' },
 ];
 
-function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean) {
+function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean, showFabricBg = false, canvasColor = '#000000') {
   if (format === 'cdr') {
     if (mode === 'screen' && !isDither) {
       return { pkg: 'ZIP archive', layers: 'One EPS per separation, spot-color DSC headers + import guide', bg: 'Transparent', marks: 'Included' };
@@ -78,12 +78,13 @@ function details(mode: 'screen' | 'dtg', format: ExportFormat, isDither: boolean
     }
   }
   if (isDither) {
+    const canvasBg = showFabricBg ? `Canvas (${canvasColor})` : 'Transparent';
     switch (format) {
-      case 'png':  return { pkg: 'Single file', layers: 'Dithered composite image',        bg: 'White', marks: 'Not included' };
-      case 'psd':  return { pkg: 'Single file', layers: 'One colored layer per ink zone',  bg: 'White', marks: 'Not included' };
-      case 'pdf':  return { pkg: 'Single file', layers: 'Dithered composite page',         bg: 'White', marks: 'Not included' };
-      case 'tiff': return { pkg: 'Single file', layers: 'Dithered composite image',        bg: 'White', marks: 'Not included' };
-      case 'eps':  return { pkg: 'Single file', layers: 'Composite RGB EPS',               bg: 'White', marks: 'Not included' };
+      case 'png':  return { pkg: 'Single file', layers: 'Dithered composite image',        bg: canvasBg, marks: 'Not included' };
+      case 'psd':  return { pkg: 'Single file', layers: 'One colored layer per ink zone',  bg: canvasBg, marks: 'Not included' };
+      case 'pdf':  return { pkg: 'Single file', layers: 'Dithered composite page',         bg: canvasBg, marks: 'Not included' };
+      case 'tiff': return { pkg: 'Single file', layers: 'Dithered composite image',        bg: canvasBg, marks: 'Not included' };
+      case 'eps':  return { pkg: 'Single file', layers: 'Composite RGB EPS',               bg: canvasBg, marks: 'Not included' };
     }
   }
   if (format === 'eps') {
@@ -118,7 +119,7 @@ const FORMATS_TEXTURE = [
 ];
 
 export function ExportModal({ onClose, onExport, onGenerateSheet, generatingSheet, defaultFileName, separationMode }: Props) {
-  const { passthroughMode, sheetSettings, updateSheetSettings, originalImage, dtgPaintMask, dtgPaintMaskDims } = useStore();
+  const { passthroughMode, sheetSettings, updateSheetSettings, originalImage, dtgPaintMask, dtgPaintMaskDims, showFabricBg, canvasColor } = useStore();
   const isDither  = !passthroughMode && separationMode === 'palette';
   const isCmykPro = separationMode === 'cmyk-pro';
   const isTexture = separationMode === 'texture';
@@ -214,7 +215,7 @@ export function ExportModal({ onClose, onExport, onGenerateSheet, generatingShee
     }
   };
 
-  const d = details(mode, format, isDither);
+  const d = details(mode, format, isDither, showFabricBg, canvasColor);
   const fmt = FORMATS.find(f => f.value === format) ?? FORMATS[0];
   // EPS/CDR in screen mode export a ZIP; show the correct extension in the filename bar
   const displayExt = ((format === 'eps' && !isDither && mode === 'screen') || format === 'cdr') ? '.zip' : fmt.ext;
