@@ -53,17 +53,21 @@ function mapSub(s: Record<string, unknown>): SealSub | null {
   const id = Number(s.id);
   if (!id) return null;
   const st = String(s.status ?? '').toUpperCase();
-  const billingInterval = String(s.billing_interval ?? '').toLowerCase();
-  const isAnnualPlan = billingInterval.includes('year') || billingInterval.includes('annual');
-  const TRIAL_DAYS = parseInt(process.env.SEAL_TRIAL_DAYS ?? '3');
+  const text = [
+    s.billing_interval, s.interval, s.plan_title, s.product_title, s.plan_name,
+    ...(Array.isArray(s.items) ? (s.items as Array<Record<string, unknown>>).map(i => String(i.selling_plan_name ?? i.title ?? '')) : []),
+  ].filter(Boolean).join(' ').toLowerCase();
+  const isMonthly = text.includes('month') && !text.includes('12 month') && !text.includes('year');
+  const TRIAL_DAYS = parseInt(process.env.SEAL_TRIAL_DAYS ?? '3', 10);
   const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
   const orderPlaced = s.order_placed as string | undefined;
-  const trialEndInferred = Number(s.subscription_type) === 2 && isAnnualPlan && orderPlaced
+  const isTrialType = Number(s.subscription_type) === 2 && !isMonthly;
+  const trialEndInferred = isTrialType && orderPlaced
     ? new Date(new Date(orderPlaced).getTime() + TRIAL_DAYS * 86_400_000).toISOString()
     : undefined;
   const trialEndRaw = trialEndExplicit ?? trialEndInferred;
   const trialStillActive = !!trialEndRaw && new Date(trialEndRaw) > new Date();
-  const isInTrial = (st === 'TRIAL' || (st === 'ACTIVE' && trialStillActive)) && isAnnualPlan;
+  const isInTrial = !isMonthly && (st === 'TRIAL' || ((st === 'ACTIVE' || st === 'PAUSED') && trialStillActive) || (isTrialType && trialStillActive));
 
   let status: SubStatus;
   if (st === 'PAUSED') status = 'paused';
@@ -73,34 +77,109 @@ function mapSub(s: Record<string, unknown>): SealSub | null {
 
   const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
   const itemPlanName = items[0]?.selling_plan_name ?? items[0]?.title;
-  const nextBillingDate = isInTrial
-    ? trialEndRaw
-    : (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at ?? s.nextBillingDate ?? s.billing_date) as string | undefined;
+  const nextBillingDate = firstUsableDate(
+    s.next_billing_date,
+    s.next_charge_scheduled_at,
+    s.next_charge_at,
+    s.nextBillingDate,
+    s.billing_date,
+    nextAttemptDate(s),
+    trialEndRaw,
+    isTrialType ? trialEndInferred : undefined,
+  );
   const planTitle = (s.plan_title ?? s.product_title ?? s.plan_name ?? itemPlanName) as string | undefined;
   return { id, status, planTitle, nextBillingDate };
 }
 
-function pickSub(subs: Array<Record<string, unknown>>): SealSub | null {
-  const mapped = subs.map(mapSub).filter((s): s is SealSub => !!s);
+function parseWhen(value: unknown): Date | null {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number') {
+    const d = new Date(value > 1e12 ? value : value * 1000);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const s = String(value).trim();
+  if (!s) return null;
+  const d = new Date(s.includes('T') ? s : s.replace(' ', 'T'));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function firstUsableDate(...vals: unknown[]): string | undefined {
+  const now = Date.now() - 60_000;
+  for (const v of vals) {
+    const d = parseWhen(v);
+    if (d && d.getTime() > now) return d.toISOString();
+  }
+  return undefined;
+}
+
+function nextAttemptDate(s: Record<string, unknown>): string | undefined {
+  const attempts = Array.isArray(s.billing_attempts) ? s.billing_attempts as Array<Record<string, unknown>> : [];
+  const now = Date.now();
+  const upcoming = attempts
+    .filter(a => {
+      const st = String(a.status ?? '').toLowerCase();
+      return st !== 'completed' && st !== 'success' && !a.completed_at;
+    })
+    .map(a => parseWhen(a.date))
+    .filter((d): d is Date => !!d && d.getTime() > now)
+    .sort((a, b) => a.getTime() - b.getTime());
+  return upcoming[0]?.toISOString();
+}
+
+function pickSub(subs: Array<Record<string, unknown>>): Record<string, unknown> | null {
+  const ranked = subs
+    .map(s => ({ raw: s, mapped: mapSub(s) }))
+    .filter((x): x is { raw: Record<string, unknown>; mapped: SealSub } => !!x.mapped);
   const rank = (s: SealSub) => s.status === 'active' || s.status === 'trial' ? 0 : s.status === 'paused' ? 1 : 2;
-  mapped.sort((a, b) => rank(a) - rank(b));
-  return mapped[0] ?? null;
+  ranked.sort((a, b) => rank(a.mapped) - rank(b.mapped));
+  return ranked[0]?.raw ?? null;
+}
+
+async function fetchSubById(id: number): Promise<Record<string, unknown> | null> {
+  const r = await fetch(`${SEAL_API_URL}/subscription?id=${id}`, { headers: sealHeaders() });
+  if (!r.ok) return null;
+  const raw = await r.json() as { payload?: Record<string, unknown> } & Record<string, unknown>;
+  if (raw.payload && typeof raw.payload === 'object') return raw.payload;
+  if (raw.id) return raw;
+  return null;
 }
 
 async function loadSub(email: string): Promise<SealSub | null> {
-  const r = await fetch(`${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`, { headers: sealHeaders() });
+  const r = await fetch(
+    `${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}&with-items=true&with-billing-attempts=true`,
+    { headers: sealHeaders() },
+  );
   if (!r.ok) return null;
-  return pickSub(parseSubs(await r.json()));
+  const listed = pickSub(parseSubs(await r.json()));
+  if (!listed) return null;
+  let mapped = mapSub(listed);
+  if (mapped && !mapped.nextBillingDate) {
+    const full = await fetchSubById(mapped.id);
+    if (full) mapped = mapSub(full) ?? mapped;
+  }
+  return mapped;
 }
 
 function billingDateParts(iso?: string): { date: string; time: string } | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
+  const d = parseWhen(iso);
+  if (!d) return null;
   const date = d.toISOString().slice(0, 10);
   const hh = String(d.getUTCHours()).padStart(2, '0');
   const mm = String(d.getUTCMinutes()).padStart(2, '0');
   return { date, time: `${hh}:${mm}` };
+}
+
+async function sealCancelNow(id: number): Promise<boolean> {
+  const r = await fetch(`${SEAL_API_URL}/subscription`, {
+    method: 'PUT',
+    headers: sealHeaders(),
+    body: JSON.stringify({ id, action: 'cancel' }),
+  });
+  if (!r.ok) {
+    console.error('Seal immediate cancel failed:', r.status, await r.text());
+    return false;
+  }
+  return true;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -136,20 +215,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (action === 'cancel') {
     if (sub.status === 'cancelled') return res.status(200).json({ ok: true, status: 'cancelled' });
     const parts = billingDateParts(sub.nextBillingDate);
-    if (!parts) {
-      return res.status(400).json({ error: 'Could not find your renewal date. Email autothreshweb@gmail.com and we will cancel it for you.' });
+    if (parts) {
+      const r = await fetch(`${SEAL_API_URL}/subscription-schedule-cancellation`, {
+        method: 'PUT',
+        headers: sealHeaders(),
+        body: JSON.stringify({ id: sub.id, date: parts.date, time: parts.time, timezone: '+00:00' }),
+      });
+      if (r.ok) {
+        return res.status(200).json({ ok: true, status: sub.status, cancelsOn: sub.nextBillingDate });
+      }
+      console.error('Seal schedule-cancellation failed:', r.status, await r.text());
+    } else {
+      console.error('Cancel missing billing date', { id: sub.id, status: sub.status, nextBillingDate: sub.nextBillingDate });
     }
-    const r = await fetch(`${SEAL_API_URL}/subscription-schedule-cancellation`, {
-      method: 'PUT',
-      headers: sealHeaders(),
-      body: JSON.stringify({ id: sub.id, date: parts.date, time: parts.time, timezone: '+00:00' }),
-    });
-    if (!r.ok) {
-      const err = await r.text();
-      console.error('Seal schedule-cancellation failed:', r.status, err);
-      return res.status(500).json({ error: 'Could not schedule cancellation. Please try again or email support.' });
+    // Paused trials often have no renewal date because billing is on hold.
+    // Cancel now so the trial cannot convert into a charge later.
+    if (sub.status === 'paused' || sub.status === 'trial') {
+      const ok = await sealCancelNow(sub.id);
+      if (ok) return res.status(200).json({ ok: true, status: 'cancelled', immediate: sub.status === 'paused' });
     }
-    return res.status(200).json({ ok: true, status: sub.status, cancelsOn: sub.nextBillingDate });
+    return res.status(400).json({ error: 'Could not find your renewal date. Email autothreshweb@gmail.com and we will cancel it for you.' });
   }
 
   const sealAction = action === 'pause' ? 'pause' : 'resume';
