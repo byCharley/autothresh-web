@@ -234,6 +234,23 @@ async function sealCheckSubscription(email: string): Promise<{ hasSub: boolean; 
         }
       }
     }
+    if (!hasSub) {
+      for (const s of subs) {
+        const st = String(s.status ?? '').toUpperCase();
+        if (st !== 'PAUSED') continue;
+        const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
+        subscriptionStatus = 'paused';
+        planTitle = (s.plan_title ?? s.product_title ?? s.plan_name ?? items[0]?.selling_plan_name ?? items[0]?.title) as string | undefined;
+        nextBillingDate = (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at) as string | undefined;
+        break;
+      }
+      if (!subscriptionStatus) {
+        for (const s of subs) {
+          const st = String(s.status ?? '').toUpperCase();
+          if (st === 'CANCELLED' || st === 'CANCELED') { subscriptionStatus = 'cancelled'; break; }
+        }
+      }
+    }
     return { hasSub, activeSubs, everInSeal, subscriptionStatus, nextBillingDate, planTitle };
   } catch (e) {
     console.error('Seal check error:', e);

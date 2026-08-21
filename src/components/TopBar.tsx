@@ -5,6 +5,7 @@ import { useAppVersion } from '../hooks/useAppVersion';
 
 import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewModal';
 import { ACCENTS, applyAccentByHex } from '../lib/accent';
+import { BillingPanel } from './BillingPanel';
 
 function getSeenDate(): string {
   return localStorage.getItem('at-changelog-seen') ?? '';
@@ -28,9 +29,10 @@ interface TopBarProps {
   sessionToken?: string;
   accentColor?: string;
   chatUnread?: number;
+  onBillingChanged?: () => void;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onWhatsNew, onLogout, onUpdateName, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0 }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onWhatsNew, onLogout, onUpdateName, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0, onBillingChanged }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
   const appVersion = useAppVersion();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -379,7 +381,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                     onMouseEnter={(e) => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = 'var(--accent)'; a.style.color = 'var(--accent)'; }}
                     onMouseLeave={(e) => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = 'var(--border)'; a.style.color = 'var(--text-muted)'; }}
                   >
-                    Manage subscription
+                    Store account
                   </a>
                 </div>
               </div>
@@ -415,7 +417,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
       <div ref={gearRef} style={{ position: 'relative' }}>
         <button
           className="btn btn-ghost btn-icon"
-          title="Theme color"
+          title="Account settings"
           onClick={() => setGearOpen(v => !v)}
           style={{ height: 26, width: 30 }}
           data-tutorial="tutorial-theme"
@@ -431,7 +433,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
             position: 'absolute', top: 'calc(100% + 6px)', right: 0,
             background: 'var(--surface)', border: '1px solid var(--border)',
             boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
-            padding: '14px 16px', zIndex: 200, minWidth: 180,
+            padding: '14px 16px', zIndex: 200, width: 280, maxWidth: 'calc(100vw - 24px)',
           }}>
             <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 12 }}>
               Accent Color
@@ -443,7 +445,6 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                   onClick={() => {
                     applyAccentByHex(a.accent);
                     setActiveAccent(a.accent);
-                    setGearOpen(false);
                     if (sessionToken) {
                       fetch('/api/presets?type=prefs', {
                         method: 'PATCH',
@@ -475,6 +476,18 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                 </button>
               ))}
             </div>
+            {sessionToken && subscriptionStatus !== 'creator' && subscriptionStatus !== 'tester' && subscriptionStatus !== 'lifetime' && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                <BillingPanel
+                  token={sessionToken}
+                  planTitle={planTitle}
+                  nextBillingDate={subscriptionExpiresAt}
+                  subscriptionStatus={subscriptionStatus}
+                  compact
+                  onChanged={onBillingChanged}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

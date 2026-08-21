@@ -3,6 +3,7 @@ import { AppIcon } from './AppIcon';
 import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
+import { BillingPanel } from './BillingPanel';
 
 const MONTHLY_URL  = 'https://charleypangus.com/checkout/autothresh-web/monthly';
 const ANNUAL_URL   = 'https://charleypangus.com/checkout/autothresh-web/yearly';
@@ -12,6 +13,9 @@ interface Props {
   firstName?: string;
   email?: string;
   subscriptionStatus?: string;
+  planTitle?: string;
+  subscriptionExpiresAt?: string;
+  token?: string;
   onLogout: () => void;
   onSwitchAccount?: () => void;
   onRecheck?: () => Promise<boolean>;
@@ -160,7 +164,7 @@ function PricingModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function SubscribePage({ firstName, email, subscriptionStatus, onLogout, onSwitchAccount, onRecheck }: Props) {
+export function SubscribePage({ firstName, email, subscriptionStatus, planTitle, subscriptionExpiresAt, token, onLogout, onSwitchAccount, onRecheck }: Props) {
   const [showEula,      setShowEula]      = useState(false);
   const [showFaq,       setShowFaq]       = useState(false);
   const [showPricing,   setShowPricing]   = useState(false);
@@ -259,6 +263,47 @@ export function SubscribePage({ firstName, email, subscriptionStatus, onLogout, 
               </button>
             </div>
           </>
+        ) : subscriptionStatus === 'paused' ? (
+          <>
+            <div style={{
+              width: 40, height: 40, borderRadius: '50%',
+              background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px',
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+              </svg>
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.01em' }}>
+              Subscription paused
+            </div>
+            {email && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                padding: '4px 10px', marginBottom: 16,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fbbf24', flexShrink: 0 }} />
+                {email}
+              </div>
+            )}
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 20 }}>
+              Billing is on hold and this account does not have access right now. Resume whenever you are ready — you will not be charged while paused.
+            </div>
+            {token && (
+              <div style={{ textAlign: 'left', marginBottom: 20 }}>
+                <BillingPanel token={token} planTitle={planTitle} nextBillingDate={subscriptionExpiresAt} subscriptionStatus="paused" onChanged={() => { void onRecheck?.(); }} />
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {onSwitchAccount && (
+                <button className="btn btn-ghost" onClick={onSwitchAccount} style={{ fontSize: 11, color: 'var(--text-muted)' }}>Different account</button>
+              )}
+              <button className="btn btn-ghost" onClick={onLogout} style={{ fontSize: 11, color: 'var(--text-dim)' }}>Sign out</button>
+            </div>
+          </>
         ) : (
           /* ── No subscription state ── */
           <>
@@ -291,7 +336,9 @@ export function SubscribePage({ firstName, email, subscriptionStatus, onLogout, 
             )}
 
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
-              Your subscription is no longer active. Pick a plan to get back in — monthly, annual, or lifetime.
+              {subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled'
+                ? 'This subscription has ended. Choose a plan whenever you are ready to come back.'
+                : 'Your subscription is no longer active. Pick a plan to get back in — monthly, annual, or lifetime.'}
             </div>
 
             <button

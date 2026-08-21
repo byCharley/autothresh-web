@@ -137,7 +137,7 @@ function App() {
   const updateAvailable = useVersionCheck();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [chunkError, setChunkError] = useState(false);
-  const { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName } = useAuth();
+  const { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [sheetGenerating, setSheetGenerating] = useState(false);
   const [showEula, setShowEula]         = useState(false);
@@ -258,7 +258,7 @@ function App() {
   }
 
   if (status === 'no-subscription') {
-    return <SubscribePage firstName={session?.firstName} email={session?.email} subscriptionStatus={session?.subscriptionStatus} onLogout={logout} onSwitchAccount={switchAccount} onRecheck={recheck} />;
+    return <SubscribePage firstName={session?.firstName} email={session?.email} subscriptionStatus={session?.subscriptionStatus} planTitle={session?.planTitle} subscriptionExpiresAt={session?.subscriptionExpiresAt} token={session?.token} onLogout={logout} onSwitchAccount={switchAccount} onRecheck={recheck} />;
   }
 
   function buildColorRefCanvas(refColors: RGB[], dpi = 72): HTMLCanvasElement {
@@ -1618,6 +1618,7 @@ function App() {
         onMockup={() => setMockupOpen(true)}
         onLogout={logout}
         onAnalytics={() => setShowAnalytics(true)}
+        onBillingChanged={syncSubscription}
         session={session}
       >
         {showExport && <ExportModal onClose={() => setShowExport(false)} onExport={handleExport} onGenerateSheet={handleGenerateDtgSheet} generatingSheet={sheetGenerating} defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'autothresh'} separationMode={separationMode} />}
@@ -1639,7 +1640,7 @@ function App() {
   return (
     <Suspense fallback={null}>
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => { setShowAnalytics(true); setCreatorChatUnread(0); }} onWhatsNew={() => setShowWhatsNew(true)} onLogout={logout} onUpdateName={updateDisplayName} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} accentColor={session?.accentColor} chatUnread={creatorChatUnread} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => { setShowAnalytics(true); setCreatorChatUnread(0); }} onWhatsNew={() => setShowWhatsNew(true)} onLogout={logout} onUpdateName={updateDisplayName} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} accentColor={session?.accentColor} chatUnread={creatorChatUnread} onBillingChanged={syncSubscription} />
 
 
       <div className="workspace">

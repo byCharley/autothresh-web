@@ -65,13 +65,15 @@ export function EulaModal({ onClose }: Props) {
           </Section>
 
           <Section title="Cancellation">
-            You are solely responsible for canceling your subscription before your
-            next billing cycle renews. To request a cancellation, email us at{' '}
+            You can pause or cancel from Account settings (the gear icon) while signed in.
+            Cancelling turns off auto-renew. Purchases are final and we do not issue refunds
+            for time already billed. You keep access through the end of your current billing
+            period, then the account will no longer open until you subscribe again. If you
+            cannot use in-app billing, email{' '}
             <a href="mailto:autothreshweb@gmail.com" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
               autothreshweb@gmail.com
             </a>{' '}
-            prior to your renewal date. We recommend canceling at least 48 hours in
-            advance to ensure processing time.
+            at least 48 hours before renewal.
           </Section>
 
           <Section title="Acceptance">

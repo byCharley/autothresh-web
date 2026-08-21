@@ -7,8 +7,10 @@ import { AppIcon } from './AppIcon';
 import { renderComposite } from '../engine/imageProcessor';
 import { compositeHalftonePlates, buildNeugebauerPrimaries } from '../engine/inkSimulator';
 import { applyFabricBlend } from '../engine/fabricBlend';
+import { BillingPanel } from './BillingPanel';
 
 interface Session {
+  token?: string;
   firstName?: string;
   email?: string;
   subscriptionStatus?: string;
@@ -21,13 +23,14 @@ interface Props {
   onMockup: () => void;
   onLogout: () => void;
   onAnalytics?: () => void;
+  onBillingChanged?: () => void;
   session: Session | null;
   children?: React.ReactNode;
 }
 
 type Sheet = 'layers' | 'controls' | null;
 
-export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, session, children }: Props) {
+export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBillingChanged, session, children }: Props) {
   const [activeSheet, setActiveSheet] = useState<Sheet>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewCenter, setPreviewCenter] = useState({ x: 0.5, y: 0.5 });
@@ -293,7 +296,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
           {menuOpen && (
             <div style={{
               position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-              width: 220,
+              width: 260,
               background: 'var(--surface)', border: '1px solid var(--border)',
               boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
               zIndex: 200,
@@ -324,6 +327,18 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
                   </button>
                 </div>
               )}
+              {subStatus !== 'creator' && subStatus !== 'tester' && subStatus !== 'lifetime' && session?.token && (
+                <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)' }}>
+                  <BillingPanel
+                    token={session.token}
+                    planTitle={session.planTitle}
+                    nextBillingDate={session.subscriptionExpiresAt}
+                    subscriptionStatus={subStatus}
+                    compact
+                    onChanged={() => { setMenuOpen(false); onBillingChanged?.(); }}
+                  />
+                </div>
+              )}
               <div style={{ padding: '10px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <button
                   onClick={() => { setMenuOpen(false); onLogout(); }}
@@ -331,14 +346,6 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
                 >
                   Sign out
                 </button>
-                <a
-                  href="https://www.charleypangus.com/login"
-                  target="_blank" rel="noopener noreferrer"
-                  onClick={() => setMenuOpen(false)}
-                  style={{ border: '1px solid var(--border)', padding: '4px 10px', fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}
-                >
-                  Subscription
-                </a>
               </div>
             </div>
           )}

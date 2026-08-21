@@ -15,6 +15,13 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-08-21',
+    label: 'Manage Billing in the App',
+    added: [
+      'Pause, resume, or cancel your subscription from Account settings (the gear icon). Cancelling turns off auto-renew — you keep access through the end of your current period. Purchases are final and are not refunded.',
+    ],
+  },
+  {
     date: '2026-08-20',
     label: 'Dither Export Fix',
     fixed: [

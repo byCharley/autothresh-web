@@ -170,17 +170,14 @@ export function useAuth() {
         if (!data.valid) { clearSession(); setStatus('unauthenticated'); return; }
         // Guard: if logout() ran while verify was in-flight, don't restore.
         if (!loadSession()) return;
-        // Paused or cancelled → log out immediately
-        if (isInactiveStatus(data.subscriptionStatus)) {
-          clearSession();
-          setStatus('unauthenticated');
-          return;
-        }
         if (data.accentColor) applyAccentByHex(data.accentColor);
         const updated: Session = applyDisplayNameOverride({ ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor });
         saveSession(updated);
         setSession(updated);
-        if (!data.hasSubscription) { setStatus('no-subscription'); return; }
+        if (!data.hasSubscription || isInactiveStatus(data.subscriptionStatus)) {
+          setStatus('no-subscription');
+          return;
+        }
         setStatus('authenticated');
       })
       .catch(() => {
@@ -202,12 +199,15 @@ export function useAuth() {
         body: JSON.stringify({ token: stored.token }),
       });
       const data = await r.json() as { valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string; accentColor?: string };
-      if (!data.valid || !data.hasSubscription) return false;
-      if (isInactiveStatus(data.subscriptionStatus)) return false;
+      if (!data.valid) return false;
       if (data.accentColor) applyAccentByHex(data.accentColor);
       const updated: Session = applyDisplayNameOverride({ ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor });
       saveSession(updated);
       setSession(updated);
+      if (!data.hasSubscription || isInactiveStatus(data.subscriptionStatus)) {
+        setStatus('no-subscription');
+        return false;
+      }
       setStatus('authenticated');
       return true;
     } catch { return false; }
@@ -278,5 +278,27 @@ export function useAuth() {
     setSession(prev => prev ? { ...prev, firstName: name.trim() || prev.firstName } : prev);
   }, []);
 
-  return { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName };
+  const syncSubscription = useCallback(async () => {
+    const stored = loadSession();
+    if (!stored) return;
+    try {
+      const r = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: stored.token }),
+      });
+      const data = await r.json() as { valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string; accentColor?: string };
+      if (!data.valid) return;
+      const updated: Session = applyDisplayNameOverride({ ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor });
+      saveSession(updated);
+      setSession(updated);
+      if (!data.hasSubscription || isInactiveStatus(data.subscriptionStatus)) {
+        setStatus('no-subscription');
+      } else {
+        setStatus('authenticated');
+      }
+    } catch { /* keep current session */ }
+  }, []);
+
+  return { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription };
 }
