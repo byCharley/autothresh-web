@@ -28,21 +28,24 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
 
   return (
     <div style={{
-      minHeight: '100dvh',
+      height: '100%',
+      overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch',
       background: 'var(--bg)',
       backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
       backgroundSize: '28px 28px',
       display: 'flex', flexDirection: 'column',
-      alignItems: 'center',
-      padding: '32px 16px',
-      paddingBottom: 'max(32px, calc(env(safe-area-inset-bottom, 0px) + 24px))',
       boxSizing: 'border-box',
       fontFamily: 'var(--font-sans)',
     }}>
       <div style={{
-        margin: 'auto',
+        flex: 1,
         width: '100%', maxWidth: 400,
+        margin: '0 auto',
+        padding: '32px 16px 16px',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center',
+        boxSizing: 'border-box',
       }}>
 
         {/* Logo */}
@@ -314,10 +317,10 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                     <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>/mo</span>
                   </div>
                   <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
-                    Cancel anytime
+                    No free trial · billed now
                   </div>
                   <div style={{ marginTop: 8, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', opacity: 0.6, lineHeight: 1.5 }}>
-                    $8.99 billed monthly
+                    $8.99 billed monthly · cancel anytime
                   </div>
                 </div>
 
@@ -383,14 +386,16 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                 onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.85')}
                 onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
               >
-                {selectedPlan === 'yearly' ? 'Try It Free — 3 Days' : 'Get Started — Monthly'}
+                {selectedPlan === 'yearly' ? 'Try It Free — 3 Days' : 'Subscribe Monthly — $8.99'}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
                 </svg>
               </button>
 
               <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', lineHeight: 1.5, opacity: 0.7 }}>
-                {selectedPlan === 'yearly' ? 'No charge until your trial ends. Cancel anytime.' : 'Cancel anytime.'}
+                {selectedPlan === 'yearly'
+                  ? 'Card required. No charge until your 3-day trial ends. Cancel anytime.'
+                  : 'Billed immediately. No trial on monthly. Cancel anytime.'}
               </div>
 
               {/* Lifetime divider */}

@@ -47,6 +47,93 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const resource = String(req.query.resource ?? '');
 
+  // ── All users (analytics + testers + suspend flags) ───────────────────────
+  if (resource === 'users') {
+    if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+    try {
+      const since = new Date(Date.now() - 365 * 86_400_000).toISOString();
+      const [eventsRes, testersRes, flagsRes] = await Promise.all([
+        sb(`analytics_events?select=email,created_at,device_type,country,event_type&created_at=gte.${since}&order=created_at.desc&limit=10000`),
+        sb('testers?select=email,status,role'),
+        sb('security_flags?select=email,expired,reason,reviewed'),
+      ]);
+
+      const events  = eventsRes.ok  ? await eventsRes.json()  as Array<Record<string, unknown>> : [];
+      const testers = testersRes.ok ? await testersRes.json() as Array<Record<string, unknown>> : [];
+      const flags   = flagsRes.ok   ? await flagsRes.json()   as Array<Record<string, unknown>> : [];
+
+      type Agg = {
+        email: string; firstSeen: string; lastSeen: string;
+        opens: number; logins: number; device: string; country: string;
+      };
+      const map = new Map<string, Agg>();
+      for (const ev of events) {
+        const email = String(ev.email ?? '').toLowerCase().trim();
+        if (!email) continue;
+        const ts = String(ev.created_at ?? '');
+        const existing = map.get(email);
+        if (!existing) {
+          map.set(email, {
+            email,
+            firstSeen: ts,
+            lastSeen: ts,
+            opens: ev.event_type === 'login' ? 0 : 1,
+            logins: ev.event_type === 'login' ? 1 : 0,
+            device: String(ev.device_type ?? ''),
+            country: String(ev.country ?? ''),
+          });
+        } else {
+          existing.opens  += ev.event_type === 'login' ? 0 : 1;
+          existing.logins += ev.event_type === 'login' ? 1 : 0;
+          if (ts > existing.lastSeen) {
+            existing.lastSeen = ts;
+            if (ev.device_type) existing.device = String(ev.device_type);
+            if (ev.country) existing.country = String(ev.country);
+          }
+          if (ts && (!existing.firstSeen || ts < existing.firstSeen)) existing.firstSeen = ts;
+        }
+      }
+
+      const testerByEmail = new Map(testers.map(t => [String(t.email).toLowerCase(), t]));
+      const flagByEmail   = new Map(flags.map(f => [String(f.email).toLowerCase(), f]));
+
+      for (const t of testers) {
+        const email = String(t.email).toLowerCase();
+        if (email && !map.has(email)) {
+          map.set(email, { email, firstSeen: '', lastSeen: '', opens: 0, logins: 0, device: '', country: '' });
+        }
+      }
+      for (const f of flags) {
+        const email = String(f.email).toLowerCase();
+        if (email && !map.has(email)) {
+          map.set(email, { email, firstSeen: '', lastSeen: '', opens: 0, logins: 0, device: '', country: '' });
+        }
+      }
+
+      const users = [...map.values()].map(u => {
+        const t = testerByEmail.get(u.email);
+        const f = flagByEmail.get(u.email);
+        const blocked = Boolean(f?.expired);
+        return {
+          ...u,
+          blocked,
+          blockReason: blocked ? String(f?.reason ?? '') : '',
+          accessRole: t ? String(t.role ?? 'tester') : null,
+          accessStatus: t ? String(t.status ?? '') : null,
+        };
+      }).sort((a, b) => (b.lastSeen || '').localeCompare(a.lastSeen || ''));
+
+      return res.status(200).json({
+        users,
+        total: users.length,
+        blocked: users.filter(u => u.blocked).length,
+      });
+    } catch (e) {
+      console.error('Users GET error:', e);
+      return res.status(500).json({ error: 'Failed to load users' });
+    }
+  }
+
   // ── Testers resource ──────────────────────────────────────────────────────
   if (resource === 'testers') {
     const TABLE_MISSING = 'testers table not found — run:\n\nCREATE TABLE testers (\n  email text PRIMARY KEY,\n  status text NOT NULL DEFAULT \'active\',\n  role text NOT NULL DEFAULT \'tester\',\n  notes text,\n  created_at timestamptz NOT NULL DEFAULT now()\n);\n\nIf the table exists but is missing the role column, run:\nALTER TABLE testers ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT \'tester\';';

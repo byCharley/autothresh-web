@@ -512,7 +512,7 @@ function ChatPanel({ session }: { session: Session }) {
   const totalUnread = tickets.reduce((s, t) => s + (t.unread_by_creator || 0), 0);
 
   return (
-    <div style={{ display: 'flex', gap: 0, height: mobile ? '100%' : 560, border: '1px solid var(--border)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', gap: 0, height: mobile ? 'min(70dvh, 560px)' : 560, minHeight: mobile ? 360 : 560, border: '1px solid var(--border)', overflow: 'hidden' }}>
 
       {/* Lightbox overlay */}
       {lightboxUrl && (
@@ -1218,6 +1218,204 @@ function ConfidenceBadge({ level }: { level: string }) {
   );
 }
 
+// ── Users Panel (all accounts + suspend) ──────────────────────────────────────
+
+interface AppUser {
+  email: string;
+  firstSeen: string;
+  lastSeen: string;
+  opens: number;
+  logins: number;
+  device: string;
+  country: string;
+  blocked: boolean;
+  blockReason: string;
+  accessRole: string | null;
+  accessStatus: string | null;
+}
+
+function UsersPanel({ session }: { session: Session }) {
+  const mobile = useMobile(640);
+  const [users, setUsers]     = useState<AppUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+  const [query, setQuery]     = useState('');
+  const [filter, setFilter]   = useState<'all' | 'active' | 'suspended'>('all');
+  const [busy, setBusy]       = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true); setError(null);
+    fetch('/api/security?resource=users', { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() as Promise<{ users?: AppUser[]; error?: string }>; })
+      .then(d => {
+        if (d.error) { setError(d.error); return; }
+        setUsers(d.users ?? []);
+      })
+      .catch(e => setError(String(e.message)))
+      .finally(() => setLoading(false));
+  }, [session.token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function setSuspended(email: string, suspend: boolean) {
+    setBusy(email);
+    try {
+      const r = await fetch('/api/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({
+          action: suspend ? 'expire' : 'unblock',
+          email,
+          notes: suspend ? 'Suspended from Users tab' : 'Restored from Users tab',
+        }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Action failed');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const q = query.trim().toLowerCase();
+  const filtered = users.filter(u => {
+    if (filter === 'suspended' && !u.blocked) return false;
+    if (filter === 'active' && u.blocked) return false;
+    if (q && !u.email.includes(q) && !u.country.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const blockedCount = users.filter(u => u.blocked).length;
+
+  function fmtDate(iso: string) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)', padding: '3px 10px' }}>
+            {users.length} users
+          </span>
+          {blockedCount > 0 && (
+            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)', padding: '3px 10px' }}>
+              {blockedCount} suspended
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['all', 'active', 'suspended'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              style={{
+                height: 26, padding: '0 10px', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer',
+                background: filter === f ? 'var(--accent)' : 'transparent',
+                border: `1px solid ${filter === f ? 'var(--accent)' : 'var(--border)'}`,
+                color: filter === f ? '#111' : 'var(--text-dim)',
+              }}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <input
+        type="search"
+        placeholder="Search email or country…"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        style={{
+          height: 36, padding: '0 12px', fontSize: 12, fontFamily: 'var(--font-mono)',
+          background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)',
+          width: '100%', boxSizing: 'border-box',
+        }}
+      />
+
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '48px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Loading users…</div>
+      )}
+      {error && (
+        <div style={{ padding: 16, fontSize: 11, fontFamily: 'var(--font-mono)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}>{error}</div>
+      )}
+
+      {!loading && !error && filtered.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '48px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+          No users match.
+        </div>
+      )}
+
+      {!loading && filtered.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--border)', border: '1px solid var(--border)' }}>
+          {filtered.map(u => (
+            <div
+              key={u.email}
+              style={{
+                background: u.blocked ? 'rgba(248,113,113,0.04)' : 'var(--surface)',
+                padding: mobile ? '12px' : '12px 14px',
+                display: 'flex',
+                flexDirection: mobile ? 'column' : 'row',
+                alignItems: mobile ? 'stretch' : 'center',
+                gap: mobile ? 10 : 12,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
+                  color: u.blocked ? '#f87171' : 'var(--text)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {u.email}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-dim)', marginTop: 3, lineHeight: 1.6 }}>
+                  Last seen {fmtDate(u.lastSeen)}
+                  {u.device ? ` · ${u.device}` : ''}
+                  {u.country && u.country !== 'Unknown' ? ` · ${u.country}` : ''}
+                  {` · ${u.opens + u.logins} visits`}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                  {u.blocked && (
+                    <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}>Suspended</span>
+                  )}
+                  {u.accessRole && (
+                    <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '2px 6px', background: 'var(--surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                      {u.accessRole}{u.accessStatus === 'paused' ? ' · paused' : ''}
+                    </span>
+                  )}
+                  {u.blockReason && (
+                    <span style={{ fontSize: 8, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{u.blockReason}</span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setSuspended(u.email, !u.blocked)}
+                disabled={busy === u.email}
+                style={{
+                  height: 32, padding: '0 12px', flexShrink: 0,
+                  fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.05em',
+                  cursor: busy === u.email ? 'default' : 'pointer', opacity: busy === u.email ? 0.5 : 1,
+                  background: u.blocked ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)',
+                  border: `1px solid ${u.blocked ? 'rgba(74,222,128,0.35)' : 'rgba(248,113,113,0.35)'}`,
+                  color: u.blocked ? '#4ade80' : '#f87171',
+                  width: mobile ? '100%' : 'auto',
+                }}
+              >
+                {busy === u.email ? '…' : u.blocked ? 'Restore access' : 'Suspend'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Access Panel ──────────────────────────────────────────────────────────────
 
 interface AccessEntry {
@@ -1229,6 +1427,7 @@ interface AccessEntry {
 }
 
 function AccessPanel({ session }: { session: Session }) {
+  const mobile = useMobile(640);
   const [testers, setTesters]   = useState<AccessEntry[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
@@ -1386,17 +1585,21 @@ function AccessPanel({ session }: { session: Session }) {
       {!loading && testers.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--border)' }}>
           {/* Column headers */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 12, background: 'var(--surface-2)', padding: '8px 14px', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr auto auto auto', gap: mobile ? 8 : 12, background: 'var(--surface-2)', padding: '8px 14px', alignItems: 'center' }}>
             <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Email</span>
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Role</span>
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Status</span>
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Actions</span>
+            {!mobile && (
+              <>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Role</span>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Status</span>
+                <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Actions</span>
+              </>
+            )}
           </div>
 
           {testers.map(t => (
             <div
               key={t.email}
-              style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 12, background: 'var(--surface)', padding: '12px 14px', alignItems: 'center' }}
+              style={{ display: 'grid', gridTemplateColumns: mobile ? '1fr' : '1fr auto auto auto', gap: mobile ? 8 : 12, background: 'var(--surface)', padding: '12px 14px', alignItems: 'center' }}
             >
               {/* Email + notes + date */}
               <div>
@@ -1428,7 +1631,7 @@ function AccessPanel({ session }: { session: Session }) {
               </div>
 
               {/* Action buttons */}
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {t.status === 'active' ? (
                   <button
                     onClick={() => act('pause', t.email)}
@@ -1853,7 +2056,7 @@ function daysAgoStr(n: number) {
 }
 
 export function AnalyticsDashboard({ session, onClose }: { session: Session; onClose: () => void }) {
-  const mobile = useMobile();
+  const mobile = useMobile(768);
   const [preset, setPreset]   = useState<Preset | 'custom'>(30);
   const [customFrom, setCustomFrom] = useState(daysAgoStr(30));
   const [customTo,   setCustomTo]   = useState(todayStr);
@@ -1944,7 +2147,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     setPreset('custom');
   }
 
-  const [activeTab, setActiveTab] = useState<'stats' | 'security' | 'access' | 'videos' | 'chat' | 'settings'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'security' | 'access' | 'videos' | 'chat' | 'settings'>('stats');
   const [securityUnreviewed, setSecurityUnreviewed] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
 
@@ -1980,36 +2183,56 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(0,0,0,0.75)',
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-      overflowY: 'auto',
-      padding: mobile ? '0' : '40px 20px 60px',
+      display: 'flex', alignItems: mobile ? 'stretch' : 'flex-start', justifyContent: 'center',
+      overflowY: mobile ? 'hidden' : 'auto',
+      padding: mobile ? 0 : '40px 20px 60px',
     }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
         width: '100%', maxWidth: 960,
+        height: mobile ? '100dvh' : 'auto',
+        maxHeight: mobile ? '100dvh' : 'none',
+        display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
         background: 'var(--bg, #111)',
         border: mobile ? 'none' : '1px solid var(--border)',
         boxShadow: '0 24px 80px rgba(0,0,0,0.8)',
       }}>
         {/* Header */}
         <div style={{
+          flexShrink: 0,
           display: 'flex', flexDirection: mobile ? 'column' : 'row',
-          alignItems: mobile ? 'flex-start' : 'center',
+          alignItems: mobile ? 'stretch' : 'center',
           justifyContent: 'space-between', gap: mobile ? 10 : 0,
-          padding: mobile ? '12px 14px' : '16px 20px',
+          padding: mobile ? '10px 12px calc(10px + env(safe-area-inset-top, 0px))' : '16px 20px',
+          paddingTop: mobile ? 'calc(10px + env(safe-area-inset-top, 0px))' : 16,
           borderBottom: '1px solid var(--border)',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" style={{ flexShrink: 0 }}>
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
             </svg>
-            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', letterSpacing: '0.04em' }}>
+            <span style={{ fontSize: mobile ? 12 : 13, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--text)', letterSpacing: '0.04em', flex: 1, minWidth: 0 }}>
               COMMAND CENTER
             </span>
-            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', background: 'rgba(var(--accent-rgb,255,200,0),0.1)', border: '1px solid var(--accent)', padding: '1px 6px', letterSpacing: '0.08em' }}>
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--accent)', background: 'rgba(var(--accent-rgb,255,200,0),0.1)', border: '1px solid var(--accent)', padding: '1px 6px', letterSpacing: '0.08em', flexShrink: 0 }}>
               CREATOR
             </span>
+            {mobile && (
+            <button
+              onClick={onClose}
+              style={{
+                height: 32, width: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'none', border: '1px solid var(--border)', cursor: 'pointer',
+                color: 'var(--text-dim)', flexShrink: 0, marginLeft: 'auto',
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {activeTab === 'stats' && PRESETS.map(d => (
@@ -2091,42 +2314,51 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                 </>
               )}
             </div>}
+            {!mobile && (
             <button
               onClick={onClose}
               style={{
                 marginLeft: 8, height: 24, width: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'none', border: '1px solid var(--border)', cursor: 'pointer',
-                color: 'var(--text-dim)', transition: 'color 0.12s, border-color 0.12s',
+                color: 'var(--text-dim)',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--text)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; }}
             >
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
             </button>
+            )}
           </div>
         </div>
 
         {/* Tab bar */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', padding: '0 20px' }}>
-          {(['stats', 'security', 'access', 'videos', 'chat', 'settings'] as const).map(tab => (
+        <div style={{
+          flexShrink: 0,
+          display: 'flex',
+          borderBottom: '1px solid var(--border)',
+          padding: mobile ? '0 8px' : '0 20px',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+        } as React.CSSProperties}>
+          {(['stats', 'users', 'security', 'access', 'videos', 'chat', 'settings'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
                 position: 'relative',
-                padding: '10px 16px',
+                padding: mobile ? '12px 12px' : '10px 16px',
                 border: 'none',
                 borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
                 background: 'transparent',
                 color: activeTab === tab ? 'var(--accent)' : 'var(--text-dim)',
-                fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                fontFamily: 'var(--font-mono)', fontSize: mobile ? 9 : 10, fontWeight: 700,
                 letterSpacing: '0.07em', textTransform: 'uppercase',
-                cursor: 'pointer', marginBottom: -1,
+                cursor: 'pointer', marginBottom: -1, flexShrink: 0, whiteSpace: 'nowrap',
               }}
             >
               {tab === 'stats' ? 'Stats'
+                : tab === 'users' ? 'Users'
                 : tab === 'security' ? (securityUnreviewed > 0 ? `Security (${securityUnreviewed > 99 ? '99+' : securityUnreviewed})` : 'Security')
                 : tab === 'access' ? 'Access'
                 : tab === 'videos' ? 'Videos'
@@ -2137,9 +2369,21 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
         </div>
 
         {/* Body */}
-        <div style={{ padding: mobile ? '12px' : '20px' }}>
+        <div style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          padding: mobile
+            ? (activeTab === 'chat' ? '0 0 calc(12px + env(safe-area-inset-bottom, 0px))' : '12px 12px calc(16px + env(safe-area-inset-bottom, 0px))')
+            : '20px',
+        } as React.CSSProperties}>
           {activeTab === 'security' && (
             <SecurityPanel session={session} onDataLoad={setSecurityUnreviewed} />
+          )}
+
+          {activeTab === 'users' && (
+            <UsersPanel session={session} />
           )}
 
           {activeTab === 'access' && (
@@ -2246,7 +2490,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
               {/* Subscription trend */}
               <Panel title="Subscription Trend (Daily Snapshots)">
-                <div style={{ display: 'flex', gap: 16, marginBottom: 10, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 16, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 20, height: 2, background: 'var(--accent)', borderRadius: 1 }} />
                     <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Active</span>

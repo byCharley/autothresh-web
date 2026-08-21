@@ -6,6 +6,7 @@ import { ControlPanel } from './ControlPanel';
 import { AppIcon } from './AppIcon';
 import { renderComposite } from '../engine/imageProcessor';
 import { compositeHalftonePlates, buildNeugebauerPrimaries } from '../engine/inkSimulator';
+import { applyFabricBlend } from '../engine/fabricBlend';
 
 interface Session {
   firstName?: string;
@@ -39,7 +40,11 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
           canvasColor, setCanvasColor,
           showFabricBg, setShowFabricBg,
           fabricTexture, setFabricTexture,
+          fabricBlendStrength, fabricTextureDepth,
           proCmykSettings } = useStore();
+  const fabricImgDataRef = useRef<ImageData | null>(null);
+  const fabricLoadKeyRef = useRef('');
+  const [fabricVersion, setFabricVersion] = useState(0);
 
   const [modePickerOpen, setModePickerOpen] = useState(false);
   const [showCmykDisclaimer, setShowCmykDisclaimer] = useState(false);
@@ -60,9 +65,37 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
     setActiveSheet(prev => prev === tab ? null : tab);
 
   const isCmykPro = separationMode === 'cmyk-pro';
-  // CMYK Pro gets ~45% of screen height so the full image is visible in the preview strip.
-  // Other modes use a compact 200px strip since they zoom into dot detail.
-  const previewH = isCmykPro ? Math.min(Math.round(window.innerHeight * 0.45), 420) : 200;
+  const fabricPreviewOn = fabricTexture !== 'none';
+  // Fit the full artwork when judging fabric; otherwise zoom into dots.
+  const previewZoomFraction = (isCmykPro || fabricPreviewOn) ? 1.0 : 0.35;
+  // CMYK Pro / fabric view: taller strip so the garment reads. Other modes: compact 200px for dots.
+  const previewH = (isCmykPro || fabricPreviewOn)
+    ? Math.min(Math.round(window.innerHeight * 0.45), 420)
+    : 200;
+
+  // Load the same fabric photos CanvasView uses so the strip can run applyFabricBlend.
+  useEffect(() => {
+    if (fabricTexture === 'none') {
+      fabricImgDataRef.current = null;
+      fabricLoadKeyRef.current = '';
+      return;
+    }
+    const path = fabricTexture === 'light'
+      ? '/textures/White_Fabric_ATW.jpg'
+      : '/textures/Black_Fabric_ATW.jpg';
+    if (fabricLoadKeyRef.current === path) return;
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      c.getContext('2d')!.drawImage(img, 0, 0);
+      fabricImgDataRef.current = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+      fabricLoadKeyRef.current = path;
+      setFabricVersion((v) => v + 1);
+    };
+    img.src = path;
+  }, [fabricTexture]);
 
   // ── Live preview strip ────────────────────────────────────────────────────
   useEffect(() => {
@@ -108,14 +141,43 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
       srcCanvas.getContext('2d')!.putImageData(composite, 0, 0);
     }
 
+    if (srcCanvas && (showFabricBg || fabricPreviewOn)) {
+      const out = document.createElement('canvas');
+      out.width = srcCanvas.width;
+      out.height = srcCanvas.height;
+      const octx = out.getContext('2d')!;
+      if (showFabricBg) {
+        octx.fillStyle = canvasColor;
+        octx.fillRect(0, 0, out.width, out.height);
+      }
+      octx.drawImage(srcCanvas, 0, 0);
+      const fabData = fabricImgDataRef.current;
+      if (fabData && fabricPreviewOn) {
+        const hex = canvasColor.replace('#', '');
+        const canvasRgb: [number, number, number] = [
+          parseInt(hex.slice(0, 2), 16) || 0,
+          parseInt(hex.slice(2, 4), 16) || 0,
+          parseInt(hex.slice(4, 6), 16) || 0,
+        ];
+        const artData = octx.getImageData(0, 0, out.width, out.height);
+        applyFabricBlend(artData, fabData, {
+          garmentType: fabricTexture as 'light' | 'dark',
+          blendStrength: fabricBlendStrength,
+          textureDepth: fabricTextureDepth,
+          canvasRgb,
+        });
+        octx.putImageData(artData, 0, 0);
+      }
+      srcCanvas = out;
+    }
+
     const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = isCmykPro ? canvasColor : '#111';
+    ctx.fillStyle = showFabricBg || isCmykPro ? canvasColor : '#111';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (!srcCanvas) return;
 
-    // CMYK Pro: fit full image width (dots become sub-pixel, image reads as the actual photo).
-    // Others: show 35% of width so individual dot patterns are inspectable.
-    const zoomFraction = isCmykPro ? 1.0 : 0.35;
+    // CMYK Pro / fabric: fit full image so the garment reads. Others: zoom into dots.
+    const zoomFraction = previewZoomFraction;
     const zoom = canvas.width / (srcCanvas.width * zoomFraction);
     const viewW = canvas.width  / zoom;
     const viewH = canvas.height / zoom;
@@ -125,10 +187,10 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
 
     // CMYK Pro downsamples a large source to a small canvas → smooth filter looks better.
     // Other modes zoom in to inspect dots → pixelated keeps hard edges.
-    ctx.imageSmoothingEnabled = isCmykPro;
-    if (isCmykPro) ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingEnabled = isCmykPro || fabricPreviewOn;
+    if (isCmykPro || fabricPreviewOn) ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(srcCanvas, cx - viewW / 2, cy - viewH / 2, viewW, viewH, 0, 0, canvas.width, canvas.height);
-  }, [activeSheet, processedLayers, processedLayerDims, ditherComposite, separationMode, previewCenter, canvasColor, proCmykSettings, isCmykPro]);
+  }, [activeSheet, processedLayers, processedLayerDims, ditherComposite, separationMode, previewCenter, canvasColor, proCmykSettings, isCmykPro, showFabricBg, fabricPreviewOn, fabricTexture, fabricBlendStrength, fabricTextureDepth, fabricVersion, previewZoomFraction]);
 
   const onPreviewDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -140,7 +202,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
     const usesDitherComposite = ditherComposite && (separationMode === 'palette' || separationMode === 'dtg' || separationMode === 'texture');
     const srcW = usesDitherComposite ? ditherComposite!.w : (processedLayerDims?.w ?? 1);
     const srcH = usesDitherComposite ? ditherComposite!.h : (processedLayerDims?.h ?? 1);
-    const panFraction = isCmykPro ? 1.0 : 0.35;
+    const panFraction = previewZoomFraction;
     const zoom  = previewCanvasRef.current.width / (srcW * panFraction);
     const dxN = -(e.clientX - d.sx) / zoom / srcW;
     const dyN = -(e.clientY - d.sy) / zoom / srcH;
@@ -258,7 +320,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, sessio
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                     </svg>
-                    Analytics
+                    Command Center
                   </button>
                 </div>
               )}

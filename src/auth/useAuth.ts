@@ -68,7 +68,8 @@ async function startOAuth(prompt?: string) {
 
 export type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated';
 
-const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS_AUTH === 'true';
+const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS_AUTH === 'true'
+  && !new URLSearchParams(window.location.search).has('login');
 
 const DEV_SESSION: Session = {
   token: 'dev-bypass',

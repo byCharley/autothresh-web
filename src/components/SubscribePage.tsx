@@ -22,15 +22,15 @@ const PLAN_FEATURES = {
     'All 6 separation modes',
     'All export formats & mockups',
     'Unlimited presets & cloud sync',
-    'Live chat support',
-    'Tutorial library built-in',
+    'Billed immediately — no trial',
+    'Cancel anytime',
   ],
   annual: [
     'Everything in Monthly',
+    '3-day free trial',
     'Priority feature requests',
     'Early access to new modes',
-    'Live chat support',
-    'Tutorial library built-in',
+    'Cancel anytime',
   ],
   lifetime: [
     'Everything in Annual',
@@ -109,7 +109,7 @@ function PricingModal({ onClose }: { onClose: () => void }) {
               </div>
               <PlanFeatures features={PLAN_FEATURES.monthly} accent="var(--accent)" />
               <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', border: '1px solid var(--accent)', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
-                Subscribe Monthly →
+                Subscribe Monthly — $8.99
               </div>
             </div>
           </a>
@@ -175,14 +175,22 @@ export function SubscribePage({ firstName, email, subscriptionStatus, onLogout, 
 
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100%',
+      overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch',
       background: 'var(--bg)',
       backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.09) 1px, transparent 1px)',
       backgroundSize: '28px 28px',
       display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
       fontFamily: 'var(--font-sans)',
     }}>
+      <div style={{
+        flex: 1,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        padding: '32px 16px 16px',
+        boxSizing: 'border-box',
+      }}>
       {/* Logo */}
       <div style={{ marginBottom: 36, textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
@@ -335,6 +343,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, onLogout, 
             )}
           </>
         )}
+      </div>
       </div>
 
       <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} />
