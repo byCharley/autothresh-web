@@ -160,28 +160,6 @@ async function loadSub(email: string): Promise<SealSub | null> {
   return mapped;
 }
 
-function billingDateParts(iso?: string): { date: string; time: string } | null {
-  const d = parseWhen(iso);
-  if (!d) return null;
-  const date = d.toISOString().slice(0, 10);
-  const hh = String(d.getUTCHours()).padStart(2, '0');
-  const mm = String(d.getUTCMinutes()).padStart(2, '0');
-  return { date, time: `${hh}:${mm}` };
-}
-
-async function sealCancelNow(id: number): Promise<boolean> {
-  const r = await fetch(`${SEAL_API_URL}/subscription`, {
-    method: 'PUT',
-    headers: sealHeaders(),
-    body: JSON.stringify({ id, action: 'cancel' }),
-  });
-  if (!r.ok) {
-    console.error('Seal immediate cancel failed:', r.status, await r.text());
-    return false;
-  }
-  return true;
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -214,27 +192,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (action === 'cancel') {
     if (sub.status === 'cancelled') return res.status(200).json({ ok: true, status: 'cancelled' });
-    const parts = billingDateParts(sub.nextBillingDate);
-    if (parts) {
-      const r = await fetch(`${SEAL_API_URL}/subscription-schedule-cancellation`, {
-        method: 'PUT',
-        headers: sealHeaders(),
-        body: JSON.stringify({ id: sub.id, date: parts.date, time: parts.time, timezone: '+00:00' }),
-      });
-      if (r.ok) {
-        return res.status(200).json({ ok: true, status: sub.status, cancelsOn: sub.nextBillingDate });
-      }
-      console.error('Seal schedule-cancellation failed:', r.status, await r.text());
-    } else {
-      console.error('Cancel missing billing date', { id: sub.id, status: sub.status, nextBillingDate: sub.nextBillingDate });
+    const r = await fetch(`${SEAL_API_URL}/subscription`, {
+      method: 'PUT',
+      headers: sealHeaders(),
+      body: JSON.stringify({ id: sub.id, action: 'cancel' }),
+    });
+    if (!r.ok) {
+      console.error('Seal cancel failed:', r.status, await r.text());
+      return res.status(500).json({ error: 'Could not cancel your subscription. Please try again or email autothreshweb@gmail.com.' });
     }
-    // Paused trials often have no renewal date because billing is on hold.
-    // Cancel now so the trial cannot convert into a charge later.
-    if (sub.status === 'paused' || sub.status === 'trial') {
-      const ok = await sealCancelNow(sub.id);
-      if (ok) return res.status(200).json({ ok: true, status: 'cancelled', immediate: sub.status === 'paused' });
-    }
-    return res.status(400).json({ error: 'Could not find your renewal date. Email autothreshweb@gmail.com and we will cancel it for you.' });
+    return res.status(200).json({ ok: true, status: 'cancelled' });
   }
 
   const sealAction = action === 'pause' ? 'pause' : 'resume';

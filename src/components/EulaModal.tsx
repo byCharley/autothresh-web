@@ -66,10 +66,10 @@ export function EulaModal({ onClose }: Props) {
 
           <Section title="Cancellation">
             You can pause or cancel from your account menu (click your name) while signed in.
-            Cancelling turns off auto-renew. Purchases are final and we do not issue refunds
-            for time already billed. You keep access through the end of your current billing
-            period, then the account will no longer open until you subscribe again. If you
-            cannot use in-app billing, email{' '}
+            Cancelling ends the subscription immediately and it will not renew. Purchases are
+            final and we do not issue refunds for time already billed. After you cancel, this
+            account will not open AutoThresh until you subscribe again. If you cannot use
+            in-app billing, email{' '}
             <a href="mailto:autothreshweb@gmail.com" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
               autothreshweb@gmail.com
             </a>{' '}

@@ -44,20 +44,14 @@ export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionSt
         headers: { 'Content-Type': 'application/json', Authorization: authToken },
         body: JSON.stringify({ action }),
       });
-      const data = await r.json() as { error?: string; cancelsOn?: string; immediate?: boolean };
+      const data = await r.json() as { error?: string };
       if (!r.ok) {
         setError(data.error || 'Something went wrong.');
         return;
       }
       setConfirm('none');
       if (action === 'cancel') {
-        if (data.immediate || isPaused) {
-          setNote('This plan is cancelled. It will not renew or charge you.');
-        } else {
-          setNote(accessUntil
-            ? `Auto-renew is off. You keep full access through ${accessUntil}.`
-            : 'Auto-renew is off. You keep access through the end of this period.');
-        }
+        setNote('This plan is cancelled. It will not renew or charge you.');
       } else if (action === 'pause') {
         setNote('Billing is paused. You can resume anytime from this account.');
       }
@@ -111,18 +105,13 @@ export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionSt
       {confirm === 'cancel' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <div style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.55 }}>
-            {isPaused
-              ? 'This cancels the paused plan so it will not restart or charge you later. Time already billed is not refunded.'
-              : <>
-                  Time already billed is not refunded. Your plan will not renew, and you keep full access
-                  {accessUntil ? ` through ${accessUntil}` : ' through the end of this billing period'}.
-                  After that, this account will not open AutoThresh until you subscribe again.
-                </>}
+            This cancels your plan now. It will not renew or charge you. Time already billed is not refunded,
+            and this account will not open AutoThresh until you subscribe again.
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <button disabled={busy} onClick={() => setConfirm('none')} style={ghostBtn}>Keep my plan</button>
             <button disabled={busy} onClick={() => run('cancel')} style={dangerBtn}>
-              {busy ? 'Cancelling…' : isPaused ? 'Cancel plan' : 'Cancel at period end'}
+              {busy ? 'Cancelling…' : 'Cancel plan'}
             </button>
           </div>
         </div>
