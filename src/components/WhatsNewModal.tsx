@@ -15,6 +15,13 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-08-30',
+    label: 'New Pricing',
+    changed: [
+      'Annual is now $79/year with a 3-day free trial. Lifetime is $149 once. Monthly stays $8.99.',
+    ],
+  },
+  {
     date: '2026-08-21',
     label: 'Manage Billing in the App',
     added: [

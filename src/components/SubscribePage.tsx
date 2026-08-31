@@ -121,14 +121,14 @@ function PricingModal({ onClose }: { onClose: () => void }) {
           {/* Annual — featured */}
           <a href={ANNUAL_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'flex' }}>
             <div style={{ border: '1px solid var(--accent)', padding: '22px 20px', width: '100%', cursor: 'pointer', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-              <div style={{ position: 'absolute', top: 0, right: 0, background: 'var(--accent)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', padding: '3px 8px' }}>SAVE 15%</div>
+              <div style={{ position: 'absolute', top: 0, right: 0, background: 'var(--accent)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', padding: '3px 8px' }}>SAVE 27%</div>
               <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Annual</div>
               <div style={{ marginBottom: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$90.95</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$79</span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-dim)', fontWeight: 400 }}>/yr</span>
                 </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', marginTop: 5, marginBottom: 14 }}>$7.58/mo · billed annually</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', marginTop: 5, marginBottom: 14 }}>$6.58/mo · billed annually</div>
               </div>
               <PlanFeatures features={PLAN_FEATURES.annual} accent="var(--accent)" />
               <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', background: 'var(--accent)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
@@ -144,7 +144,7 @@ function PricingModal({ onClose }: { onClose: () => void }) {
               <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Lifetime</div>
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$249.99</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$149</span>
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 5 }}>one-time · never pay again</div>
               </div>
