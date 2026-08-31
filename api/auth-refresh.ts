@@ -32,9 +32,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'refresh failed' });
   }
 
-  const tokens = JSON.parse(body) as { id_token?: string; refresh_token?: string; access_token?: string };
-  console.log('Token refresh OK, id_token present:', !!tokens.id_token);
+  const tokens = JSON.parse(body) as {
+    id_token?: string;
+    refresh_token?: string;
+    access_token?: string;
+    expires_in?: number;
+  };
+  if (!tokens.access_token) {
+    console.error('Token refresh missing access_token:', body.slice(0, 200));
+    return res.status(401).json({ error: 'refresh missing access token' });
+  }
+  console.log('Token refresh OK');
   return res.status(200).json({
+    accessToken:  tokens.access_token,
+    expiresAt:    new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000).toISOString(),
     idToken:      tokens.id_token,
     refreshToken: tokens.refresh_token, // Shopify rotates it — client should save the new one
   });

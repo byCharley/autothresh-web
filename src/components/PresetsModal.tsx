@@ -13,11 +13,11 @@ interface SavedPreset {
 }
 
 interface Props {
-  token: string;
+  getValidToken: () => Promise<string | null>;
   onClose: () => void;
 }
 
-export function PresetsModal({ token, onClose }: Props) {
+export function PresetsModal({ getValidToken, onClose }: Props) {
   const { loadPreset, capturePreset, separationMode } = useStore();
 
   const [presets, setPresets]           = useState<SavedPreset[]>([]);
@@ -39,11 +39,36 @@ export function PresetsModal({ token, onClose }: Props) {
 
   useEffect(() => { fetchPresets(); }, []);
 
+  async function authFetch(path: string, init: RequestInit = {}): Promise<Response> {
+    const token = await getValidToken();
+    if (!token) throw new Error('Session expired — please sign out and sign back in.');
+    const headers = new Headers(init.headers);
+    headers.set('Authorization', token);
+    if (init.body && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    const r = await fetch(path, { ...init, headers });
+    if (!r.ok) {
+      let msg = r.status === 401
+        ? 'Session expired — please sign out and sign back in.'
+        : `Could not reach presets API (${r.status}).`;
+      try {
+        const body = await r.json() as { error?: string };
+        if (body.error) {
+          msg = r.status === 401
+            ? 'Session expired — please sign out and sign back in.'
+            : body.error.slice(0, 200);
+        }
+      } catch { /* non-json (e.g. local dev without API server) */ }
+      throw new Error(msg);
+    }
+    return r;
+  }
+
   async function fetchPresets() {
     setLoading(true);
     try {
-      const r = await fetch('/api/presets', { headers: { Authorization: token } });
-      if (!r.ok) throw new Error('not ok');
+      const r = await authFetch('/api/presets');
       setPresets(await r.json());
       setApiAvailable(true);
     } catch {
@@ -59,18 +84,16 @@ export function PresetsModal({ token, onClose }: Props) {
     setSaveError('');
     try {
       const data = capturePreset();
-      const r = await fetch('/api/presets', {
+      const r = await authFetch('/api/presets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: token },
         body: JSON.stringify({ name: newName.trim(), data }),
       });
-      if (!r.ok) throw new Error('Failed to save preset');
       const saved = await r.json() as SavedPreset;
       setPresets((prev) => [{ ...saved, data }, ...prev]);
       setNewName('');
       setApiAvailable(true);
-    } catch {
-      setSaveError('Could not save. Make sure you\'re connected and try again.');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save preset. Try again.');
     } finally {
       setSaving(false);
     }
@@ -79,8 +102,7 @@ export function PresetsModal({ token, onClose }: Props) {
   async function handleDelete(id: string) {
     setDeletingId(id);
     try {
-      const r = await fetch(`/api/presets?id=${id}`, { method: 'DELETE', headers: { Authorization: token } });
-      if (!r.ok) throw new Error('Delete failed');
+      await authFetch(`/api/presets?id=${id}`, { method: 'DELETE' });
       setPresets((prev) => prev.filter((p) => p.id !== id));
       if (loadedId === id) setLoadedId(null);
     } catch {
@@ -200,7 +222,7 @@ export function PresetsModal({ token, onClose }: Props) {
                 <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', lineHeight: 1.7, maxWidth: 220 }}>
                   {apiAvailable
                     ? `Switch to ${TAB_LABELS[currentMode]} mode, set up your settings, then save a preset from the right panel.`
-                    : 'Save a preset to get started. Your settings will sync to your account once connected.'}
+                    : 'Presets API unavailable. On localhost, run `vercel dev` (not just `npm run dev`) so /api routes work.'}
                 </div>
               </div>
             ) : (

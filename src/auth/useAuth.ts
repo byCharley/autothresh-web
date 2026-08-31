@@ -213,6 +213,50 @@ export function useAuth() {
     } catch { return false; }
   }, []);
 
+  const refreshAccessToken = useCallback(async (): Promise<Session | null> => {
+    const stored = loadSession();
+    if (!stored) return null;
+    const refreshToken = localStorage.getItem(SHOPIFY_REFRESH_TOKEN);
+    if (!refreshToken) return stored;
+    try {
+      const r = await fetch('/api/auth-refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!r.ok) return null;
+      const data = await r.json() as {
+        accessToken?: string;
+        expiresAt?: string;
+        idToken?: string;
+        refreshToken?: string;
+      };
+      if (!data.accessToken) return null;
+      if (data.idToken) saveIdToken(data.idToken);
+      if (data.refreshToken) saveRefreshToken(data.refreshToken);
+      const updated: Session = applyDisplayNameOverride({
+        ...stored,
+        token: data.accessToken,
+        expiresAt: data.expiresAt ?? stored.expiresAt,
+      });
+      saveSession(updated);
+      setSession(updated);
+      return updated;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const getValidToken = useCallback(async (): Promise<string | null> => {
+    if (DEV_BYPASS) return DEV_SESSION.token;
+    const stored = loadSession();
+    if (!stored) return null;
+    const expiresMs = new Date(stored.expiresAt).getTime();
+    if (Date.now() < expiresMs - 60_000) return stored.token;
+    const refreshed = await refreshAccessToken();
+    return refreshed?.token ?? null;
+  }, [refreshAccessToken]);
+
   // switchAccount: reads shopify_id_token/refresh_token (kept across regular
   // logouts), refreshes to get a non-expired hint, then hits Shopify's OIDC
   // end-session endpoint. Shopify clears its session and redirects to /auth/start
@@ -300,5 +344,5 @@ export function useAuth() {
     } catch { /* keep current session */ }
   }, []);
 
-  return { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription };
+  return { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription, getValidToken, refreshAccessToken };
 }

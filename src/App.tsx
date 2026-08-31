@@ -137,7 +137,7 @@ function App() {
   const updateAvailable = useVersionCheck();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [chunkError, setChunkError] = useState(false);
-  const { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription } = useAuth();
+  const { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription, getValidToken } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [sheetGenerating, setSheetGenerating] = useState(false);
   const [showEula, setShowEula]         = useState(false);
@@ -1623,7 +1623,7 @@ function App() {
       >
         {showExport && <ExportModal onClose={() => setShowExport(false)} onExport={handleExport} onGenerateSheet={handleGenerateDtgSheet} generatingSheet={sheetGenerating} defaultFileName={imageFileName.replace(/\.[^.]+$/, '') || 'autothresh'} separationMode={separationMode} />}
         {mockupOpen && <MockupPreview onClose={() => setMockupOpen(false)} />}
-        {presetsOpen && session?.token && <PresetsModal token={session.token} onClose={() => setPresetsOpen(false)} />}
+        {presetsOpen && session?.token && <PresetsModal getValidToken={getValidToken} onClose={() => setPresetsOpen(false)} />}
         {showFaq      && <FaqModal      onClose={() => setShowFaq(false)} />}
         {showEula     && <EulaModal     onClose={() => setShowEula(false)} />}
         {showContact  && <ContactModal  onClose={() => setShowContact(false)} />}
@@ -1688,7 +1688,7 @@ function App() {
         <MockupPreview onClose={() => setMockupOpen(false)} />
       )}
       {presetsOpen && session?.token && (
-        <PresetsModal token={session.token} onClose={() => setPresetsOpen(false)} />
+        <PresetsModal getValidToken={getValidToken} onClose={() => setPresetsOpen(false)} />
       )}
       <footer style={{
         height: 28, flexShrink: 0,

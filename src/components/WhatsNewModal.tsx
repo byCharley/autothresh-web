@@ -15,6 +15,14 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-08-31',
+    label: 'Preset Save Fix',
+    fixed: [
+      'Resolved an issue where saving presets could fail after being logged in for a while. Your session now refreshes automatically in the background so preset save and load keeps working without needing to sign out and back in.',
+      'Preset save errors now show a clearer message — if your session has expired, you\'ll be told to sign out and sign back in instead of seeing a generic "could not save" message.',
+    ],
+  },
+  {
     date: '2026-08-21',
     label: 'Manage Billing in the App',
     added: [
