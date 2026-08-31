@@ -20,6 +20,9 @@ export const CHANGELOG: Entry[] = [
     changed: [
       'Annual is now $79/year with a 3-day free trial. Lifetime is $149 once. Monthly stays $8.99.',
     ],
+    fixed: [
+      'Lifetime (one-time) purchases now unlock the app when you sign in. Some lifetime members were previously asked to subscribe again.',
+    ],
   },
   {
     date: '2026-08-21',

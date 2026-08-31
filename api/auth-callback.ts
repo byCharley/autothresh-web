@@ -100,12 +100,14 @@ const LDT_API_URL  = 'https://digital.ldtsoft.work/api/integrate';
 
 interface SealCheck {
   hasSub: boolean;
+  hasLifetime: boolean;
   activeSubs: number;
   everInSeal: boolean;
   subscriptionStatus?: string;
   nextBillingDate?: string;
   planTitle?: string;
 }
+interface LdtCheck { lifetime: boolean; webOrder: boolean }
 interface TesterRecord { status: 'active' | 'paused'; role: string }
 interface Membership {
   hasSubscription: boolean;
@@ -116,12 +118,58 @@ interface Membership {
   hasLifetime: boolean;
 }
 
+function looksLikeOneTimePlan(text: string): boolean {
+  const t = String(text ?? '').toLowerCase();
+  return /one[\s_-]*time/.test(t) || /\blifetime\b/.test(t);
+}
+
+function isAutothreshWebText(text: string): boolean {
+  const t = String(text ?? '').toLowerCase().replace(/™/g, '');
+  return t.includes('autothresh web') && !t.includes('autothresh pro') && !t.includes('autothresh lite');
+}
+
+function collectPlanText(o: unknown): string {
+  const parts: string[] = [];
+  const walk = (v: unknown, key: string) => {
+    if (v == null) return;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      const k = key.toLowerCase();
+      const named =
+        k === 'title' || k === 'name' || k === 'sku' || k === 'handle' ||
+        k.includes('selling_plan') || k.includes('sellingplan') ||
+        k.includes('variant') || k.includes('plan_name') || k.includes('planname') ||
+        k.includes('plan_title') || k.includes('plantitle') ||
+        k.includes('product_title') || k.includes('producttitle') ||
+        k.includes('internal_name') || k.includes('internalname') ||
+        k === 'product' || k === 'product_name' || k === 'productname';
+      if (named) parts.push(String(v));
+      return;
+    }
+    if (Array.isArray(v)) { v.forEach(item => walk(item, key)); return; }
+    if (typeof v === 'object') {
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) walk(val, k);
+    }
+  };
+  walk(o, '');
+  return parts.join(' ').toLowerCase();
+}
+
+function orderLooksLikeLifetime(o: unknown): boolean {
+  const json = JSON.stringify(o).toLowerCase().replace(/™/g, '');
+  const named = collectPlanText(o);
+  if (!isAutothreshWebText(named) && !isAutothreshWebText(json)) return false;
+  if (looksLikeOneTimePlan(named) || looksLikeOneTimePlan(json)) return true;
+  const namedRecurring = /\b(monthly|annual|yearly|subscribe)\b/.test(named);
+  if (namedRecurring) return false;
+  return /"(?:total|total_price|total_value|amount|price|final_amount|current_total)"\s*:\s*"?(?:1[2-9]\d|2\d{2})(?:\.\d+)?/.test(json);
+}
+
 function sealBlob(s: Record<string, unknown>): string {
   const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
   return [
     s.billing_interval, s.interval, s.delivery_interval,
-    s.plan_title, s.product_title, s.plan_name, s.selling_plan_name,
-    items[0]?.selling_plan_name, items[0]?.title, items[0]?.product_title,
+    s.plan_title, s.product_title, s.plan_name, s.selling_plan_name, s.name, s.internal_name,
+    ...items.map(i => [i.selling_plan_name, i.title, i.product_title, i.variant_title, i.name].filter(Boolean).join(' ')),
   ].filter(Boolean).join(' ').toLowerCase();
 }
 
@@ -130,13 +178,27 @@ function sealItemPlan(s: Record<string, unknown>): unknown {
   return items[0]?.selling_plan_name ?? items[0]?.title;
 }
 
-async function checkLdtLifetime(email: string): Promise<boolean> {
-  if (!LDT_ACCESS) return false;
+function isSealOneTimePurchase(s: Record<string, unknown>): boolean {
+  const blob = sealBlob(s);
+  if (looksLikeOneTimePlan(blob)) return true;
+  const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
+  if (
+    items.length > 0 &&
+    items.every(i => Number(i.is_one_time_item) === 1) &&
+    !/\b(month|annual|year|subscribe)\b/.test(blob)
+  ) {
+    return isAutothreshWebText(blob);
+  }
+  return false;
+}
+
+async function checkLdtLifetime(email: string): Promise<LdtCheck> {
+  if (!LDT_ACCESS) return { lifetime: false, webOrder: false };
   try {
-    const r = await fetch(`${LDT_API_URL}/order/search?email=${encodeURIComponent(email)}&page=1&pageSize=20`, {
+    const r = await fetch(`${LDT_API_URL}/order/search?email=${encodeURIComponent(email)}&page=1&pageSize=50`, {
       headers: { 'LDT-X-Access-Token': LDT_ACCESS },
     });
-    if (!r.ok) return false;
+    if (!r.ok) return { lifetime: false, webOrder: false };
     const raw = JSON.parse(await r.text()) as unknown;
     let orders: unknown[] = [];
     if (Array.isArray(raw)) orders = raw;
@@ -146,24 +208,44 @@ async function checkLdtLifetime(email: string): Promise<boolean> {
         if (Array.isArray(obj[key])) { orders = obj[key] as unknown[]; break; }
       }
     }
-    const isLifetimeWebOrder = (o: unknown) => {
-      const json = JSON.stringify(o).toLowerCase().replace(/™/g, '');
-      if (!json.includes('autothresh web')) return false;
-      if (json.includes('autothresh pro') || json.includes('autothresh lite')) return false;
-      return /\blifetime\b/.test(json) && !json.includes('monthly') && !json.includes('annual') && !json.includes('yearly');
+    const webOrders = orders.filter(o => isAutothreshWebText(JSON.stringify(o).toLowerCase().replace(/™/g, '')));
+    return { lifetime: webOrders.filter(orderLooksLikeLifetime).length > 0, webOrder: webOrders.length > 0 };
+  } catch { return { lifetime: false, webOrder: false }; }
+}
+
+async function checkShopifyLifetime(token: string): Promise<boolean> {
+  try {
+    const r = await fetch(CUST_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': token },
+      body: JSON.stringify({
+        query: `query { customer { orders(first: 25) { nodes { lineItems(first: 15) { nodes { name title variantTitle sku } } } } } }`,
+      }),
+    });
+    const body = await r.json() as {
+      data?: { customer?: { orders?: { nodes?: Array<{ lineItems?: { nodes?: Array<Record<string, unknown>> } }> } } };
+      errors?: unknown;
     };
-    return orders.filter(isLifetimeWebOrder).length > 0;
+    if (body.errors) return false;
+    const orders = body.data?.customer?.orders?.nodes ?? [];
+    for (const order of orders) {
+      for (const item of order.lineItems?.nodes ?? []) {
+        const text = [item.name, item.title, item.variantTitle, item.sku].filter(Boolean).join(' ');
+        if (isAutothreshWebText(text) && looksLikeOneTimePlan(text)) return true;
+      }
+    }
+    return false;
   } catch { return false; }
 }
 
 async function sealCheckSubscription(email: string): Promise<SealCheck> {
   try {
-    const r = await fetch(`${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}`, {
+    const r = await fetch(`${SEAL_API_URL}/subscriptions?query=${encodeURIComponent(email)}&with-items=true`, {
       headers: { 'X-Seal-Token': SEAL_TOKEN },
     });
     const rawText = await r.text();
     console.log('Seal HTTP status:', r.status);
-    if (!r.ok) return { hasSub: false, activeSubs: 0, everInSeal: false };
+    if (!r.ok) return { hasSub: false, hasLifetime: false, activeSubs: 0, everInSeal: false };
 
     const raw = JSON.parse(rawText) as unknown;
     let subs: Array<Record<string, unknown>> = [];
@@ -184,11 +266,16 @@ async function sealCheckSubscription(email: string): Promise<SealCheck> {
     let planTitle: string | undefined;
     let subscriptionStatus: string | undefined;
     let hasSub = false;
+    let hasLifetime = false;
     let activeSubs = 0;
     const everInSeal = subs.length > 0;
     const TRIAL_DAYS = parseInt(process.env.SEAL_TRIAL_DAYS ?? '3', 10);
 
     for (const s of subs) {
+      if (isSealOneTimePurchase(s)) {
+        hasLifetime = true;
+        continue;
+      }
       const st = String(s.status ?? '').toUpperCase();
       const isMonthly = sealBlob(s).includes('month');
       const trialEndExplicit = (s.trial_end_date ?? s.trial_ends_on ?? s.free_trial_end_date ?? s.trial_end ?? s.free_trial_end ?? s.trial_ends_at) as string | undefined;
@@ -216,6 +303,7 @@ async function sealCheckSubscription(email: string): Promise<SealCheck> {
     }
     if (!hasSub) {
       for (const s of subs) {
+        if (isSealOneTimePurchase(s)) continue;
         const st = String(s.status ?? '').toUpperCase();
         if (st !== 'PAUSED') continue;
         subscriptionStatus = 'paused';
@@ -225,15 +313,16 @@ async function sealCheckSubscription(email: string): Promise<SealCheck> {
       }
       if (!subscriptionStatus) {
         for (const s of subs) {
+          if (isSealOneTimePurchase(s)) continue;
           const st = String(s.status ?? '').toUpperCase();
           if (st === 'CANCELLED' || st === 'CANCELED') { subscriptionStatus = 'cancelled'; break; }
         }
       }
     }
-    return { hasSub, activeSubs, everInSeal, subscriptionStatus, nextBillingDate, planTitle };
+    return { hasSub, hasLifetime, activeSubs, everInSeal, subscriptionStatus, nextBillingDate, planTitle };
   } catch (e) {
     console.error('Seal check error:', e);
-    return { hasSub: false, activeSubs: 0, everInSeal: false };
+    return { hasSub: false, hasLifetime: false, activeSubs: 0, everInSeal: false };
   }
 }
 
@@ -256,13 +345,16 @@ function resolveMembership(opts: {
   envTester: boolean;
   testerRecord: TesterRecord | null;
   ldtLifetime: boolean;
+  ldtWebOrder: boolean;
   seal: SealCheck;
 }): Membership {
-  const { isCreator, envTester, testerRecord, ldtLifetime, seal } = opts;
+  const { isCreator, envTester, testerRecord, ldtLifetime, ldtWebOrder, seal } = opts;
   const isTester = envTester || (!isCreator && testerRecord?.status === 'active' && testerRecord.role !== 'lifetime');
   const hasManualLifetime = !isCreator && testerRecord?.status === 'active' && testerRecord.role === 'lifetime';
   const liveSeal = seal.hasSub || seal.subscriptionStatus === 'paused';
-  const hasLifetime = !liveSeal && (ldtLifetime || hasManualLifetime);
+  const hasLifetime = !liveSeal && (
+    seal.hasLifetime || ldtLifetime || hasManualLifetime || (ldtWebOrder && !seal.everInSeal)
+  );
 
   if (isCreator) {
     return { hasSubscription: true, subscriptionStatus: 'creator', planTitle: 'Creator', isTester: false, hasLifetime: false };
@@ -403,9 +495,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const emailLower = custEmail.toLowerCase();
   const isCreator  = CREATOR_EMAILS.has(emailLower);
 
-  const [sealResult, ldtLifetime, testerRecord, isSecurityExpired] = await Promise.all([
+  const [sealResult, ldtLifetime, shopifyLifetime, testerRecord, isSecurityExpired] = await Promise.all([
     sealCheckSubscription(custEmail),
-    (!isCreator) ? checkLdtLifetime(emailLower) : Promise.resolve(false),
+    (!isCreator) ? checkLdtLifetime(emailLower) : Promise.resolve({ lifetime: false, webOrder: false }),
+    (!isCreator) ? checkShopifyLifetime(tokens.access_token) : Promise.resolve(false),
     (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve(null),
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
   ]);
@@ -415,7 +508,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     isCreator,
     envTester,
     testerRecord,
-    ldtLifetime,
+    ldtLifetime: ldtLifetime.lifetime || shopifyLifetime,
+    ldtWebOrder: ldtLifetime.webOrder || shopifyLifetime,
     seal: sealResult,
   });
 
@@ -426,7 +520,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const finalPlan = membership.planTitle;
   const finalExpiry = membership.subscriptionExpiresAt;
 
-  console.log('Auth result:', { custEmail, hasSub: sealResult.hasSub, isCreator, isTester, testerRecord, ldtLifetime, finalHasSub, finalStatus, planTitle: finalPlan });
+  console.log('Auth result:', { custEmail, hasSub: sealResult.hasSub, sealLifetime: sealResult.hasLifetime, everInSeal: sealResult.everInSeal, isCreator, isTester, testerRecord, ldtLifetime: ldtLifetime.lifetime, ldtWebOrder: ldtLifetime.webOrder, shopifyLifetime, finalHasSub, finalStatus, planTitle: finalPlan });
 
   // ── Log login + security events (fire-and-forget) ────────────────────────
   const ua = String(req.headers['user-agent'] ?? '');
