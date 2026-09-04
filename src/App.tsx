@@ -204,7 +204,7 @@ function App() {
     separationMode, cmykLpi, cmykAngles, cmykParams, cmykQuality,
     proCmykSettings,
     paletteColors, paletteVisibility, palettePattern, palettePatternScale,
-    paletteDensity, paletteAngle, paletteSoftness,
+    paletteDensity, paletteAngle, paletteSoftness, paletteColorMode,
     colorSepNumColors, colorSepColorPriority, colorSepPattern, colorSepPatternScale,
     colorSepPatternDensity, colorSepPatternAngle, colorSepLockedColors, colorSepVisibility, colorSepNames,
     paintMasks,
@@ -407,21 +407,42 @@ function App() {
     // iOS (Chrome/Safari on iPhone/iPad) does not support the `download` attribute:
     // clicking a blob URL navigates the current page away, wiping React state.
     // Use Web Share API (iOS 14+) so the user gets the native share sheet to save
-    // to Files/Photos. Fall back to opening in a new tab for older iOS.
+    // to Files/Photos. Fall back carefully — blob tabs often fail to "Save Image".
+    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
     const saveFile = async (blob: Blob, filename: string) => {
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      if (isIOS) {
-        const file = new File([blob], filename, { type: blob.type });
-        if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
-          try { await navigator.share({ files: [file] }); return; } catch (e) {
-            if ((e as Error).name === 'AbortError') return; // user dismissed share sheet
+      if (isIOSDevice) {
+        const mime = blob.type || (filename.endsWith('.png') ? 'image/png'
+          : filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? 'image/jpeg'
+          : filename.endsWith('.pdf') ? 'application/pdf'
+          : filename.endsWith('.zip') ? 'application/zip'
+          : 'application/octet-stream');
+        const file = new File([blob], filename, { type: mime });
+        if (typeof navigator.share === 'function') {
+          const payload = { files: [file] };
+          // Some iOS builds return false from canShare for ZIP/PDF even though share works;
+          // try share whenever the API exists, and only skip when canShare explicitly rejects images.
+          const canShareImages = !navigator.canShare || navigator.canShare(payload);
+          if (canShareImages || mime.startsWith('image/')) {
+            try {
+              await navigator.share(payload);
+              return;
+            } catch (e) {
+              if ((e as Error).name === 'AbortError') return; // user dismissed share sheet
+              // fall through for non-abort failures
+            }
           }
         }
-        // Fallback: open in new tab — user can long-press to save without leaving the app
+        // ZIP/PDF blob tabs cannot be saved as images on iOS — avoid a dead-end tab.
+        if (mime === 'application/zip' || mime === 'application/pdf' || mime === 'application/octet-stream') {
+          alert('This export format can’t be saved directly on iPad/iPhone. Try PNG, or use Share when the sheet appears. For full layer ZIP/PSD exports, use a Mac or PC.');
+          return;
+        }
+        // Image fallback: open in new tab — user can long-press → Share/Save
         const url = URL.createObjectURL(blob);
         const win = window.open(url, '_blank');
-        if (!win) { // popup blocked — try anchor with target=_blank
+        if (!win) {
           const a = document.createElement('a');
           a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click();
         }
@@ -602,12 +623,13 @@ function App() {
 
     const importanceMap = buildImportanceMap(artImageData, artBgMask);
 
-    // Palette tile size — same logic as CanvasView so export matches the preview exactly
+    // Palette tile size — same logic as CanvasView, then × exportScaleFactor so
+    // full-res export matches the on-screen dither density (Bayer cell size, angle, etc.).
     const _palIsErrDiff = ['diffusion', 'atkinson', 'jarvis', 'stucki'].includes(palettePattern);
     const _palBN = bayerOrder(palettePattern);
-    const _palCell = Math.max(1, Math.round(palettePatternScale * documentDpi / 300));
+    const _palCell = Math.max(1, Math.round(palettePatternScale * documentDpi / 300 * exportScaleFactor));
     const paletteTileSize = _palIsErrDiff
-      ? Math.max(1, Math.round(palettePatternScale))
+      ? Math.max(1, Math.round(palettePatternScale * exportScaleFactor))
       : _palBN > 0 ? _palBN * _palCell : Math.max(2, _palCell);
 
     // Helper: apply image adjustments to a full-res ImageData (mirrors CanvasView's applyAdjToImage)
@@ -977,9 +999,28 @@ function App() {
         artComposite = renderCmykSmooth(applyAdjToImageData(artImageData), artBgMask, { 'cmyk-k': true, 'cmyk-c': true, 'cmyk-m': true, 'cmyk-y': true }, overrideParams);
       } else if (separationMode === 'palette') {
         artComposite = renderPaletteComposite(artImageData, paletteColors, artBgMask,
-          Object.fromEntries(paletteColors.map((_, i) => [`palette-${i}`, true])),
+          paletteVisibility,
           palettePattern, paletteTileSize, imageAdjustments,
           paletteDensity, paletteAngle, paletteSoftness, importanceMap);
+        // Match CanvasView: optional "color" blend restores original hues onto the dither
+        if (paletteColorMode) {
+          const tmpCanvas = document.createElement('canvas');
+          tmpCanvas.width = artScaleW; tmpCanvas.height = artScaleH;
+          const tmpCtx = tmpCanvas.getContext('2d')!;
+          tmpCtx.putImageData(artComposite, 0, 0);
+          const origData = new ImageData(new Uint8ClampedArray(artImageData.data), artScaleW, artScaleH);
+          if (artBgMask) {
+            for (let i = 0; i < artBgMask.length; i++) {
+              if (artBgMask[i] === 255) origData.data[i * 4 + 3] = 0;
+            }
+          }
+          const origCanvas = document.createElement('canvas');
+          origCanvas.width = artScaleW; origCanvas.height = artScaleH;
+          origCanvas.getContext('2d')!.putImageData(origData, 0, 0);
+          tmpCtx.globalCompositeOperation = 'color';
+          tmpCtx.drawImage(origCanvas, 0, 0);
+          artComposite = tmpCtx.getImageData(0, 0, artScaleW, artScaleH);
+        }
       } else if (separationMode === 'color-sep' && csExportImageData && csExportSettings) {
         artComposite = renderColorSepComposite(csExportImageData, csExportColors, colorSepVisibility, csExportSettings, artBgMask, importanceMap);
       } else if ((separationMode === 'dtg' || separationMode === 'texture') && dtgExportImageData) {
@@ -1238,15 +1279,20 @@ function App() {
         }
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         // Plates (grayscale positives) + proofs on white and on garment
-        const zip    = new JSZip();
-        const plates = zip.folder(baseName)!;
-        for (const pl of visibleLayers) {
-          plates.file(`${layerName(pl).toLowerCase().replace(/\s*·\s*/g, '-')}.png`, await pngOf(buildCmykPlateCanvas(pl)));
+        if (isIOSDevice) {
+          // ZIP plates aren't reliably shareable on iPad — ship the on-garment proof PNG.
+          saveFile(await pngOf(buildCompositeCanvas(false)), `${baseName}-proof.png`);
+        } else {
+          const zip    = new JSZip();
+          const plates = zip.folder(baseName)!;
+          for (const pl of visibleLayers) {
+            plates.file(`${layerName(pl).toLowerCase().replace(/\s*·\s*/g, '-')}.png`, await pngOf(buildCmykPlateCanvas(pl)));
+          }
+          zip.file('proof-on-garment.png', await pngOf(buildCompositeCanvas(false)));
+          zip.file('proof-on-white.png',   await pngOf(buildCompositeCanvas(false, '#ffffff')));
+          const suffix = separationMode === 'cmyk-pro' ? 'cmyk-pro-plates' : 'cmyk-plates';
+          saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-${suffix}.zip`);
         }
-        zip.file('proof-on-garment.png', await pngOf(buildCompositeCanvas(false)));
-        zip.file('proof-on-white.png',   await pngOf(buildCompositeCanvas(false, '#ffffff')));
-        const suffix = separationMode === 'cmyk-pro' ? 'cmyk-pro-plates' : 'cmyk-plates';
-        saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-${suffix}.zip`);
       } else if (separationMode === 'palette') {
         if (underbase) {
           const zip = new JSZip();
@@ -1255,6 +1301,14 @@ function App() {
           saveFile(await zip.generateAsync({ type: 'blob' }), `${baseName}-dither.zip`);
         } else {
           saveFile(await pngOf(buildCompositeCanvas(false)), `${baseName}-dither.png`);
+        }
+      } else if (isIOSDevice) {
+        // iOS browsers often cannot share ZIP files (canShare returns false → dead blob tab /
+        // "Cannot save image" / timeout). Color Sep & Threshold PNG on iPad get a single
+        // composite PNG via the share sheet — matches what they see on canvas.
+        saveFile(await pngOf(buildCompositeCanvas(true)), `${baseName}-composite.png`);
+        if (underbase) {
+          saveFile(await pngOf(buildUnderbaseCanvas(underbaseChoke)), `${baseName}-underbase.png`);
         }
       } else {
         const zip    = new JSZip();

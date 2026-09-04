@@ -1039,6 +1039,7 @@ export function CanvasView() {
           //                    Tile period = N × cellSize  (N = matrix order, e.g. 8 for Bayer 8×8).
           //                    Matrix size and cell size are fully independent.
           //   Other ordered:   cellSize treated as tile period.
+          // Export multiplies this by exportScaleFactor so full-res output matches this preview.
           const isErrDiff = ['diffusion', 'atkinson', 'jarvis', 'stucki'].includes(palettePattern);
           const bN = bayerOrder(palettePattern);
           const cellSize = Math.max(1, Math.round(palettePatternScale * documentDpi / 300));

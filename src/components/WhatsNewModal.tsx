@@ -15,6 +15,15 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-09-04',
+    label: 'Export Fixes — Dither Match & iPad Save',
+    fixed: [
+      'Dither exports now match what you see on screen — Bayer Ordered cell size, angle, and density were being recalculated at full export resolution and looked like default settings. Export now keeps the same pattern scale you dialed in on the canvas.',
+      'Dither Color Mode (hue restore blend) is now applied on export, not just in the preview.',
+      'iPad / iPhone Color Separation PNG export no longer fails with “Cannot save image” / “no internet connection” / a blank download. iOS browsers can’t reliably save ZIP layer packs, so PNG export on iPad now shares a single composite image via the native Share sheet (Save to Files / Photos). Use a Mac or PC for full multi-layer ZIP exports.',
+    ],
+  },
+  {
     date: '2026-08-31',
     label: 'Preset Save Fix',
     fixed: [
