@@ -91,6 +91,69 @@ async function getSealSubscriptionCounts(): Promise<{ active: number; trial: num
   return counts;
 }
 
+export interface CancelledSubscriber {
+  email: string;
+  firstName: string;
+  lastName: string;
+  planTitle: string;
+  billingInterval: string;
+  cancelledOn: string;
+  orderPlaced: string;
+  status: string;
+}
+
+async function getCancelledSubscribers(): Promise<CancelledSubscriber[]> {
+  const byEmail = new Map<string, CancelledSubscriber>();
+  let page = 1;
+
+  while (page <= 40) {
+    const url = `${SEAL_API_URL}/subscriptions?cancelled-only=true&with-items=true&page=${page}&per_page=50`;
+    const r = await fetch(url, { headers: { 'X-Seal-Token': SEAL_TOKEN } });
+    if (!r.ok) {
+      console.error('[analytics] Seal cancelled fetch failed:', r.status, await r.text().catch(() => ''));
+      break;
+    }
+    const subs = extractSubs(await r.json() as unknown);
+    if (subs.length === 0) break;
+
+    for (const s of subs) {
+      const email = String(s.email ?? '').trim().toLowerCase();
+      if (!email || !email.includes('@')) continue;
+
+      const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
+      const itemPlan = items[0]?.selling_plan_name ?? items[0]?.title;
+      const planTitle = String(s.plan_title ?? s.product_title ?? s.plan_name ?? itemPlan ?? '');
+      const cancelledOn = String(s.cancelled_on ?? s.canceled_on ?? '');
+      const orderPlaced = String(s.order_placed ?? '');
+      const row: CancelledSubscriber = {
+        email,
+        firstName: String(s.first_name ?? s.s_first_name ?? ''),
+        lastName: String(s.last_name ?? s.s_last_name ?? ''),
+        planTitle,
+        billingInterval: String(s.billing_interval ?? ''),
+        cancelledOn,
+        orderPlaced,
+        status: String(s.status ?? 'CANCELLED'),
+      };
+
+      const existing = byEmail.get(email);
+      // Keep the most recently cancelled subscription per email
+      if (!existing || (cancelledOn && cancelledOn > (existing.cancelledOn || ''))) {
+        byEmail.set(email, row);
+      }
+    }
+
+    page++;
+  }
+
+  return [...byEmail.values()].sort((a, b) => {
+    if (a.cancelledOn && b.cancelledOn) return b.cancelledOn.localeCompare(a.cancelledOn);
+    if (a.cancelledOn) return -1;
+    if (b.cancelledOn) return 1;
+    return a.email.localeCompare(b.email);
+  });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -116,6 +179,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: `Supabase ${r.status}` });
     }
     return res.status(200).json({ ok: true, snapshot: counts });
+  }
+
+  // ── Cancelled subscriber export (CSV-ready for win-back emails) ───────────
+  if (req.query.action === 'cancelled-export') {
+    try {
+      const subscribers = await getCancelledSubscribers();
+      return res.status(200).json({
+        count: subscribers.length,
+        exportedAt: new Date().toISOString(),
+        subscribers,
+      });
+    } catch (e) {
+      console.error('[analytics] cancelled-export error:', e);
+      return res.status(500).json({ error: 'Failed to export cancelled subscribers' });
+    }
   }
 
   const fromParam = req.query.from ? String(req.query.from) : null;

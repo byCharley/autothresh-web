@@ -2094,6 +2094,59 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  const [exportingCancelled, setExportingCancelled] = useState(false);
+
+  async function exportCancelledCsv() {
+    setExportingCancelled(true);
+    try {
+      const r = await fetch('/api/analytics?action=cancelled-export', {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const body = await r.json() as {
+        count: number;
+        subscribers: Array<{
+          email: string;
+          firstName: string;
+          lastName: string;
+          planTitle: string;
+          billingInterval: string;
+          cancelledOn: string;
+          orderPlaced: string;
+          status: string;
+        }>;
+      };
+      const esc = (v: string) => {
+        const s = String(v ?? '');
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const header = ['email', 'first_name', 'last_name', 'plan', 'billing_interval', 'cancelled_on', 'order_placed', 'status'];
+      const lines = [
+        header.join(','),
+        ...body.subscribers.map(s => [
+          esc(s.email),
+          esc(s.firstName),
+          esc(s.lastName),
+          esc(s.planTitle),
+          esc(s.billingInterval),
+          esc(s.cancelledOn),
+          esc(s.orderPlaced),
+          esc(s.status),
+        ].join(',')),
+      ];
+      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `autothresh-cancelled-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Export failed');
+    } finally {
+      setExportingCancelled(false);
+    }
+  }
 
   const load = useCallback((params: { days: number } | { from: string; to: string }) => {
     setError(null);
@@ -2458,12 +2511,32 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
               </div>
 
               {/* Subscription row */}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'stretch' }}>
                 <StatCard label="Active Subs" value={data.subscriptions.active} accent />
                 <StatCard label="Trials" value={data.subscriptions.trial} />
                 <StatCard label="Paused" value={data.subscriptions.paused} />
                 <StatCard label="Cancelled" value={data.subscriptions.cancelled} />
                 <StatCard label="Total Subs" value={data.subscriptions.total} />
+                <button
+                  onClick={exportCancelledCsv}
+                  disabled={exportingCancelled || data.subscriptions.cancelled === 0}
+                  title="Download CSV of cancelled subscribers for win-back emails"
+                  style={{
+                    minWidth: 140, padding: '10px 14px',
+                    background: 'var(--surface-2)', border: '1px solid var(--border)',
+                    color: exportingCancelled ? 'var(--text-dim)' : 'var(--accent)',
+                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                    letterSpacing: '0.06em', textTransform: 'uppercase',
+                    cursor: exportingCancelled || data.subscriptions.cancelled === 0 ? 'default' : 'pointer',
+                    opacity: data.subscriptions.cancelled === 0 ? 0.4 : 1,
+                    display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
+                  }}
+                >
+                  <span>{exportingCancelled ? 'Exporting…' : 'Export Cancelled'}</span>
+                  <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
+                    CSV · email list
+                  </span>
+                </button>
               </div>
 
               {/* Trend chart */}
