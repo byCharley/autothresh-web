@@ -15,6 +15,13 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
+    date: '2026-09-18',
+    label: 'iPad PSD Export Fix',
+    fixed: [
+      'PSD export on iPad and iPhone now opens the Share sheet so you can Save to Files. Previously PSD was blocked on iOS because it was treated like an unsavable download type — Export → PSD should work on all devices now.',
+    ],
+  },
+  {
     date: '2026-09-04',
     label: 'Export Fixes — Dither Match & iPad Save',
     fixed: [

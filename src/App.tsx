@@ -411,46 +411,61 @@ function App() {
     const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
+    const mimeForExport = (blob: Blob, filename: string): string => {
+      const lower = filename.toLowerCase();
+      // Prefer extension over blob.type — many exports were tagged octet-stream.
+      if (lower.endsWith('.png')) return 'image/png';
+      if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+      if (lower.endsWith('.psd')) return 'image/vnd.adobe.photoshop';
+      if (lower.endsWith('.pdf')) return 'application/pdf';
+      if (lower.endsWith('.zip')) return 'application/zip';
+      if (lower.endsWith('.tif') || lower.endsWith('.tiff')) return 'image/tiff';
+      if (lower.endsWith('.eps')) return 'application/postscript';
+      if (blob.type && blob.type !== 'application/octet-stream') return blob.type;
+      return 'application/octet-stream';
+    };
+
     const saveFile = async (blob: Blob, filename: string) => {
       if (isIOSDevice) {
-        const mime = blob.type || (filename.endsWith('.png') ? 'image/png'
-          : filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? 'image/jpeg'
-          : filename.endsWith('.pdf') ? 'application/pdf'
-          : filename.endsWith('.zip') ? 'application/zip'
-          : 'application/octet-stream');
+        const mime = mimeForExport(blob, filename);
+        // Re-wrap so the File carries the correct MIME (critical for PSD on iOS Share).
         const file = new File([blob], filename, { type: mime });
         if (typeof navigator.share === 'function') {
           const payload = { files: [file] };
-          // Some iOS builds return false from canShare for ZIP/PDF even though share works;
-          // try share whenever the API exists, and only skip when canShare explicitly rejects images.
-          const canShareImages = !navigator.canShare || navigator.canShare(payload);
-          if (canShareImages || mime.startsWith('image/')) {
-            try {
-              await navigator.share(payload);
-              return;
-            } catch (e) {
-              if ((e as Error).name === 'AbortError') return; // user dismissed share sheet
-              // fall through for non-abort failures
-            }
+          // Always attempt share. canShare() often returns false for PSD/PDF/ZIP on iOS
+          // even though Share → Save to Files works.
+          try {
+            await navigator.share(payload);
+            return;
+          } catch (e) {
+            if ((e as Error).name === 'AbortError') return; // user dismissed share sheet
+            // fall through for non-abort failures
           }
         }
-        // ZIP/PDF blob tabs cannot be saved as images on iOS — avoid a dead-end tab.
-        if (mime === 'application/zip' || mime === 'application/pdf' || mime === 'application/octet-stream') {
-          alert('This export format can’t be saved directly on iPad/iPhone. Try PNG, or use Share when the sheet appears. For full layer ZIP/PSD exports, use a Mac or PC.');
+        // ZIP multi-packs: blob tabs are useless on iOS
+        if (mime === 'application/zip') {
+          alert('ZIP exports can’t be saved directly on iPad/iPhone. Export PNG or PSD instead (Share → Save to Files), or use a Mac/PC for full layer ZIP packs.');
           return;
         }
-        // Image fallback: open in new tab — user can long-press → Share/Save
-        const url = URL.createObjectURL(blob);
-        const win = window.open(url, '_blank');
-        if (!win) {
-          const a = document.createElement('a');
-          a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click();
+        // Previewable images: open in a tab as last resort
+        if (mime === 'image/png' || mime === 'image/jpeg') {
+          const url = URL.createObjectURL(new Blob([blob], { type: mime }));
+          const win = window.open(url, '_blank');
+          if (!win) {
+            const a = document.createElement('a');
+            a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click();
+          }
+          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+          return;
         }
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        alert(`Couldn’t open the share sheet for ${filename}. Try again, or use Save to Files from the share sheet when it appears. If this keeps happening, export PNG on iPad or use a Mac/PC.`);
         return;
       }
       saveAs(blob, filename);
     };
+
+    const psdBlob = (buffer: ArrayBuffer | Uint8Array) =>
+      new Blob([buffer as BlobPart], { type: 'image/vnd.adobe.photoshop' });
 
     const mode = _mode;
 
@@ -1350,7 +1365,7 @@ function App() {
             { name: 'Composite', canvas: buildCompositeCanvas(true), top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
           ],
         });
-        saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-dtg.psd`);
+        saveFile(psdBlob(buffer), `${baseName}-dtg.psd`);
       } else if (separationMode === 'cmyk' || separationMode === 'cmyk-pro') {
         if (separationMode === 'cmyk-pro') {
           // CMYK Pro PSD layer order (bottom → top): Garment Substrate, plate layers (hidden), Color Proof.
@@ -1390,7 +1405,7 @@ function App() {
               { name: 'Color Proof', canvas: proofCanvas, top: 0, left: 0, blendMode: 'normal' as const, opacity: 1 },
             ],
           });
-          saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk-pro.psd`);
+          saveFile(psdBlob(buffer), `${baseName}-cmyk-pro.psd`);
         } else {
           // Legacy CMYK mode PSD
           const substrateCanvas = document.createElement('canvas');
@@ -1410,7 +1425,7 @@ function App() {
               ...plateLayers,
             ],
           });
-          saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-cmyk.psd`);
+          saveFile(psdBlob(buffer), `${baseName}-cmyk.psd`);
         }
       } else if (separationMode === 'palette') {
         // PSD: garment/canvas background + colored dithered ink layers
@@ -1432,7 +1447,7 @@ function App() {
             ...plateLayers,
           ],
         });
-        saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-color-match.psd`);
+        saveFile(psdBlob(buffer), `${baseName}-color-match.psd`);
       } else {
         const psdLayers = visibleLayers.map((pl) => ({
           name:      layerNameHex(pl),
@@ -1451,7 +1466,7 @@ function App() {
           opacity: 1,
         }] : [];
         const buffer = writePsd({ width: docPxW, height: docPxH, ...psdRes, children: [bgLayer, ...ubPsdLayer, ...psdLayers, ...colorRefLayer] });
-        saveFile(new Blob([buffer], { type: 'application/octet-stream' }), `${baseName}-screen.psd`);
+        saveFile(psdBlob(buffer), `${baseName}-screen.psd`);
       }
       return;
     }
