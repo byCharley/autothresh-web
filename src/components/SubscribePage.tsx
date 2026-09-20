@@ -79,7 +79,7 @@ function PricingModal({ onClose, offer }: { onClose: () => void; offer?: 'monthl
             fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
             letterSpacing: '0.14em', textTransform: 'uppercase',
             color: '#fbbf24', marginBottom: 8,
-          }}>Lifetime</div>
+          }}>License</div>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>
             Pay once. Own it forever.
           </div>
@@ -97,7 +97,7 @@ function PricingModal({ onClose, offer }: { onClose: () => void; offer?: 'monthl
             </div>
             <PlanFeatures features={PLAN_FEATURES.lifetime} accent="#fbbf24" />
             <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', background: '#fbbf24', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700 }}>
-              Buy Lifetime Access →
+              Buy license →
             </div>
           </div>
         </a>
@@ -295,7 +295,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
             </div>
 
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.01em' }}>
-              {firstName ? `Hi ${firstName} —` : ''} Lifetime license required
+              {firstName ? `Hi ${firstName} —` : ''} License required
             </div>
 
             {email && (
@@ -312,7 +312,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
 
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
               {subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled'
-                ? 'Your subscription has ended. Buy lifetime at 30% off to keep going — pay once, own forever.'
+                ? 'Your subscription has ended. Buy a license at 30% off to keep going — pay once, own forever.'
                 : 'AutoThresh Web is a one-time purchase. Pay once and own it forever.'}
             </div>
 
@@ -321,7 +321,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
               className="btn btn-primary"
               style={{ width: '100%', justifyContent: 'center', marginBottom: 20, color: '#000', fontSize: 13 }}
             >
-              {subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled' ? 'Buy Lifetime — 30% off' : 'Buy Lifetime — $149'}
+              {subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled' ? 'Buy license — 30% off' : 'Buy license — $149'}
             </button>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>

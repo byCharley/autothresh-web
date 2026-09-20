@@ -65,7 +65,7 @@ export function FaqModal({ onClose }: Props) {
           </Item>
 
           <Item n={3} q="How does the 3-day trial work?">
-            You can use the full app for 3 days with no account. When the trial ends, you'll be sent to the AutoThresh Web product page to buy lifetime access. One trial per device — clearing cookies or using a private window won't start a new one.
+            You can use the full app for 3 days with no account. When the trial ends, you'll be sent to the AutoThresh Web product page to buy a license. One trial per device — clearing cookies or using a private window won't start a new one.
             Already purchased? Sign in with your Charley Pangus email, or enter your license key and order number.
           </Item>
 

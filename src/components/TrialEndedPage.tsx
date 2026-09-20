@@ -38,7 +38,7 @@ export function TrialEndedPage({ onSignIn }: Props) {
         Your 3-day trial has ended
       </div>
       <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 10, textAlign: 'center', maxWidth: 380, lineHeight: 1.6 }}>
-        Taking you to AutoThresh Web so you can buy lifetime access. Already purchased? Sign in here.
+        Taking you to AutoThresh Web so you can buy a license. Already purchased? Sign in here.
       </div>
       <a
         href={PRODUCT_URL}

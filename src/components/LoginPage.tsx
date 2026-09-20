@@ -79,43 +79,10 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
           {/* Header */}
           <div style={{ marginBottom: 22, textAlign: 'center' }}>
             <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '-0.01em', marginBottom: 7 }}>
-              Try AutoThresh Web
+              Sign In to AutoThresh Web
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.65 }}>
-              3 days free, no account needed. Buy a license when you&apos;re ready.
-            </div>
-          </div>
-
-          <a
-            href="/"
-            style={{
-              width: '100%', boxSizing: 'border-box', padding: '16px 20px', marginBottom: 10,
-              background: 'var(--accent)', color: '#000', textDecoration: 'none',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-              fontSize: 15, fontWeight: 700, letterSpacing: '0.04em',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            Try free for 3 days
-          </a>
-          <a
-            href={PRODUCT_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              width: '100%', boxSizing: 'border-box', padding: '16px 20px',
-              background: '#fbbf24', color: '#000', textDecoration: 'none',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-              fontSize: 15, fontWeight: 700, letterSpacing: '0.04em',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            Buy license — $149
-          </a>
-
-          <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--border)', textAlign: 'center' }}>
-            <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>
-              Already purchased?
+              Sign in with the email you bought with, or activate with your license key and order number.
             </div>
           </div>
 
@@ -125,12 +92,12 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
             disabled={loading}
             style={{
               width: '100%', padding: '12px 20px',
-              background: loading ? 'var(--surface-2)' : 'transparent',
-              border: '1px solid var(--border)',
+              background: loading ? 'var(--surface-2)' : 'var(--accent)',
+              border: '1px solid transparent',
               cursor: loading ? 'default' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
               fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
-              color: loading ? 'var(--text-muted)' : 'var(--text)',
+              color: loading ? 'var(--text-muted)' : '#000',
               fontFamily: 'var(--font-mono)',
               transition: 'opacity 0.15s',
             }}
@@ -302,6 +269,45 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
         )}
 
       </div>{/* end centering wrapper */}
+
+      <div style={{
+        flexShrink: 0,
+        width: '100%',
+        maxWidth: 400,
+        margin: '0 auto',
+        padding: '8px 16px 4px',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}>
+        <a
+          href="/"
+          style={{
+            width: '100%', boxSizing: 'border-box', padding: '16px 20px',
+            background: 'var(--accent)', color: '#000', textDecoration: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 15, fontWeight: 700, letterSpacing: '0.04em',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          Try free for 3 days
+        </a>
+        <a
+          href={PRODUCT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            width: '100%', boxSizing: 'border-box', padding: '16px 20px',
+            background: '#fbbf24', color: '#000', textDecoration: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 15, fontWeight: 700, letterSpacing: '0.04em',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          Buy license — $149
+        </a>
+      </div>
 
       <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} onContact={() => setShowContact(true)} />
       {showContact && <ContactModal onClose={() => setShowContact(false)} />}

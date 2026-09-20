@@ -287,7 +287,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
             const subLabel = subscriptionStatus === 'creator' ? 'Creator'
               : subscriptionStatus === 'tester' ? 'Tester'
               : subscriptionStatus === 'trial' || subscriptionStatus === 'app_trial' ? 'Free Trial'
-              : subscriptionStatus === 'lifetime' ? 'Lifetime'
+              : subscriptionStatus === 'lifetime' ? 'License'
               : subscriptionStatus === 'paused' ? 'Paused'
               : subscriptionStatus === 'cancelled' ? 'Cancelled'
               : 'Active';
