@@ -134,9 +134,16 @@ function looksLikeOneTimePlan(text: string): boolean {
   return /one[\s_-]*time/.test(t) || /\blifetime\b/.test(t);
 }
 
+function looksLikeRecurringTitle(text: string): boolean {
+  const t = String(text ?? '').toLowerCase();
+  if (looksLikeOneTimePlan(t)) return false;
+  return t.includes('monthly') || t.includes('annual') || t.includes('yearly') || /\bsubscribe\b/.test(t) || t.includes('free trial');
+}
+
 function isAutothreshWebText(text: string): boolean {
-  const t = String(text ?? '').toLowerCase().replace(/™/g, '');
-  return t.includes('autothresh web') && !t.includes('autothresh pro') && !t.includes('autothresh lite');
+  const t = String(text ?? '').toLowerCase().replace(/™/g, '').replace(/[–—]/g, '-');
+  if (t.includes('autothresh pro') || t.includes('autothresh lite')) return false;
+  return t.includes('autothresh web') || t.includes('autothresh-web') || t.includes('autothreshweb');
 }
 
 function collectPlanText(o: unknown): string {
@@ -169,11 +176,21 @@ function orderLooksLikeLifetime(o: unknown): boolean {
   const json = JSON.stringify(o).toLowerCase().replace(/™/g, '');
   const named = collectPlanText(o);
   if (!isAutothreshWebText(named) && !isAutothreshWebText(json)) return false;
-  if (looksLikeOneTimePlan(named) || looksLikeOneTimePlan(json)) return true;
-  const namedRecurring = /\b(monthly|annual|yearly|subscribe)\b/.test(named);
-  if (namedRecurring) return false;
-  // Lifetime is $149 / $249; annual is $79 / $90.95. Use paid total when plan name is missing.
-  return /"(?:total|total_price|total_value|amount|price|final_amount|current_total)"\s*:\s*"?(?:1[2-9]\d|2\d{2})(?:\.\d+)?/.test(json);
+  // If the product/plan title is monthly, annual, or a trial, this is a subscription order.
+  // Anything else — One-Time, Lifetime, or just "AutoThresh Web" — is lifetime.
+  return !looksLikeRecurringTitle(named);
+}
+
+function extractLdtOrders(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (!raw || typeof raw !== 'object') return [];
+  const obj = raw as Record<string, unknown>;
+  for (const key of ['data', 'orders', 'items', 'result', 'list', 'payload', 'records', 'digital_orders', 'orderList']) {
+    const nested = extractLdtOrders(obj[key]);
+    if (nested.length) return nested;
+  }
+  if (obj.email || obj.order_id || obj.orderId || obj.product || obj.product_title || obj.title) return [obj];
+  return [];
 }
 
 function sealBlob(s: Record<string, unknown>): string {
@@ -193,15 +210,12 @@ function sealItemPlan(s: Record<string, unknown>): unknown {
 function isSealOneTimePurchase(s: Record<string, unknown>): boolean {
   const blob = sealBlob(s);
   if (looksLikeOneTimePlan(blob)) return true;
-  const items = Array.isArray(s.items) ? s.items as Array<Record<string, unknown>> : [];
-  if (
-    items.length > 0 &&
-    items.every(i => Number(i.is_one_time_item) === 1) &&
-    !/\b(month|annual|year|subscribe)\b/.test(blob)
-  ) {
-    return isAutothreshWebText(blob);
-  }
-  return false;
+  const json = JSON.stringify(s);
+  if (!isAutothreshWebText(blob) && !isAutothreshWebText(json)) return false;
+  const interval = String(s.billing_interval ?? s.interval ?? s.delivery_interval ?? '').toLowerCase();
+  const recurringInterval = /\bmonth/.test(interval) || /\byear/.test(interval) || interval.includes('annual');
+  if (recurringInterval || looksLikeRecurringTitle(blob)) return false;
+  return true;
 }
 
 async function checkLdtLifetime(email: string): Promise<LdtCheck> {
@@ -211,24 +225,13 @@ async function checkLdtLifetime(email: string): Promise<LdtCheck> {
       headers: { 'LDT-X-Access-Token': LDT_ACCESS },
     });
     const rawText = await r.text();
-    console.log('LDT HTTP status:', r.status, 'body:', rawText.slice(0, 300));
+    console.log('LDT HTTP status:', r.status, 'body:', rawText.slice(0, 400));
     if (!r.ok) return { lifetime: false, webOrder: false };
-    const raw = JSON.parse(rawText) as unknown;
-    let orders: unknown[] = [];
-    if (Array.isArray(raw)) orders = raw;
-    else if (raw && typeof raw === 'object') {
-      const obj = raw as Record<string, unknown>;
-      for (const key of ['data', 'orders', 'items', 'result', 'list']) {
-        if (Array.isArray(obj[key])) { orders = obj[key] as unknown[]; break; }
-      }
-    }
-    const webOrders = orders.filter(o => {
-      const json = JSON.stringify(o).toLowerCase().replace(/™/g, '');
-      return isAutothreshWebText(json);
-    });
-    const lifetime = webOrders.filter(orderLooksLikeLifetime).length > 0;
-    console.log('LDT orders:', orders.length, 'web:', webOrders.length, 'lifetime matches:', lifetime);
-    return { lifetime, webOrder: webOrders.length > 0 };
+    const orders = extractLdtOrders(JSON.parse(rawText) as unknown);
+    const webOrders = orders.filter(o => isAutothreshWebText(JSON.stringify(o)));
+    const lifetimeOrders = webOrders.filter(orderLooksLikeLifetime);
+    console.log('LDT orders:', orders.length, 'web:', webOrders.length, 'lifetime:', lifetimeOrders.length, 'titles:', collectPlanText(webOrders[0] ?? {}).slice(0, 200));
+    return { lifetime: lifetimeOrders.length > 0, webOrder: webOrders.length > 0 };
   } catch (e) {
     console.error('LDT check error:', e);
     return { lifetime: false, webOrder: false };
@@ -241,25 +244,29 @@ async function checkShopifyLifetime(token: string): Promise<boolean> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': token },
       body: JSON.stringify({
-        query: `query { customer { orders(first: 25) { nodes { lineItems(first: 15) { nodes { name title variantTitle sku } } } } } }`,
+        query: `query { customer { orders(first: 25) { nodes { name lineItems(first: 20) { nodes { name title variantTitle sku } } } } } }`,
       }),
     });
     const body = await r.json() as {
-      data?: { customer?: { orders?: { nodes?: Array<{ lineItems?: { nodes?: Array<Record<string, unknown>> } }> } } };
+      data?: { customer?: { orders?: { nodes?: Array<{ name?: string; lineItems?: { nodes?: Array<Record<string, unknown>> } }> } } };
       errors?: unknown;
     };
     if (body.errors) {
-      console.log('Shopify orders query errors:', JSON.stringify(body.errors).slice(0, 300));
+      console.log('Shopify orders query errors:', JSON.stringify(body.errors).slice(0, 400));
       return false;
     }
     const orders = body.data?.customer?.orders?.nodes ?? [];
+    const titles: string[] = [];
+    let lifetime = false;
     for (const order of orders) {
       for (const item of order.lineItems?.nodes ?? []) {
         const text = [item.name, item.title, item.variantTitle, item.sku].filter(Boolean).join(' ');
-        if (isAutothreshWebText(text) && looksLikeOneTimePlan(text)) return true;
+        titles.push(text);
+        if (isAutothreshWebText(text) && !looksLikeRecurringTitle(text)) lifetime = true;
       }
     }
-    return false;
+    console.log('Shopify orders:', orders.length, 'lifetime:', lifetime, 'titles:', titles.slice(0, 10));
+    return lifetime;
   } catch (e) {
     console.error('Shopify lifetime order check error:', e);
     return false;
@@ -377,15 +384,13 @@ function resolveMembership(opts: {
   ldtWebOrder: boolean;
   seal: SealCheck;
 }): Membership {
-  const { isCreator, envTester, testerRecord, ldtLifetime, ldtWebOrder, seal } = opts;
+  const { isCreator, envTester, testerRecord, ldtLifetime, seal } = opts;
   const isTester = envTester || (!isCreator && testerRecord?.status === 'active' && testerRecord.role !== 'lifetime');
   const hasManualLifetime = !isCreator && testerRecord?.status === 'active' && testerRecord.role === 'lifetime';
   const liveSeal = seal.hasSub || seal.subscriptionStatus === 'paused';
-  // Lifetime-only checkouts often never create a Seal subscription. If they have
-  // an AutoThresh Web LDT order and no recurring Seal plan, they bought one-time.
-  const hasLifetime = !liveSeal && (
-    seal.hasLifetime || ldtLifetime || hasManualLifetime || (ldtWebOrder && !seal.everInSeal)
-  );
+  // Any AutoThresh Web order that isn't monthly/annual/trial is lifetime.
+  // A cancelled Seal record must not block that.
+  const hasLifetime = !liveSeal && (seal.hasLifetime || ldtLifetime || hasManualLifetime);
 
   if (isCreator) {
     return { hasSubscription: true, subscriptionStatus: 'creator', planTitle: 'Creator', isTester: false, hasLifetime: false };
