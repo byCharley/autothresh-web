@@ -162,23 +162,44 @@ function collectPlanText(o: unknown): string {
 }
 
 function orderLooksLikeLifetime(o: unknown): boolean {
-  const json = JSON.stringify(o).toLowerCase().replace(/™/g, '');
   const named = collectPlanText(o);
-  if (!isAutothreshWebText(named) && !isAutothreshWebText(json)) return false;
-  // If the product/plan title is monthly, annual, or a trial, this is a subscription order.
-  // Anything else — One-Time, Lifetime, or just "AutoThresh Web" — is lifetime.
+  if (!isAutothreshWebText(named)) return false;
   return !looksLikeRecurringTitle(named);
 }
 
+function collectEmails(o: unknown): string[] {
+  const emails: string[] = [];
+  const walk = (v: unknown, key: string) => {
+    if (v == null) return;
+    if (typeof v === 'string') {
+      if (v.includes('@') && key.toLowerCase().includes('email')) emails.push(v.toLowerCase().trim());
+      return;
+    }
+    if (Array.isArray(v)) { v.forEach(item => walk(item, key)); return; }
+    if (typeof v === 'object') {
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) walk(val, k);
+    }
+  };
+  walk(o, '');
+  return emails;
+}
+
+function ldtOrderBelongsToEmail(o: unknown, email: string): boolean {
+  const emails = collectEmails(o);
+  if (!emails.length) return true;
+  return emails.includes(email.toLowerCase());
+}
+
 function extractLdtOrders(raw: unknown): unknown[] {
-  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw)) {
+    return raw.filter(item => item && typeof item === 'object' && !Array.isArray(item));
+  }
   if (!raw || typeof raw !== 'object') return [];
   const obj = raw as Record<string, unknown>;
   for (const key of ['data', 'orders', 'items', 'result', 'list', 'payload', 'records', 'digital_orders', 'orderList']) {
     const nested = extractLdtOrders(obj[key]);
     if (nested.length) return nested;
   }
-  if (obj.email || obj.order_id || obj.orderId || obj.product || obj.product_title || obj.title) return [obj];
   return [];
 }
 
@@ -197,13 +218,12 @@ function sealItemPlan(s: Record<string, unknown>): unknown {
 }
 
 function isSealOneTimePurchase(s: Record<string, unknown>): boolean {
-  const blob = sealBlob(s);
-  if (looksLikeOneTimePlan(blob)) return true;
-  const json = JSON.stringify(s);
-  if (!isAutothreshWebText(blob) && !isAutothreshWebText(json)) return false;
+  const titles = `${sealBlob(s)} ${collectPlanText(s)}`;
+  if (!isAutothreshWebText(titles)) return false;
+  if (looksLikeOneTimePlan(titles)) return true;
   const interval = String(s.billing_interval ?? s.interval ?? s.delivery_interval ?? '').toLowerCase();
   const recurringInterval = /\bmonth/.test(interval) || /\byear/.test(interval) || interval.includes('annual');
-  if (recurringInterval || looksLikeRecurringTitle(blob)) return false;
+  if (recurringInterval || looksLikeRecurringTitle(titles)) return false;
   return true;
 }
 
@@ -216,8 +236,9 @@ async function checkLdtLifetime(email: string): Promise<LdtCheck> {
     const rawText = await r.text();
     console.log('LDT HTTP status:', r.status, 'body:', rawText.slice(0, 400));
     if (!r.ok) return { lifetime: false, webOrder: false };
-    const orders = extractLdtOrders(JSON.parse(rawText) as unknown);
-    const webOrders = orders.filter(o => isAutothreshWebText(JSON.stringify(o)));
+    const orders = extractLdtOrders(JSON.parse(rawText) as unknown)
+      .filter(o => ldtOrderBelongsToEmail(o, email));
+    const webOrders = orders.filter(o => isAutothreshWebText(collectPlanText(o)));
     const lifetimeOrders = webOrders.filter(orderLooksLikeLifetime);
     console.log('LDT orders:', orders.length, 'web:', webOrders.length, 'lifetime:', lifetimeOrders.length);
     return { lifetime: lifetimeOrders.length > 0, webOrder: webOrders.length > 0 };

@@ -61,7 +61,7 @@ function extractLicenseFields(o: unknown): { licenseKey: string; orderNumber: st
 function isAutothreshWeb(text: string): boolean {
   const t = text.toLowerCase().replace(/™/g, '');
   if (t.includes('autothresh pro') || t.includes('autothresh lite')) return false;
-  return t.includes('autothresh web') || t.includes('autothresh-web') || t.includes('autothreshweb') || t.includes('autothresh');
+  return t.includes('autothresh web') || t.includes('autothresh-web') || t.includes('autothreshweb');
 }
 
 async function ldtGet(path: string): Promise<{ ok: boolean; raw: unknown; text: string }> {
@@ -81,7 +81,7 @@ async function lookupLicense(licenseKey: string): Promise<{ ok: boolean; email: 
     ok,
     email: fields.email,
     orderNumber: fields.orderNumber,
-    product: fields.product || JSON.stringify(raw ?? '').toLowerCase(),
+    product: fields.product,
     raw,
   };
 }
@@ -105,9 +105,8 @@ async function lookupOrderByEmail(email: string): Promise<{ licenseKey: string; 
     }
   }
   for (const order of orders) {
-    const json = JSON.stringify(order).toLowerCase();
-    if (!isAutothreshWeb(json)) continue;
     const fields = extractLicenseFields(order);
+    if (!isAutothreshWeb(fields.product)) continue;
     if (fields.licenseKey) {
       return { licenseKey: fields.licenseKey, orderNumber: fields.orderNumber, product: fields.product };
     }
@@ -240,9 +239,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!license.ok) {
       return res.status(200).json({ ok: false, error: 'That license key was not found. Check the key from your order email or Charley Pangus account.' });
     }
-    const blob = JSON.stringify(license.raw ?? {}).toLowerCase();
-    const productText = `${license.product} ${blob}`;
+    const productText = license.product;
     if (productText.includes('autothresh pro') || productText.includes('autothresh lite')) {
+      return res.status(200).json({ ok: false, error: 'That license is not for AutoThresh Web.' });
+    }
+    if (productText && !isAutothreshWeb(productText)) {
       return res.status(200).json({ ok: false, error: 'That license is not for AutoThresh Web.' });
     }
     const expectedOrder = normOrder(license.orderNumber);
