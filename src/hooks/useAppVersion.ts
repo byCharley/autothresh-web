@@ -15,7 +15,7 @@ export function invalidateAppVersion() {
     .catch(() => {});
 }
 
-export function useAppVersion(fallback = '1.0.2'): string {
+export function useAppVersion(fallback = '1.0.3'): string {
   const [version, setVersion] = useState(_cached ?? fallback);
 
   useEffect(() => {

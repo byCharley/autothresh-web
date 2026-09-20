@@ -5,6 +5,7 @@ import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 import { BillingPanel } from './BillingPanel';
 import { DeviceManager, type LicenseDevice } from './DeviceManager';
+import { useAppVersion } from '../hooks/useAppVersion';
 
 const LIFETIME_URL = 'https://charleypangus.com/products/autothresh-web';
 const LIFETIME_MONTHLY_URL = 'https://charleypangus.com/discount/ATWEB30';
@@ -110,6 +111,7 @@ function PricingModal({ onClose, offer }: { onClose: () => void; offer?: 'monthl
 }
 
 export function SubscribePage({ firstName, email, subscriptionStatus, planTitle, subscriptionExpiresAt, token, devices, onLogout, onSwitchAccount, onRecheck }: Props) {
+  const appVersion = useAppVersion();
   const [showEula,      setShowEula]      = useState(false);
   const [showFaq,       setShowFaq]       = useState(false);
   const [showPricing,   setShowPricing]   = useState(false);
@@ -146,7 +148,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
           <AppIcon size={56} color="var(--accent)" />
         </div>
         <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-          AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta 1.0.2</span>
+          AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta {appVersion}</span>
         </div>
       </div>
 

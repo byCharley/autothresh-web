@@ -11,6 +11,10 @@ const linkStyle: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: '8px 4px',
 };
 
+function Divider() {
+  return <span style={{ width: 1, height: 10, background: 'var(--border)', opacity: 0.5, flexShrink: 0 }} />;
+}
+
 export function PageFooter({ onEula, onFaq, onContact }: Props) {
   return (
     <div
@@ -36,7 +40,7 @@ export function PageFooter({ onEula, onFaq, onContact }: Props) {
         Support
       </button>
 
-      <span style={{ width: 1, height: 10, background: 'var(--border)', opacity: 0.5, flexShrink: 0 }} />
+      <Divider />
 
       <button
         onClick={onFaq}
@@ -47,7 +51,7 @@ export function PageFooter({ onEula, onFaq, onContact }: Props) {
         FAQ
       </button>
 
-      <span style={{ width: 1, height: 10, background: 'var(--border)', opacity: 0.5, flexShrink: 0 }} />
+      <Divider />
 
       <button
         onClick={onEula}
@@ -57,6 +61,38 @@ export function PageFooter({ onEula, onFaq, onContact }: Props) {
       >
         EULA
       </button>
+
+      <Divider />
+
+      <a
+        href="https://charleypangus.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          color: 'var(--text-dim)',
+          textDecoration: 'none',
+          opacity: 0.85,
+          padding: '8px 4px',
+        }}
+        onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.opacity = '1')}
+        onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.opacity = '0.85')}
+      >
+        <span style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.06em',
+        }}>
+          Developed by
+        </span>
+        <img
+          src="/CharleyPangus_Favicon.svg"
+          alt="Charley Pangus"
+          style={{ height: 16, width: 'auto', filter: 'brightness(0) invert(1)', display: 'block' }}
+        />
+      </a>
     </div>
   );
 }
