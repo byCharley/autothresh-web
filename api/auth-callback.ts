@@ -129,6 +129,52 @@ function looksLikeRecurringTitle(text: string): boolean {
   return t.includes('monthly') || t.includes('annual') || t.includes('yearly') || /\bsubscribe\b/.test(t) || t.includes('free trial');
 }
 
+const LIFETIME_MIN_PAID = 80;
+
+function parseMoney(v: unknown): number {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v.replace(/[^0-9.]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (v && typeof v === 'object' && 'amount' in (v as object)) {
+    return parseMoney((v as { amount: unknown }).amount);
+  }
+  return 0;
+}
+
+function toUsd(n: number): number {
+  if (n >= 1000) return n / 100;
+  return n;
+}
+
+function collectMoney(o: unknown): number {
+  let max = 0;
+  const walk = (v: unknown, key: string) => {
+    if (v == null) return;
+    const k = key.toLowerCase();
+    const moneyKey = /(price|total|amount|paid|subtotal|grand|cost)/.test(k)
+      && !/(page|count|qty|quantity|id$|interval|type)/.test(k);
+    if (moneyKey) {
+      const usd = toUsd(parseMoney(v));
+      if (usd > max && usd < 10_000) max = usd;
+    }
+    if (Array.isArray(v)) { v.forEach(item => walk(item, key)); return; }
+    if (typeof v === 'object') {
+      for (const [ck, cv] of Object.entries(v as Record<string, unknown>)) walk(cv, ck);
+    }
+  };
+  walk(o, '');
+  return max;
+}
+
+function isPaidLifetime(o: unknown, titles: string): boolean {
+  if (!isAutothreshWebText(titles)) return false;
+  if (looksLikeRecurringTitle(titles)) return false;
+  if (looksLikeOneTimePlan(titles)) return true;
+  return collectMoney(o) > LIFETIME_MIN_PAID;
+}
+
 function isAutothreshWebText(text: string): boolean {
   const t = String(text ?? '').toLowerCase().replace(/™/g, '').replace(/[–—]/g, '-');
   if (t.includes('autothresh pro') || t.includes('autothresh lite')) return false;
@@ -162,9 +208,7 @@ function collectPlanText(o: unknown): string {
 }
 
 function orderLooksLikeLifetime(o: unknown): boolean {
-  const named = collectPlanText(o);
-  if (!isAutothreshWebText(named)) return false;
-  return !looksLikeRecurringTitle(named);
+  return isPaidLifetime(o, collectPlanText(o));
 }
 
 function collectEmails(o: unknown): string[] {
@@ -218,13 +262,7 @@ function sealItemPlan(s: Record<string, unknown>): unknown {
 }
 
 function isSealOneTimePurchase(s: Record<string, unknown>): boolean {
-  const titles = `${sealBlob(s)} ${collectPlanText(s)}`;
-  if (!isAutothreshWebText(titles)) return false;
-  if (looksLikeOneTimePlan(titles)) return true;
-  const interval = String(s.billing_interval ?? s.interval ?? s.delivery_interval ?? '').toLowerCase();
-  const recurringInterval = /\bmonth/.test(interval) || /\byear/.test(interval) || interval.includes('annual');
-  if (recurringInterval || looksLikeRecurringTitle(titles)) return false;
-  return true;
+  return isPaidLifetime(s, `${sealBlob(s)} ${collectPlanText(s)}`);
 }
 
 async function checkLdtLifetime(email: string): Promise<LdtCheck> {
@@ -254,11 +292,11 @@ async function checkShopifyLifetime(token: string): Promise<boolean> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': token },
       body: JSON.stringify({
-        query: `query { customer { orders(first: 25) { nodes { name lineItems(first: 20) { nodes { name title variantTitle sku } } } } } }`,
+        query: `query { customer { orders(first: 25) { nodes { name totalPrice { amount } lineItems(first: 20) { nodes { name title variantTitle sku currentTotalPrice { amount } originalTotalPrice { amount } } } } } } }`,
       }),
     });
     const body = await r.json() as {
-      data?: { customer?: { orders?: { nodes?: Array<{ name?: string; lineItems?: { nodes?: Array<Record<string, unknown>> } }> } } };
+      data?: { customer?: { orders?: { nodes?: Array<{ name?: string; totalPrice?: { amount?: string }; lineItems?: { nodes?: Array<Record<string, unknown>> } }> } } };
       errors?: unknown;
     };
     if (body.errors) {
@@ -267,9 +305,12 @@ async function checkShopifyLifetime(token: string): Promise<boolean> {
     }
     const orders = body.data?.customer?.orders?.nodes ?? [];
     for (const order of orders) {
+      const orderTotal = parseMoney(order.totalPrice);
       for (const item of order.lineItems?.nodes ?? []) {
         const text = [item.name, item.title, item.variantTitle, item.sku].filter(Boolean).join(' ');
-        if (isAutothreshWebText(text) && !looksLikeRecurringTitle(text)) return true;
+        if (!isAutothreshWebText(text) || looksLikeRecurringTitle(text)) continue;
+        const itemPaid = parseMoney(item.currentTotalPrice) || parseMoney(item.originalTotalPrice) || orderTotal;
+        if (looksLikeOneTimePlan(text) || itemPaid > LIFETIME_MIN_PAID) return true;
       }
     }
     return false;

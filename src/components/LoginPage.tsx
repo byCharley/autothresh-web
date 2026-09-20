@@ -5,6 +5,7 @@ import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 import { useAppVersion } from '../hooks/useAppVersion';
+import { PRODUCT_URL } from '../lib/product';
 
 interface Props {
   onLogin: () => void;
@@ -23,7 +24,6 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
   const [showEula, setShowEula]             = useState(false);
   const [showFaq, setShowFaq]               = useState(false);
   const [showInfo, setShowInfo]             = useState(false);
-  const [showSubscribe, setShowSubscribe]   = useState(false);
 
   const handleSignIn = () => {
     setLoading(true);
@@ -79,10 +79,43 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
           {/* Header */}
           <div style={{ marginBottom: 22, textAlign: 'center' }}>
             <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '-0.01em', marginBottom: 7 }}>
-              Sign In to AutoThresh Web
+              Try AutoThresh Web
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.65 }}>
-              Sign in with the email you bought with, or activate with your license key and order number.
+              3 days free, no account needed. Buy a license when you&apos;re ready.
+            </div>
+          </div>
+
+          <a
+            href="/"
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '16px 20px', marginBottom: 10,
+              background: 'var(--accent)', color: '#000', textDecoration: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+              fontSize: 15, fontWeight: 700, letterSpacing: '0.04em',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            Try free for 3 days
+          </a>
+          <a
+            href={PRODUCT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '16px 20px',
+              background: '#fbbf24', color: '#000', textDecoration: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+              fontSize: 15, fontWeight: 700, letterSpacing: '0.04em',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            Buy license — $149
+          </a>
+
+          <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 }}>
+              Already purchased?
             </div>
           </div>
 
@@ -92,12 +125,12 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
             disabled={loading}
             style={{
               width: '100%', padding: '12px 20px',
-              background: loading ? 'var(--surface-2)' : 'var(--accent)',
-              border: '1px solid transparent',
+              background: loading ? 'var(--surface-2)' : 'transparent',
+              border: '1px solid var(--border)',
               cursor: loading ? 'default' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
               fontSize: 13, fontWeight: 700, letterSpacing: '0.04em',
-              color: loading ? 'var(--text-muted)' : '#000',
+              color: loading ? 'var(--text-muted)' : 'var(--text)',
               fontFamily: 'var(--font-mono)',
               transition: 'opacity 0.15s',
             }}
@@ -195,36 +228,6 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
               </div>
             )}
           </div>
-
-          {/* Buy lifetime */}
-          <div style={{
-            marginTop: 18, paddingTop: 16,
-            borderTop: '1px solid var(--border)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-              Need a license?
-            </span>
-            <button
-              onClick={() => setShowSubscribe(true)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
-                fontWeight: 700, padding: 0,
-              }}
-            >
-              Buy lifetime — $149
-            </button>
-            </div>
-            <a
-              href="/"
-              style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}
-            >
-              Or try free for 3 days →
-            </a>
-          </div>
         </div>
 
         {/* About link */}
@@ -294,76 +297,6 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
                 Whether you prefer the speed of the Photoshop plugin or the flexibility of a web app, every AutoThresh product
                 is designed to deliver the same high-quality results while continuing to add new tools, workflows, and separation technologies.
               </p>
-            </div>
-          </div>
-        )}
-
-        {/* Subscribe modal */}
-        {showSubscribe && (
-          <div
-            onClick={() => setShowSubscribe(false)}
-            style={{
-              position: 'fixed', inset: 0, zIndex: 100,
-              background: 'rgba(0,0,0,0.82)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: '24px 16px',
-            }}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                width: '100%', maxWidth: 460,
-                padding: '28px 28px 30px',
-                position: 'relative',
-              }}
-            >
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>
-                  AutoThresh Web
-                </div>
-                <button
-                  onClick={() => setShowSubscribe(false)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)', padding: 4, display: 'flex', lineHeight: 0 }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em', marginBottom: 8 }}>
-                Lifetime Access
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', lineHeight: 1.55, marginBottom: 24 }}>
-                Pay once. Own it forever. Two devices per license.
-              </div>
-              <div style={{ padding: '22px 20px', border: '1px solid #fbbf24', background: 'rgba(251,191,36,0.04)', marginBottom: 16 }}>
-                <div style={{ fontSize: 9, color: '#fbbf24', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>One-time</div>
-                <div style={{ fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
-                  <span style={{ fontSize: 34, fontWeight: 700 }}>$149</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>once</span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
-                  All separation modes, exports, presets, and future updates. No subscription.
-                </div>
-              </div>
-              <a
-                href="https://charleypangus.com/products/autothresh-web"
-                target="_blank" rel="noopener noreferrer"
-                style={{
-                  display: 'flex', width: '100%', boxSizing: 'border-box',
-                  alignItems: 'center', justifyContent: 'center',
-                  padding: '14px 20px', border: '1px solid #fbbf24',
-                  background: '#fbbf24', color: '#000', textDecoration: 'none',
-                  fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)',
-                }}
-              >
-                Buy Lifetime Access
-              </a>
-              <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', lineHeight: 1.5 }}>
-                After checkout, sign in with your Charley Pangus email or enter your license key and order number.
-              </div>
             </div>
           </div>
         )}
