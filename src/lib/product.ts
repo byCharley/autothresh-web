@@ -1,4 +1,10 @@
 export const PRODUCT_URL = 'https://charleypangus.com/products/autothresh-web';
+export const PRODUCT_PRICE = '$159';
+
+export function productUrlWithCode(code?: string): string {
+  if (!code) return PRODUCT_URL;
+  return `${PRODUCT_URL}?discount=${encodeURIComponent(code)}`;
+}
 
 export function formatTrialLeft(expiresAt: string): string {
   const ms = Date.parse(expiresAt) - Date.now();

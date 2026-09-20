@@ -397,7 +397,11 @@ async function sealCheckSubscription(email: string): Promise<SealCheck> {
         for (const s of subs) {
           if (isSealOneTimePurchase(s)) continue;
           const st = String(s.status ?? '').toUpperCase();
-          if (st === 'CANCELLED' || st === 'CANCELED') { subscriptionStatus = 'cancelled'; break; }
+          if (st === 'CANCELLED' || st === 'CANCELED') {
+            subscriptionStatus = 'cancelled';
+            planTitle = (s.plan_title ?? s.product_title ?? s.plan_name ?? sealItemPlan(s)) as string | undefined;
+            break;
+          }
         }
       }
     }

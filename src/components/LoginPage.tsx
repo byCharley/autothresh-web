@@ -5,15 +5,52 @@ import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 import { useAppVersion } from '../hooks/useAppVersion';
-import { PRODUCT_URL } from '../lib/product';
+import { PRODUCT_URL, PRODUCT_PRICE } from '../lib/product';
+
+const LOGIN_HEROES = [
+  { src: '/login-hero.webp', alt: 'AutoThresh Web on tablet', fit: 'tablet' },
+  { src: '/login-hero-mobile.webp', alt: 'AutoThresh Web on phone', fit: 'phone' },
+];
+
+function DeviceGlyph({ kind }: { kind: 'desktop' | 'tablet' | 'mobile' }) {
+  if (kind === 'desktop') {
+    return (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M8 21h8M12 17v4" />
+      </svg>
+    );
+  }
+  if (kind === 'tablet') {
+    return (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <rect x="4" y="2" width="16" height="20" rx="2" />
+        <path d="M12 18h.01" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="7" y="2" width="10" height="20" rx="2" />
+      <path d="M12 18h.01" />
+    </svg>
+  );
+}
+
+const DEVICE_ITEMS = [
+  { kind: 'desktop' as const, label: 'Desktop' },
+  { kind: 'tablet' as const, label: 'Tablet' },
+  { kind: 'mobile' as const, label: 'Mobile' },
+];
 
 interface Props {
   onLogin: () => void;
   onSwitchAccount?: () => void;
   onActivateLicense?: (licenseKey: string, orderNumber: string) => Promise<{ ok: boolean; error?: string }>;
+  onStartTrial?: () => Promise<boolean>;
 }
 
-export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props) {
+export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStartTrial }: Props) {
   const appVersion = useAppVersion();
   const [loading, setLoading]           = useState(false);
   const [licenseBusy, setLicenseBusy]   = useState(false);
@@ -24,6 +61,8 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
   const [showEula, setShowEula]         = useState(false);
   const [showFaq, setShowFaq]           = useState(false);
   const [showInfo, setShowInfo]         = useState(false);
+  const [trialBusy, setTrialBusy] = useState(false);
+  const [trialError, setTrialError] = useState('');
   const [canSwitch] = useState(() => {
     try { return !!localStorage.getItem('shopify_id_token'); } catch { return false; }
   });
@@ -40,10 +79,25 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
     <div className="login-screen">
       <div className="login-visual">
         <div className="login-visual-frame">
-          <img src="/login-hero.webp" alt="AutoThresh Web on tablet" />
+          {LOGIN_HEROES.map(img => (
+            <img
+              key={img.src}
+              src={img.src}
+              alt={img.alt}
+              data-fit={img.fit}
+            />
+          ))}
           <div className="login-visual-brand">
             <AppIcon size={22} color="#fff" />
             <span>AutoThresh Web</span>
+          </div>
+          <div className="login-visual-devices" aria-label="Works on desktop, tablet, and mobile">
+            {DEVICE_ITEMS.map(item => (
+              <span key={item.kind}>
+                <DeviceGlyph kind={item.kind} />
+                {item.label}
+              </span>
+            ))}
           </div>
         </div>
       </div>
@@ -53,6 +107,14 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
           <div className="login-screen-col">
             <h1 className="login-headline">Sign in to AutoThresh Web</h1>
             <p className="login-lede">Use the email on your order. Beta {appVersion}</p>
+            <div className="login-devices" aria-label="Works on desktop, tablet, and mobile">
+              {DEVICE_ITEMS.map(item => (
+                <span key={item.kind}>
+                  <DeviceGlyph kind={item.kind} />
+                  {item.label}
+                </span>
+              ))}
+            </div>
 
             <button className="login-primary" onClick={handleSignIn} disabled={loading}>
               {loading ? 'Redirecting…' : 'Sign in'}
@@ -96,16 +158,31 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
             {licenseError && <div className="login-error">{licenseError}</div>}
 
             <div className="login-ctas">
-              <a href="/" className="login-cta login-cta-try">Try 3 days free</a>
+              <button
+                type="button"
+                className="login-cta login-cta-try"
+                disabled={trialBusy}
+                onClick={async () => {
+                  if (!onStartTrial || trialBusy) return;
+                  setTrialBusy(true);
+                  setTrialError('');
+                  const ok = await onStartTrial();
+                  if (!ok) setTrialError('Could not start your trial. Try again, or sign in if you already have access.');
+                  setTrialBusy(false);
+                }}
+              >
+                {trialBusy ? 'Starting…' : 'Try 3 days free'}
+              </button>
               <a
                 href={PRODUCT_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="login-cta login-cta-buy"
               >
-                Buy license · $149
+                Buy license · {PRODUCT_PRICE}
               </a>
             </div>
+            {trialError && <div className="login-error">{trialError}</div>}
 
             <button className="login-text-btn login-about" onClick={() => setShowInfo(true)}>
               About AutoThresh Web

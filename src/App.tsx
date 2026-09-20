@@ -138,7 +138,7 @@ function App() {
   const updateAvailable = useVersionCheck();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [chunkError, setChunkError] = useState(false);
-  const { status, session, initiateLogin, switchAccount, logout, showLogin, recheck, updateDisplayName, syncSubscription, getValidToken, activateLicense } = useAuth();
+  const { status, session, initiateLogin, switchAccount, logout, showLogin, startTrial, recheck, updateDisplayName, syncSubscription, getValidToken, activateLicense } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [sheetGenerating, setSheetGenerating] = useState(false);
   const [showEula, setShowEula]         = useState(false);
@@ -255,7 +255,7 @@ function App() {
   }
 
   if (status === 'unauthenticated') {
-    return <LoginPage onLogin={handleLogin} onSwitchAccount={switchAccount} onActivateLicense={activateLicense} />;
+    return <LoginPage onLogin={handleLogin} onSwitchAccount={switchAccount} onActivateLicense={activateLicense} onStartTrial={startTrial} />;
   }
 
   if (status === 'trial-ended') {

@@ -1,24 +1,44 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { AppIcon } from './AppIcon';
-import { PRODUCT_URL } from '../lib/product';
+import { getDeviceId } from '../lib/deviceId';
+import { getBrowserFingerprint } from '../lib/fingerprint';
+import { PRODUCT_URL, PRODUCT_PRICE, productUrlWithCode } from '../lib/product';
 
 interface Props {
   onSignIn: () => void;
 }
 
 export function TrialEndedPage({ onSignIn }: Props) {
-  const cancelled = useRef(false);
+  const [code, setCode] = useState('');
+  const [price, setPrice] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      if (!cancelled.current) window.location.assign(PRODUCT_URL);
-    }, 2500);
-    return () => window.clearTimeout(t);
+    let cancelled = false;
+    (async () => {
+      const fingerprint = await getBrowserFingerprint();
+      const r = await fetch('/api/discount', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: getDeviceId(), fingerprint }),
+      });
+      const data = await r.json() as { code?: string; price?: string };
+      if (cancelled || !r.ok || !data.code) return;
+      setCode(data.code);
+      if (data.price) setPrice(data.price);
+    })().catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
-  const stayAndSignIn = () => {
-    cancelled.current = true;
-    onSignIn();
+  const buyUrl = productUrlWithCode(code);
+  const copyCode = async () => {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch { /* ignore */ }
   };
 
   return (
@@ -37,14 +57,54 @@ export function TrialEndedPage({ onSignIn }: Props) {
       <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', marginTop: 20, letterSpacing: '-0.02em' }}>
         Your 3-day trial has ended
       </div>
-      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 10, textAlign: 'center', maxWidth: 380, lineHeight: 1.6 }}>
-        Taking you to AutoThresh Web so you can buy a license. Already purchased? Sign in here.
+      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 10, textAlign: 'center', maxWidth: 400, lineHeight: 1.6 }}>
+        Buy a license at 15% off{price ? ` (${price})` : ''}. Want to save more? There are bundle deals on the{' '}
+        <a href={PRODUCT_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+          product page
+        </a>
+        {' '}at checkout.
       </div>
+
+      {code && (
+        <div style={{
+          marginTop: 22, width: '100%', maxWidth: 400,
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          padding: '10px 12px',
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 4 }}>
+              Your one-time code
+            </div>
+            <div style={{ fontSize: 15, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text)', letterSpacing: '0.04em' }}>
+              {code}
+            </div>
+          </div>
+          <button
+            onClick={copyCode}
+            style={{
+              flexShrink: 0, height: 32, padding: '0 12px',
+              fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
+              background: 'transparent', border: '1px solid var(--border)',
+              color: copied ? '#4ade80' : 'var(--text-muted)', cursor: 'pointer',
+            }}
+          >
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+      )}
+      {code && (
+        <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.6, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', maxWidth: 400 }}>
+          This code is for AutoThresh Web only and cannot be stacked with bundles or other discounts.
+        </div>
+      )}
+
       <a
-        href={PRODUCT_URL}
-        onClick={() => { cancelled.current = true; }}
+        href={buyUrl}
+        target="_blank"
+        rel="noopener noreferrer"
         style={{
-          marginTop: 28,
+          marginTop: 24,
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -57,10 +117,10 @@ export function TrialEndedPage({ onSignIn }: Props) {
           fontWeight: 700,
         }}
       >
-        Get AutoThresh Web
+        {code ? 'Buy license — 15% off' : `Get AutoThresh Web — ${PRODUCT_PRICE}`}
       </a>
       <button
-        onClick={stayAndSignIn}
+        onClick={onSignIn}
         style={{
           marginTop: 14,
           background: 'none',

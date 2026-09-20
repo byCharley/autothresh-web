@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { AppIcon } from './AppIcon';
 import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
@@ -6,10 +6,36 @@ import { PageFooter } from './PageFooter';
 import { BillingPanel } from './BillingPanel';
 import { DeviceManager, type LicenseDevice } from './DeviceManager';
 import { useAppVersion } from '../hooks/useAppVersion';
+import { getDeviceId } from '../lib/deviceId';
+import { getBrowserFingerprint } from '../lib/fingerprint';
+import { PRODUCT_URL, PRODUCT_PRICE, productUrlWithCode } from '../lib/product';
 
-const LIFETIME_URL = 'https://charleypangus.com/products/autothresh-web';
-const LIFETIME_MONTHLY_URL = 'https://charleypangus.com/discount/ATWEB30';
-const LIFETIME_ANNUAL_URL  = 'https://charleypangus.com/discount/ATWEB50';
+type IssuedDiscount = {
+  code: string;
+  percent: number;
+  price: string;
+  compareAt: string;
+};
+
+function offerLabel(percent?: number) {
+  if (percent === 50) return '50% off after your annual plan';
+  if (percent === 30) return '30% off after your monthly plan';
+  if (percent === 15) return '15% off after your free trial';
+  return 'Pay once. Own it forever.';
+}
+
+function BundleNote({ hasCode }: { hasCode?: boolean }) {
+  return (
+    <div style={{ marginTop: 10, fontSize: 11, lineHeight: 1.6, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+      Want to save more? There are bundle deals on the{' '}
+      <a href={PRODUCT_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+        product page
+      </a>
+      {' '}at checkout.
+      {hasCode ? ' This code is for AutoThresh Web only and cannot be stacked with bundles or other discounts.' : ''}
+    </div>
+  );
+}
 
 interface Props {
   firstName?: string;
@@ -47,10 +73,22 @@ function PlanFeatures({ features, accent }: { features: string[]; accent: string
   );
 }
 
-function PricingModal({ onClose, offer }: { onClose: () => void; offer?: 'monthly30' | 'annual50' }) {
-  const discounted = offer === 'annual50' ? { label: '50% off for annual members', price: '$75', url: LIFETIME_ANNUAL_URL }
-    : offer === 'monthly30' ? { label: '30% off after your monthly plan', price: '$104', url: LIFETIME_MONTHLY_URL }
-    : { label: 'Pay once. Own it forever.', price: '$149', url: LIFETIME_URL };
+function PricingModal({ onClose, issued }: { onClose: () => void; issued?: IssuedDiscount | null }) {
+  const [copied, setCopied] = useState(false);
+  const buyUrl = productUrlWithCode(issued?.code);
+  const percent = issued?.percent ?? 0;
+  const price = issued?.price || PRODUCT_PRICE;
+  const compareAt = issued?.compareAt || PRODUCT_PRICE;
+
+  const copyCode = async () => {
+    if (!issued?.code) return;
+    try {
+      await navigator.clipboard.writeText(issued.code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch { /* ignore */ }
+  };
+
   return (
     <div
       style={{
@@ -85,23 +123,53 @@ function PricingModal({ onClose, offer }: { onClose: () => void; offer?: 'monthl
             Pay once. Own it forever.
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-mono)' }}>
-            {discounted.label}
+            {offerLabel(percent || undefined)}
           </div>
         </div>
 
-        <a href={discounted.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
+        <a href={buyUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
           <div style={{ border: '1px solid #fbbf24', padding: '22px 20px', position: 'relative' }}>
             <div style={{ position: 'absolute', top: 0, right: 0, background: '#fbbf24', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', padding: '3px 8px' }}>ONE-TIME</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, color: 'var(--text)' }}>{discounted.price}</span>
-              {discounted.price !== '$149' && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-dim)', textDecoration: 'line-through' }}>$149</span>}
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, color: 'var(--text)' }}>{price}</span>
+              {percent > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-dim)', textDecoration: 'line-through' }}>{compareAt}</span>}
             </div>
             <PlanFeatures features={PLAN_FEATURES.lifetime} accent="#fbbf24" />
             <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', background: '#fbbf24', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700 }}>
-              Buy license →
+              Buy on the product page →
             </div>
           </div>
         </a>
+
+        {issued?.code && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, marginTop: 16,
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            padding: '10px 12px',
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 4 }}>
+                Your one-time code
+              </div>
+              <div style={{ fontSize: 15, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text)', letterSpacing: '0.04em' }}>
+                {issued.code}
+              </div>
+            </div>
+            <button
+              onClick={copyCode}
+              style={{
+                flexShrink: 0, height: 32, padding: '0 12px',
+                fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                background: 'transparent', border: '1px solid var(--border)',
+                color: copied ? '#4ade80' : 'var(--text-muted)', cursor: 'pointer',
+              }}
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        )}
+        <BundleNote hasCode={!!issued?.code} />
+
         <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
           Two devices per license. Remove a device anytime to free a slot.
         </div>
@@ -116,6 +184,32 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
   const [showFaq,       setShowFaq]       = useState(false);
   const [showPricing,   setShowPricing]   = useState(false);
   const [recheckState,  setRecheckState]  = useState<'idle' | 'checking' | 'denied'>('idle');
+  const [issued, setIssued] = useState<IssuedDiscount | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const fingerprint = await getBrowserFingerprint();
+      const r = await fetch('/api/discount', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: token } : {}),
+        },
+        body: JSON.stringify({ deviceId: getDeviceId(), fingerprint, token }),
+      });
+      const data = await r.json() as IssuedDiscount & { error?: string };
+      if (cancelled || !r.ok || !data.code || !data.percent) return;
+      setIssued({
+        code: data.code,
+        percent: data.percent,
+        price: data.price,
+        compareAt: data.compareAt,
+      });
+    })().catch(() => {});
+    return () => { cancelled = true; };
+  }, [token]);
 
   const handleRecheck = useCallback(async () => {
     if (!onRecheck || recheckState === 'checking') return;
@@ -313,9 +407,18 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
             )}
 
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
-              {subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled'
-                ? 'Your subscription has ended. Buy a license at 30% off to keep going — pay once, own forever.'
-                : 'AutoThresh Web is a one-time purchase. Pay once and own it forever.'}
+              {issued?.percent === 50
+                ? 'Your annual plan has ended. Buy a license at 50% off — pay once, own forever.'
+                : issued?.percent === 30
+                  ? 'Your monthly plan has ended. Buy a license at 30% off — pay once, own forever.'
+                  : issued?.percent === 15
+                    ? 'Your free trial has ended. Buy a license at 15% off — pay once, own forever.'
+                    : 'AutoThresh Web is a one-time purchase. Pay once and own it forever.'}
+              {' '}Want to save more? There are bundle deals on the{' '}
+              <a href={PRODUCT_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>
+                product page
+              </a>
+              {' '}at checkout.
             </div>
 
             <button
@@ -323,7 +426,9 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
               className="btn btn-primary"
               style={{ width: '100%', justifyContent: 'center', marginBottom: 20, color: '#000', fontSize: 13 }}
             >
-              {subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled' ? 'Buy license — 30% off' : 'Buy license — $149'}
+              {issued?.percent
+                ? `Buy license — ${issued.percent}% off`
+                : `Buy license — ${PRODUCT_PRICE}`}
             </button>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -373,7 +478,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
       <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} />
       {showEula    && <EulaModal onClose={() => setShowEula(false)} />}
       {showFaq     && <FaqModal  onClose={() => setShowFaq(false)} />}
-      {showPricing && <PricingModal onClose={() => setShowPricing(false)} offer={subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled' ? 'monthly30' : undefined} />}
+      {showPricing && <PricingModal onClose={() => setShowPricing(false)} issued={issued} />}
     </div>
   );
 }

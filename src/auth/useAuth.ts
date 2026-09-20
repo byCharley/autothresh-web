@@ -429,6 +429,13 @@ export function useAuth() {
     setStatus('unauthenticated');
   }, []);
 
+  const startTrial = useCallback(async (): Promise<boolean> => {
+    window.history.replaceState({}, '', '/');
+    const claim = await claimAnonymousTrial();
+    applyTrialClaim(claim, setSession, setStatus);
+    return claim.kind === 'active' || claim.kind === 'ended';
+  }, []);
+
   const updateDisplayName = useCallback((name: string) => {
     if (name.trim()) {
       localStorage.setItem(DISPLAY_NAME_KEY, name.trim());
@@ -498,5 +505,5 @@ export function useAuth() {
     }
   }, []);
 
-  return { status, session, initiateLogin, switchAccount, logout, showLogin, recheck, updateDisplayName, syncSubscription, getValidToken, refreshAccessToken, activateLicense };
+  return { status, session, initiateLogin, switchAccount, logout, showLogin, startTrial, recheck, updateDisplayName, syncSubscription, getValidToken, refreshAccessToken, activateLicense };
 }
