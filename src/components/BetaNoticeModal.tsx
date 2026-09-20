@@ -50,7 +50,7 @@ export function BetaNoticeModal({ onClose }: Props) {
               Beta
             </span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text)' }}>
-              AutoThresh™ Web
+              AutoThresh Web
             </span>
           </div>
           <button
@@ -66,7 +66,7 @@ export function BetaNoticeModal({ onClose }: Props) {
         {/* Body */}
         <div style={{ padding: '22px 24px', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.85, fontFamily: 'var(--font-sans)' }}>
           <p style={{ margin: '0 0 14px' }}>
-            AutoThresh™ is an active work in progress. New features, improvements, and workflow updates
+            AutoThresh is an active work in progress. New features, improvements, and workflow updates
             ship regularly — and the roadmap is shaped directly by the{' '}
             <span style={{ color: 'var(--text)', fontWeight: 600 }}>community using it</span>.
           </p>

@@ -6,7 +6,7 @@ import { PageFooter } from './PageFooter';
 import { BillingPanel } from './BillingPanel';
 import { DeviceManager, type LicenseDevice } from './DeviceManager';
 
-const LIFETIME_URL = 'https://charleypangus.com/checkout/autothresh-web/lifetime';
+const LIFETIME_URL = 'https://charleypangus.com/products/autothresh-web';
 const LIFETIME_MONTHLY_URL = 'https://charleypangus.com/discount/ATWEB30';
 const LIFETIME_ANNUAL_URL  = 'https://charleypangus.com/discount/ATWEB50';
 

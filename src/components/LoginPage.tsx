@@ -64,7 +64,7 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
             />
           </div>
           <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-            AutoThresh™ Web <span style={{ color: 'var(--accent)' }}>Beta {appVersion}</span>
+            AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta {appVersion}</span>
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 7, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-mono)', lineHeight: 1.9 }}>
             Professional Color Separation App<br />Trusted By Pros Worldwide<br />Community Led Improvements Weekly
@@ -79,7 +79,7 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
           {/* Header */}
           <div style={{ marginBottom: 22, textAlign: 'center' }}>
             <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '-0.01em', marginBottom: 7 }}>
-              Sign In to AutoThresh™ Web
+              Sign In to AutoThresh Web
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.65 }}>
               Sign in with the email you bought with, or activate with your license key and order number.
@@ -200,8 +200,9 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
           <div style={{
             marginTop: 18, paddingTop: 16,
             borderTop: '1px solid var(--border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
           }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
             <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
               Need a license?
             </span>
@@ -216,6 +217,13 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
             >
               Buy lifetime — $149
             </button>
+            </div>
+            <a
+              href="/"
+              style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textDecoration: 'none' }}
+            >
+              Or try free for 3 days →
+            </a>
           </div>
         </div>
 
@@ -237,7 +245,7 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
               <line x1="12" y1="16" x2="12" y2="12"/>
               <line x1="12" y1="8" x2="12.01" y2="8"/>
             </svg>
-            About AutoThresh™ Web
+            About AutoThresh Web
           </button>
         </div>
 
@@ -264,7 +272,7 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>
-                  About AutoThresh™ Web
+                  About AutoThresh Web
                 </div>
                 <button
                   onClick={() => setShowInfo(false)}
@@ -276,10 +284,10 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
                 </button>
               </div>
               <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
-                Part of the Growing AutoThresh™ Lineup
+                Part of the Growing AutoThresh Lineup
               </div>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.75, margin: '0 0 12px', fontFamily: 'var(--font-sans)' }}>
-                AutoThresh™ Web is the next step in the AutoThresh ecosystem. Built on the same trusted AutoThresh® Engine,
+                AutoThresh Web is the next step in the AutoThresh ecosystem. Built on the same trusted AutoThresh® Engine,
                 it expands the lineup beyond Photoshop, giving you the freedom to create professional color separations directly in your browser.
               </p>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.75, margin: 0, fontFamily: 'var(--font-sans)' }}>
@@ -313,7 +321,7 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
                 <div style={{ fontSize: 10, color: 'var(--accent)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>
-                  AutoThresh™ Web
+                  AutoThresh Web
                 </div>
                 <button
                   onClick={() => setShowSubscribe(false)}
@@ -341,7 +349,7 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props
                 </div>
               </div>
               <a
-                href="https://charleypangus.com/checkout/autothresh-web/lifetime"
+                href="https://charleypangus.com/products/autothresh-web"
                 target="_blank" rel="noopener noreferrer"
                 style={{
                   display: 'flex', width: '100%', boxSizing: 'border-box',

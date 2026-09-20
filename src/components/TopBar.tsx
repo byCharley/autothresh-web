@@ -7,6 +7,7 @@ import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewM
 import { ACCENTS, applyAccentByHex } from '../lib/accent';
 import { ManageSubscriptionPage } from './ManageSubscriptionPage';
 import { DeviceManager } from './DeviceManager';
+import { PRODUCT_URL, formatTrialLeft } from '../lib/product';
 
 function getSeenDate(): string {
   return localStorage.getItem('at-changelog-seen') ?? '';
@@ -21,6 +22,7 @@ interface TopBarProps {
   onAnalytics?: () => void;
   onWhatsNew?: () => void;
   onLogout?: () => void;
+  onLogin?: () => void;
   onUpdateName?: (name: string) => void;
   userEmail?: string;
   firstName?: string;
@@ -33,7 +35,7 @@ interface TopBarProps {
   onBillingChanged?: () => void;
 }
 
-export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onWhatsNew, onLogout, onUpdateName, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0, onBillingChanged }: TopBarProps) {
+export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onAnalytics, onWhatsNew, onLogout, onLogin, onUpdateName, userEmail, firstName, subscriptionExpiresAt, planTitle, subscriptionStatus, sessionToken, accentColor, chatUnread = 0, onBillingChanged }: TopBarProps) {
   const { theme, setTheme, imageFileName, originalImage, clearImage, resetAllSettings, historyStack, undo, passthroughMode, setPassthroughMode } = useStore();
   const appVersion = useAppVersion();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -205,8 +207,44 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
         </div>
       </div>
 
+      {/* Trial — no account yet */}
+      {subscriptionStatus === 'app_trial' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 6 }}>
+          <span style={{
+            fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em',
+            textTransform: 'uppercase', color: '#111', background: '#a78bfa', padding: '3px 8px',
+          }}>
+            Trial · {subscriptionExpiresAt ? formatTrialLeft(subscriptionExpiresAt) : '3 days'}
+          </span>
+          <a
+            href={PRODUCT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
+              padding: '4px 10px', background: 'var(--accent)', color: '#000',
+              textDecoration: 'none', letterSpacing: '0.04em',
+            }}
+          >
+            Buy
+          </a>
+          {onLogin && (
+            <button
+              onClick={onLogin}
+              style={{
+                fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                padding: '4px 10px', background: 'none', border: '1px solid var(--border)',
+                color: 'var(--text)', cursor: 'pointer',
+              }}
+            >
+              Sign in
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Signed-in user badge — click to open account dropdown */}
-      {displayName && (
+      {displayName && subscriptionStatus !== 'app_trial' && (
         <div ref={menuRef} style={{ position: 'relative' }}>
           <button
             onClick={() => setMenuOpen(v => !v)}
@@ -242,13 +280,13 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
           {menuOpen && (() => {
             const subColor = subscriptionStatus === 'creator'  ? 'var(--accent)'
               : subscriptionStatus === 'tester'                ? '#38bdf8'
-              : subscriptionStatus === 'trial'                 ? '#a78bfa'
+              : subscriptionStatus === 'trial' || subscriptionStatus === 'app_trial' ? '#a78bfa'
               : subscriptionStatus === 'lifetime'              ? '#fbbf24'
               : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
               : '#3ecf4f';
             const subLabel = subscriptionStatus === 'creator' ? 'Creator'
               : subscriptionStatus === 'tester' ? 'Tester'
-              : subscriptionStatus === 'trial' ? 'Free Trial'
+              : subscriptionStatus === 'trial' || subscriptionStatus === 'app_trial' ? 'Free Trial'
               : subscriptionStatus === 'lifetime' ? 'Lifetime'
               : subscriptionStatus === 'paused' ? 'Paused'
               : subscriptionStatus === 'cancelled' ? 'Cancelled'
@@ -346,7 +384,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                   </div>
                   {(nextBillingFormatted || (daysRemaining !== null && daysRemaining > 0)) && (
                     <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {subscriptionStatus === 'trial' ? 'Trial ends' : subscriptionStatus === 'lifetime' ? 'Never expires' : 'Renews'}{subscriptionStatus !== 'lifetime' && nextBillingFormatted ? ` ${nextBillingFormatted}` : ''}
+                      {subscriptionStatus === 'trial' || subscriptionStatus === 'app_trial' ? 'Trial ends' : subscriptionStatus === 'lifetime' ? 'Never expires' : 'Renews'}{subscriptionStatus !== 'lifetime' && nextBillingFormatted ? ` ${nextBillingFormatted}` : ''}
                       {daysRemaining !== null && daysRemaining > 0 && (
                         <span style={{ color: 'var(--text-muted)', marginLeft: 5 }}>· {daysRemaining}d left</span>
                       )}
@@ -371,7 +409,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                       Sign out
                     </button>
                   )}
-                  {subscriptionStatus !== 'creator' && (
+                  {subscriptionStatus !== 'creator' && subscriptionStatus !== 'app_trial' && (
                     <button
                       onClick={() => { setMenuOpen(false); setShowDevices(true); }}
                       style={{
@@ -384,7 +422,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                       Devices
                     </button>
                   )}
-                  {subscriptionStatus !== 'creator' && subscriptionStatus !== 'tester' && subscriptionStatus !== 'lifetime' && (
+                  {subscriptionStatus !== 'creator' && subscriptionStatus !== 'tester' && subscriptionStatus !== 'lifetime' && subscriptionStatus !== 'app_trial' && (
                     <button
                       onClick={() => { setMenuOpen(false); setShowBilling(true); }}
                       style={{

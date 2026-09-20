@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { generateCodeVerifier, generateCodeChallenge, generateState } from './pkce';
 import { applyAccentByHex } from '../lib/accent';
 import { deviceNameFromUa, getDeviceId } from '../lib/deviceId';
+import { getBrowserFingerprint } from '../lib/fingerprint';
 
 export interface Session {
   token:                   string;
@@ -68,7 +69,64 @@ async function startOAuth(prompt?: string) {
   window.location.href = redirectUrl;
 }
 
-export type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated';
+export type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated' | 'trial' | 'trial-ended';
+
+function wantsLoginScreen(): boolean {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  return path === '/login' || new URLSearchParams(window.location.search).has('login');
+}
+
+function trialSession(expiresAt: string): Session {
+  return {
+    token: '',
+    expiresAt,
+    email: '',
+    firstName: '',
+    hasSubscription: false,
+    subscriptionStatus: 'app_trial',
+    subscriptionExpiresAt: expiresAt,
+  };
+}
+
+type TrialClaim = { kind: 'login' } | { kind: 'unavailable' } | { kind: 'active'; expiresAt: string } | { kind: 'ended' };
+
+async function claimAnonymousTrial(): Promise<TrialClaim> {
+  if (wantsLoginScreen()) return { kind: 'login' };
+  try {
+    const fingerprint = await getBrowserFingerprint();
+    const r = await fetch('/api/trial', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ deviceId: getDeviceId(), fingerprint }),
+    });
+    if (!r.ok) return { kind: 'unavailable' };
+    const data = await r.json() as { status?: string; expiresAt?: string };
+    if (data.status === 'active' && data.expiresAt) return { kind: 'active', expiresAt: data.expiresAt };
+    return { kind: 'ended' };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+
+function applyTrialClaim(
+  claim: TrialClaim,
+  setSession: (s: Session | null) => void,
+  setStatus: (s: AuthStatus) => void,
+) {
+  if (claim.kind === 'active') {
+    setSession(trialSession(claim.expiresAt));
+    setStatus('trial');
+    return;
+  }
+  if (claim.kind === 'ended') {
+    setSession(null);
+    setStatus('trial-ended');
+    return;
+  }
+  setSession(null);
+  setStatus('unauthenticated');
+}
 
 const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS_AUTH === 'true'
   && !new URLSearchParams(window.location.search).has('login');
@@ -79,6 +137,7 @@ const DEV_SESSION: Session = {
   email: 'dev@localhost',
   firstName: 'Dev',
   hasSubscription: true,
+  subscriptionStatus: 'creator',
 };
 
 export function useAuth() {
@@ -100,7 +159,7 @@ export function useAuth() {
     // older session. Just clean up and show the login screen.
     if (localStorage.getItem('at_post_logout')) {
       localStorage.removeItem('at_post_logout');
-      setStatus('unauthenticated');
+      claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
       return;
     }
 
@@ -117,7 +176,7 @@ export function useAuth() {
 
       if (!codeVerifier || retState !== storedState) {
         window.history.replaceState({}, '', '/');
-        setStatus('unauthenticated');
+        claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
         return;
       }
 
@@ -129,7 +188,10 @@ export function useAuth() {
         .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; refreshToken?: string; subscriptionStatus?: string; subscriptionExpiresAt?: string; planTitle?: string }>)
         .then((data) => {
           window.history.replaceState({}, '', '/');
-          if (data.error || !data.token) { setStatus('unauthenticated'); return; }
+          if (data.error || !data.token) {
+            claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+            return;
+          }
           if (data.idToken) saveIdToken(data.idToken);
           if (data.refreshToken) saveRefreshToken(data.refreshToken);
           const s: Session = applyDisplayNameOverride({
@@ -154,14 +216,20 @@ export function useAuth() {
           }
           setStatus('authenticated');
         })
-        .catch(() => { window.history.replaceState({}, '', '/'); setStatus('unauthenticated'); });
+        .catch(() => {
+          window.history.replaceState({}, '', '/');
+          claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+        });
 
       return;
     }
 
     // ── Verify stored session ─────────────────────────────────────────────
     const stored = loadSession();
-    if (!stored) { setStatus('unauthenticated'); return; }
+    if (!stored || stored.subscriptionStatus === 'app_trial' || !stored.token) {
+      claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+      return;
+    }
 
     fetch('/api/verify', {
       method: 'POST',
@@ -170,7 +238,11 @@ export function useAuth() {
     })
       .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string; accentColor?: string }>)
       .then((data) => {
-        if (!data.valid) { clearSession(); setStatus('unauthenticated'); return; }
+        if (!data.valid) {
+          clearSession();
+          claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+          return;
+        }
         // Guard: if logout() ran while verify was in-flight, don't restore.
         if (!loadSession()) return;
         if (data.accentColor) applyAccentByHex(data.accentColor);
@@ -189,6 +261,42 @@ export function useAuth() {
         setStatus(stored.hasSubscription ? 'authenticated' : 'no-subscription');
       });
   }, []);
+
+  useEffect(() => {
+    if (status !== 'trial') return;
+    const tick = () => {
+      claimAnonymousTrial().then(claim => {
+        if (claim.kind === 'active') {
+          setSession(trialSession(claim.expiresAt));
+          setStatus('trial');
+          return;
+        }
+        applyTrialClaim(claim, setSession, setStatus);
+      });
+    };
+    const id = window.setInterval(tick, 5 * 60 * 1000);
+    const vis = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', vis);
+    };
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== 'trial' || !session?.subscriptionExpiresAt) return;
+    const ms = Date.parse(session.subscriptionExpiresAt) - Date.now();
+    if (ms <= 0) {
+      setSession(null);
+      setStatus('trial-ended');
+      return;
+    }
+    const t = window.setTimeout(() => {
+      setSession(null);
+      setStatus('trial-ended');
+    }, ms + 250);
+    return () => window.clearTimeout(t);
+  }, [status, session?.subscriptionExpiresAt]);
 
   const initiateLogin = useCallback(() => startOAuth(), []);
 
@@ -312,6 +420,11 @@ export function useAuth() {
     clearSession();
     localStorage.removeItem('at-mode');
     localStorage.removeItem('at-accent');
+    claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+  }, []);
+
+  const showLogin = useCallback(() => {
+    window.history.replaceState({}, '', '/login');
     setSession(null);
     setStatus('unauthenticated');
   }, []);
@@ -385,5 +498,5 @@ export function useAuth() {
     }
   }, []);
 
-  return { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription, getValidToken, refreshAccessToken, activateLicense };
+  return { status, session, initiateLogin, switchAccount, logout, showLogin, recheck, updateDisplayName, syncSubscription, getValidToken, refreshAccessToken, activateLicense };
 }

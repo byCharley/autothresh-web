@@ -389,7 +389,7 @@ export function WhatsNewModal({ onClose, onContact }: Props) {
               fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
               letterSpacing: '0.05em',
             }}>
-              AutoThresh™ Web
+              AutoThresh Web
             </span>
           </div>
           <button

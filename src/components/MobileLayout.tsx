@@ -9,6 +9,7 @@ import { compositeHalftonePlates, buildNeugebauerPrimaries } from '../engine/ink
 import { applyFabricBlend } from '../engine/fabricBlend';
 import { ManageSubscriptionPage } from './ManageSubscriptionPage';
 import { DeviceManager } from './DeviceManager';
+import { PRODUCT_URL, formatTrialLeft } from '../lib/product';
 
 interface Session {
   token?: string;
@@ -23,6 +24,7 @@ interface Props {
   onExport: () => void;
   onMockup: () => void;
   onLogout: () => void;
+  onLogin?: () => void;
   onAnalytics?: () => void;
   onBillingChanged?: () => void;
   session: Session | null;
@@ -31,7 +33,7 @@ interface Props {
 
 type Sheet = 'layers' | 'controls' | null;
 
-export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBillingChanged, session, children }: Props) {
+export function MobileLayout({ onExport, onMockup, onLogout, onLogin, onAnalytics, onBillingChanged, session, children }: Props) {
   const [activeSheet, setActiveSheet] = useState<Sheet>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
@@ -221,7 +223,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
 
   const subStatus = session?.subscriptionStatus;
   const subColor = subStatus === 'tester' ? '#38bdf8'
-    : subStatus === 'trial' ? '#a78bfa'
+    : subStatus === 'trial' || subStatus === 'app_trial' ? '#a78bfa'
     : subStatus === 'paused' || subStatus === 'cancelled' ? '#e6a817'
     : '#3ecf4f';
 
@@ -263,7 +265,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
             </span>
           ) : (
             <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text)' }}>
-              AutoThresh™ <span style={{ color: 'var(--accent)' }}>Web</span>
+              AutoThresh <span style={{ color: 'var(--accent)' }}>Web</span>
             </span>
           )}
         </div>
@@ -306,10 +308,12 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
             }}>
               <div style={{ padding: '12px 14px 10px', borderBottom: '1px solid var(--border)' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>
-                  {session?.firstName || session?.email?.split('@')[0] || 'User'}
+                  {subStatus === 'app_trial' ? '3-day trial' : (session?.firstName || session?.email?.split('@')[0] || 'User')}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {session?.email}
+                  {subStatus === 'app_trial'
+                    ? (session?.subscriptionExpiresAt ? formatTrialLeft(session.subscriptionExpiresAt) : 'Try the full app')
+                    : session?.email}
                 </div>
               </div>
               {subStatus === 'creator' && onAnalytics && (
@@ -330,7 +334,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
                   </button>
                 </div>
               )}
-              {subStatus !== 'creator' && session?.token && (
+              {subStatus !== 'creator' && subStatus !== 'app_trial' && session?.token && (
                 <div style={{ padding: '8px 14px 0', borderTop: '1px solid var(--border)' }}>
                   <button
                     onClick={() => { setMenuOpen(false); setShowDevices(true); }}
@@ -344,7 +348,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
                   </button>
                 </div>
               )}
-              {subStatus !== 'creator' && subStatus !== 'tester' && subStatus !== 'lifetime' && session?.token && (
+              {subStatus !== 'creator' && subStatus !== 'tester' && subStatus !== 'lifetime' && subStatus !== 'app_trial' && session?.token && (
                 <div style={{ padding: '8px 14px 0', borderTop: '1px solid var(--border)' }}>
                   <button
                     onClick={() => { setMenuOpen(false); setShowBilling(true); }}
@@ -358,13 +362,34 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
                   </button>
                 </div>
               )}
-              <div style={{ padding: '10px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <button
-                  onClick={() => { setMenuOpen(false); onLogout(); }}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}
-                >
-                  Sign out
-                </button>
+              <div style={{ padding: '10px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                {subStatus === 'app_trial' ? (
+                  <>
+                    <a
+                      href={PRODUCT_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontWeight: 700, textDecoration: 'none' }}
+                    >
+                      Buy
+                    </a>
+                    {onLogin && (
+                      <button
+                        onClick={() => { setMenuOpen(false); onLogin(); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}
+                      >
+                        Sign in
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    onClick={() => { setMenuOpen(false); onLogout(); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}
+                  >
+                    Sign out
+                  </button>
+                )}
               </div>
             </div>
           )}

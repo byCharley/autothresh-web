@@ -46,10 +46,10 @@ export function FaqModal({ onClose }: Props) {
             no downloads, no plugins, and no Photoshop required.
             <br /><br />
             <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>
-              Part of the Growing AutoThresh™ Lineup
+              Part of the Growing AutoThresh Lineup
             </span>
             <br />
-            AutoThresh™ Web is the next step in the AutoThresh ecosystem. Built on the same trusted AutoThresh® Engine,
+            AutoThresh Web is the next step in the AutoThresh ecosystem. Built on the same trusted AutoThresh® Engine,
             it expands the lineup beyond Photoshop, giving you the freedom to create professional color separations directly in your browser.
             Whether you prefer the speed of the Photoshop plugin or the flexibility of a web app, every AutoThresh product
             is designed to deliver the same high-quality results while continuing to add new tools, workflows, and separation technologies.
@@ -64,12 +64,9 @@ export function FaqModal({ onClose }: Props) {
             to anyone, not just Photoshop users.
           </Item>
 
-          <Item n={3} q="Can I pause or cancel my subscription anytime?">
-            Yes! You can manage your subscription at any time. Visit{' '}
-            <a href="https://www.charleypangus.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-              www.charleypangus.com
-            </a>{' '}
-            and sign in using the email you subscribed with to pause, cancel, or update your plan.
+          <Item n={3} q="How does the 3-day trial work?">
+            You can use the full app for 3 days with no account. When the trial ends, you'll be sent to the AutoThresh Web product page to buy lifetime access. One trial per device — clearing cookies or using a private window won't start a new one.
+            Already purchased? Sign in with your Charley Pangus email, or enter your license key and order number.
           </Item>
 
           <Item n={4} q="I'm having issues — how can I get help?">

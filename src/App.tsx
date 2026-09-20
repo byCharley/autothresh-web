@@ -3,6 +3,7 @@ import { useAuth } from './auth/useAuth';
 import { initBetaFeatures } from './auth/betaFeatures';
 import { LoginPage } from './components/LoginPage';
 import { SubscribePage } from './components/SubscribePage';
+import { TrialEndedPage } from './components/TrialEndedPage';
 import { MobileLayout } from './components/MobileLayout';
 import { TopBar } from './components/TopBar';
 import { LayerPanel } from './components/LayerPanel';
@@ -137,7 +138,7 @@ function App() {
   const updateAvailable = useVersionCheck();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [chunkError, setChunkError] = useState(false);
-  const { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription, getValidToken, activateLicense } = useAuth();
+  const { status, session, initiateLogin, switchAccount, logout, showLogin, recheck, updateDisplayName, syncSubscription, getValidToken, activateLicense } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [sheetGenerating, setSheetGenerating] = useState(false);
   const [showEula, setShowEula]         = useState(false);
@@ -255,6 +256,10 @@ function App() {
 
   if (status === 'unauthenticated') {
     return <LoginPage onLogin={handleLogin} onSwitchAccount={switchAccount} onActivateLicense={activateLicense} />;
+  }
+
+  if (status === 'trial-ended') {
+    return <TrialEndedPage onSignIn={showLogin} />;
   }
 
   if (status === 'no-subscription') {
@@ -1676,8 +1681,11 @@ function App() {
     }
   };
 
-  const subStatus = import.meta.env.DEV ? 'creator' : session?.subscriptionStatus;
+  const subStatus = (import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH === 'true')
+    ? 'creator'
+    : session?.subscriptionStatus;
   const isCreator = subStatus === 'creator';
+  const isAppTrial = subStatus === 'app_trial';
 
   if (isMobile) {
     return (
@@ -1686,6 +1694,7 @@ function App() {
         onExport={() => setShowExport(true)}
         onMockup={() => setMockupOpen(true)}
         onLogout={logout}
+        onLogin={showLogin}
         onAnalytics={() => setShowAnalytics(true)}
         onBillingChanged={syncSubscription}
         session={session}
@@ -1700,7 +1709,7 @@ function App() {
         {showVideo    && <TutorialsModal  onClose={() => setShowVideo(false)} />}
         {showSplash   && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
         {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
-        {session && !isCreator && <ChatWidget session={session} />}
+        {session && !isCreator && !isAppTrial && session.token && <ChatWidget session={session} />}
       </MobileLayout>
       </Suspense>
     );
@@ -1709,7 +1718,7 @@ function App() {
   return (
     <Suspense fallback={null}>
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => { setShowAnalytics(true); setCreatorChatUnread(0); }} onWhatsNew={() => setShowWhatsNew(true)} onLogout={logout} onUpdateName={updateDisplayName} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} accentColor={session?.accentColor} chatUnread={creatorChatUnread} onBillingChanged={syncSubscription} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => { setShowAnalytics(true); setCreatorChatUnread(0); }} onWhatsNew={() => setShowWhatsNew(true)} onLogout={logout} onLogin={showLogin} onUpdateName={updateDisplayName} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} accentColor={session?.accentColor} chatUnread={creatorChatUnread} onBillingChanged={syncSubscription} />
 
 
       <div className="workspace">
@@ -1843,7 +1852,7 @@ function App() {
       {showVideo    && <TutorialsModal  onClose={() => setShowVideo(false)} />}
       {showSplash && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
       {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
-      {session && !isCreator && <ChatWidget session={session} />}
+      {session && !isCreator && !isAppTrial && session.token && <ChatWidget session={session} />}
 
       {(updateAvailable && !updateDismissed) || chunkError ? (
         <div style={{
@@ -1897,7 +1906,7 @@ function App() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
-            <div style={{ fontSize: 17, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em', marginBottom: 6 }}>AutoThresh™ for Desktop</div>
+            <div style={{ fontSize: 17, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em', marginBottom: 6 }}>AutoThresh for Desktop</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', lineHeight: 1.6, marginBottom: 24 }}>
               A native desktop app for Mac and Windows is in the works.
             </div>

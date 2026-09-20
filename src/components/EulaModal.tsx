@@ -39,7 +39,7 @@ export function EulaModal({ onClose }: Props) {
         <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.85, fontFamily: 'var(--font-sans)' }}>
 
           <Section title="Subscription &amp; Users">
-            Each AutoThresh™ subscription is licensed to a single user only. Sharing
+            Each AutoThresh Web license is for a single user only. Sharing
             your account, login credentials, or access with any other person is strictly
             prohibited. If we determine that an account is being shared — regardless of
             intent — the subscription will be permanently banned with no exceptions and

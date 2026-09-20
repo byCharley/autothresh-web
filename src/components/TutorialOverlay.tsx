@@ -11,7 +11,7 @@ const VIDEO_URL = 'https://youtu.be/80Fogz8q5_U';
 const STEPS: Step[] = [
   {
     key: null,
-    title: 'Welcome to AutoThresh™',
+    title: 'Welcome to AutoThresh',
     desc: 'This quick tour covers the key tools. Click Next to continue, or Skip to explore on your own.',
   },
   {

@@ -115,7 +115,7 @@ export function ManageSubscriptionPage({ onBack, token, planTitle, nextBillingDa
               />
             </div>
             <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', fontFamily: 'var(--font-mono)' }}>
-              AutoThresh™ Web <span style={{ color: 'var(--accent)' }}>Beta {appVersion}</span>
+              AutoThresh Web <span style={{ color: 'var(--accent)' }}>Beta {appVersion}</span>
             </div>
             <div style={{
               fontSize: 10, color: 'var(--text-muted)', marginTop: 8,
