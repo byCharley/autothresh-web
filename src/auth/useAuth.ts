@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { generateCodeVerifier, generateCodeChallenge, generateState } from './pkce';
 import { applyAccentByHex } from '../lib/accent';
+import { deviceNameFromUa, getDeviceId } from '../lib/deviceId';
 
 export interface Session {
   token:                   string;
@@ -13,6 +14,7 @@ export interface Session {
   subscriptionExpiresAt?:  string;
   planTitle?:              string;
   accentColor?:            string;
+  devices?:                Array<{ id: string; device_id: string; device_name: string; last_seen_at: string; created_at: string; isCurrent?: boolean }>;
 }
 
 const SESSION_KEY           = 'at_session';
@@ -24,7 +26,7 @@ const VERIFIER_KEY     = 'at_pkce_verifier';
 const STATE_KEY        = 'at_pkce_state';
 const NONCE_KEY        = 'at_pkce_nonce';
 function isInactiveStatus(status?: string): boolean {
-  return status === 'paused' || status === 'cancelled' || status === 'canceled';
+  return status === 'paused' || status === 'cancelled' || status === 'canceled' || status === 'device_limit';
 }
 
 function applyDisplayNameOverride(s: Session): Session {
@@ -122,7 +124,7 @@ export function useAuth() {
       fetch('/api/auth-callback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, codeVerifier }),
+        body: JSON.stringify({ code, codeVerifier, deviceId: getDeviceId(), deviceName: deviceNameFromUa() }),
       })
         .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; refreshToken?: string; subscriptionStatus?: string; subscriptionExpiresAt?: string; planTitle?: string }>)
         .then((data) => {
@@ -140,6 +142,7 @@ export function useAuth() {
             subscriptionStatus:     data.subscriptionStatus,
             subscriptionExpiresAt:  data.subscriptionExpiresAt,
             planTitle:              data.planTitle,
+            devices:                (data as { devices?: Session['devices'] }).devices,
           });
           saveSession(s);
           setSession(s);
@@ -163,7 +166,7 @@ export function useAuth() {
     fetch('/api/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: stored.token }),
+      body: JSON.stringify({ token: stored.token, deviceId: getDeviceId(), deviceName: deviceNameFromUa() }),
     })
       .then((r) => r.json() as Promise<{ valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string; accentColor?: string }>)
       .then((data) => {
@@ -171,7 +174,7 @@ export function useAuth() {
         // Guard: if logout() ran while verify was in-flight, don't restore.
         if (!loadSession()) return;
         if (data.accentColor) applyAccentByHex(data.accentColor);
-        const updated: Session = applyDisplayNameOverride({ ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor });
+        const updated: Session = applyDisplayNameOverride({ ...stored, hasSubscription: data.hasSubscription, subscriptionStatus: data.subscriptionStatus, email: data.email, firstName: data.firstName, subscriptionExpiresAt: data.subscriptionExpiresAt, planTitle: data.planTitle, accentColor: data.accentColor, devices: (data as { devices?: Session['devices'] }).devices });
         saveSession(updated);
         setSession(updated);
         if (!data.hasSubscription || isInactiveStatus(data.subscriptionStatus)) {
@@ -196,7 +199,7 @@ export function useAuth() {
       const r = await fetch('/api/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: stored.token }),
+        body: JSON.stringify({ token: stored.token, deviceId: getDeviceId(), deviceName: deviceNameFromUa() }),
       });
       const data = await r.json() as { valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string; accentColor?: string };
       if (!data.valid) return false;
@@ -329,7 +332,7 @@ export function useAuth() {
       const r = await fetch('/api/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: stored.token }),
+        body: JSON.stringify({ token: stored.token, deviceId: getDeviceId(), deviceName: deviceNameFromUa() }),
       });
       const data = await r.json() as { valid: boolean; hasSubscription: boolean; subscriptionStatus?: string; email: string; firstName: string; subscriptionExpiresAt?: string; planTitle?: string; accentColor?: string };
       if (!data.valid) return;
@@ -344,5 +347,43 @@ export function useAuth() {
     } catch { /* keep current session */ }
   }, []);
 
-  return { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription, getValidToken, refreshAccessToken };
+  const activateLicense = useCallback(async (licenseKey: string, orderNumber: string): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const r = await fetch('/api/license', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'activate',
+          licenseKey,
+          orderNumber,
+          deviceId: getDeviceId(),
+          deviceName: deviceNameFromUa(),
+        }),
+      });
+      const data = await r.json() as Partial<Session> & { ok?: boolean; error?: string; devices?: Session['devices'] };
+      if (!data.token) return { ok: false, error: data.error || 'Could not activate that license.' };
+      const s: Session = applyDisplayNameOverride({
+        token: data.token,
+        expiresAt: data.expiresAt || new Date(Date.now() + 30 * 86_400_000).toISOString(),
+        email: data.email || '',
+        firstName: data.firstName || '',
+        hasSubscription: !!data.hasSubscription,
+        subscriptionStatus: data.subscriptionStatus,
+        planTitle: data.planTitle,
+        devices: data.devices,
+      });
+      saveSession(s);
+      setSession(s);
+      if (!s.hasSubscription || isInactiveStatus(s.subscriptionStatus)) {
+        setStatus('no-subscription');
+        return { ok: false, error: data.error };
+      }
+      setStatus('authenticated');
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Could not reach the license server. Try again.' };
+    }
+  }, []);
+
+  return { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription, getValidToken, refreshAccessToken, activateLicense };
 }

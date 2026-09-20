@@ -288,7 +288,7 @@
     .export-name { font-family: var(--mono); font-size: 9px; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.06em; }
     .export-desc { font-size: 11px; color: var(--dim); line-height: 1.6; }
 
-    .pricing-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; max-width: 900px; margin: 0 auto; }
+    .pricing-grid { display: grid; grid-template-columns: 1fr; gap: 20px; max-width: 420px; margin: 0 auto; }
     .price-card { background: var(--surface); border: 1px solid var(--border); padding: 36px 32px; position: relative; transition: border-color 0.2s; }
     .price-card:hover { border-color: var(--border-2); }
     .price-card.featured { border-color: var(--accent); }
@@ -913,48 +913,9 @@
     <div class="section-header fade-in">
       <div class="section-label">Pricing</div>
       <h2 class="section-title">Simple pricing.<br />Unlimited separations.</h2>
-      <p class="section-sub" style="margin:0 auto">3-day free trial on the annual plan only. Monthly is billed immediately. Or own it forever with one payment. A credit card is required for the annual trial — you won't be charged until it ends.</p>
+      <p class="section-sub" style="margin:0 auto">Pay once. Own it forever. Existing monthly and annual plans keep running until they end.</p>
     </div>
     <div class="pricing-grid fade-in">
-      <div class="price-card">
-        <div class="price-plan">Monthly</div>
-        <div class="price-amount">$8.99</div>
-        <div class="price-period">/month</div>
-        <div class="price-equiv" style="visibility:hidden">—</div>
-        <hr class="price-divider"/>
-        <ul class="price-features">
-          <li>All 6 separation modes</li>
-          <li>All 6 export formats</li>
-          <li>Unlimited projects</li>
-          <li>Presets &amp; cloud sync</li>
-          <li>Billed now — no free trial</li>
-        </ul>
-        <a href="https://charleypangus.com/checkout/autothresh-web/monthly" target="_blank" rel="noopener">
-          <button class="price-cta">Subscribe Monthly</button>
-        </a>
-        <p class="price-fine">$8.99 billed immediately · Cancel anytime</p>
-      </div>
-      <div class="price-card featured">
-        <div class="price-badge">SAVE 27%</div>
-        <div class="price-plan">Annual</div>
-        <div class="price-amount">$79</div>
-        <div class="price-period">/year</div>
-        <div class="price-equiv">$6.58/month</div>
-        <hr class="price-divider"/>
-        <ul class="price-features">
-          <li>Everything in Monthly</li>
-          <li>3-day free trial</li>
-          <li>Priority feature requests</li>
-          <li>Early access to new modes</li>
-          <li>Support indie software ♥</li>
-        </ul>
-        <a href="https://charleypangus.com/checkout/autothresh-web/yearly" target="_blank" rel="noopener">
-          <button class="price-cta featured-btn">Start 3-Day Free Trial</button>
-        </a>
-        <p class="price-fine">$79 billed after trial · Cancel anytime</p>
-      </div>
-
-      <!-- Lifetime -->
       <div class="price-card" style="border-color:#fbbf24">
         <div class="price-badge" style="background:#fbbf24;color:#000">ONE-TIME</div>
         <div class="price-plan">Lifetime</div>
@@ -963,16 +924,16 @@
         <div class="price-equiv">Never pay again</div>
         <hr class="price-divider"/>
         <ul class="price-features">
-          <li>Everything in Annual</li>
+          <li>All 6 separation modes</li>
+          <li>All export formats &amp; mockups</li>
           <li>Pay once, own forever</li>
+          <li>Two devices per license</li>
           <li>All future updates included</li>
-          <li>Highest priority support</li>
-          <li>Lock in today's price</li>
         </ul>
         <a href="https://charleypangus.com/checkout/autothresh-web/lifetime" target="_blank" rel="noopener">
           <button class="price-cta" style="border-color:#fbbf24;color:#fbbf24" onmouseover="this.style.background='#fbbf24';this.style.color='#000'" onmouseout="this.style.background='none';this.style.color='#fbbf24'">Buy Lifetime Access</button>
         </a>
-        <p class="price-fine">One-time purchase · No subscription needed</p>
+        <p class="price-fine">One-time purchase · No subscription</p>
       </div>
     </div>
   </div>

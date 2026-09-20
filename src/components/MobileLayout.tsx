@@ -8,6 +8,7 @@ import { renderComposite } from '../engine/imageProcessor';
 import { compositeHalftonePlates, buildNeugebauerPrimaries } from '../engine/inkSimulator';
 import { applyFabricBlend } from '../engine/fabricBlend';
 import { ManageSubscriptionPage } from './ManageSubscriptionPage';
+import { DeviceManager } from './DeviceManager';
 
 interface Session {
   token?: string;
@@ -34,6 +35,7 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
   const [activeSheet, setActiveSheet] = useState<Sheet>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
+  const [showDevices, setShowDevices] = useState(false);
   const [previewCenter, setPreviewCenter] = useState({ x: 0.5, y: 0.5 });
   const menuRef = useRef<HTMLDivElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -325,6 +327,20 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
                       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                     </svg>
                     Command Center
+                  </button>
+                </div>
+              )}
+              {subStatus !== 'creator' && session?.token && (
+                <div style={{ padding: '8px 14px 0', borderTop: '1px solid var(--border)' }}>
+                  <button
+                    onClick={() => { setMenuOpen(false); setShowDevices(true); }}
+                    style={{
+                      width: '100%', background: 'none', border: '1px solid var(--border)',
+                      cursor: 'pointer', padding: '7px 10px', fontSize: 11,
+                      color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                    }}
+                  >
+                    Devices
                   </button>
                 </div>
               )}
@@ -713,6 +729,31 @@ export function MobileLayout({ onExport, onMockup, onLogout, onAnalytics, onBill
           subscriptionStatus={subStatus}
           onChanged={onBillingChanged}
         />
+      )}
+      {showDevices && session?.token && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 8000,
+          background: 'var(--bg)', display: 'flex', flexDirection: 'column',
+        }}>
+          <div style={{
+            height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
+            padding: '0 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface)',
+          }}>
+            <button
+              onClick={() => setShowDevices(false)}
+              style={{
+                height: 30, padding: '0 10px', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer',
+              }}
+            >
+              Back
+            </button>
+            <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>Devices</div>
+          </div>
+          <div style={{ padding: 16 }}>
+            <DeviceManager token={session.token} />
+          </div>
+        </div>
       )}
     </div>
   );

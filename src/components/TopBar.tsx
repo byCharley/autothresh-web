@@ -6,6 +6,7 @@ import { useAppVersion } from '../hooks/useAppVersion';
 import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewModal';
 import { ACCENTS, applyAccentByHex } from '../lib/accent';
 import { ManageSubscriptionPage } from './ManageSubscriptionPage';
+import { DeviceManager } from './DeviceManager';
 
 function getSeenDate(): string {
   return localStorage.getItem('at-changelog-seen') ?? '';
@@ -45,6 +46,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
   const gearRef = useRef<HTMLDivElement>(null);
   const [activeAccent, setActiveAccent] = useState(accentColor ?? '#FF6B1A');
   const [showBilling, setShowBilling] = useState(false);
+  const [showDevices, setShowDevices] = useState(false);
 
   useEffect(() => { if (accentColor) { applyAccentByHex(accentColor); setActiveAccent(accentColor); } }, [accentColor]);
 
@@ -369,6 +371,19 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                       Sign out
                     </button>
                   )}
+                  {subscriptionStatus !== 'creator' && (
+                    <button
+                      onClick={() => { setMenuOpen(false); setShowDevices(true); }}
+                      style={{
+                        border: '1px solid var(--border)', cursor: 'pointer',
+                        padding: '4px 10px', fontSize: 10,
+                        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                        background: 'transparent',
+                      }}
+                    >
+                      Devices
+                    </button>
+                  )}
                   {subscriptionStatus !== 'creator' && subscriptionStatus !== 'tester' && subscriptionStatus !== 'lifetime' && (
                     <button
                       onClick={() => { setMenuOpen(false); setShowBilling(true); }}
@@ -578,6 +593,33 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
         subscriptionStatus={subscriptionStatus}
         onChanged={onBillingChanged}
       />
+    )}
+    {showDevices && sessionToken && (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 8000,
+        background: 'var(--bg)',
+        display: 'flex', flexDirection: 'column',
+        fontFamily: 'var(--font-sans)',
+      }}>
+        <div style={{
+          height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12,
+          padding: '0 16px', borderBottom: '1px solid var(--border)', background: 'var(--surface)',
+        }}>
+          <button
+            onClick={() => setShowDevices(false)}
+            style={{
+              height: 30, padding: '0 10px', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700,
+              background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer',
+            }}
+          >
+            Back to editor
+          </button>
+          <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', fontWeight: 700 }}>Devices</div>
+        </div>
+        <div style={{ maxWidth: 480, width: '100%', margin: '32px auto', padding: '0 16px' }}>
+          <DeviceManager token={sessionToken} />
+        </div>
+      </div>
     )}
     </>
   );

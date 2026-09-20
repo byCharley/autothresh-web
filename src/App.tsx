@@ -137,7 +137,7 @@ function App() {
   const updateAvailable = useVersionCheck();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [chunkError, setChunkError] = useState(false);
-  const { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription, getValidToken } = useAuth();
+  const { status, session, initiateLogin, switchAccount, logout, recheck, updateDisplayName, syncSubscription, getValidToken, activateLicense } = useAuth();
   const [showExport, setShowExport] = useState(false);
   const [sheetGenerating, setSheetGenerating] = useState(false);
   const [showEula, setShowEula]         = useState(false);
@@ -254,11 +254,11 @@ function App() {
   }
 
   if (status === 'unauthenticated') {
-    return <LoginPage onLogin={handleLogin} onSwitchAccount={switchAccount} />;
+    return <LoginPage onLogin={handleLogin} onSwitchAccount={switchAccount} onActivateLicense={activateLicense} />;
   }
 
   if (status === 'no-subscription') {
-    return <SubscribePage firstName={session?.firstName} email={session?.email} subscriptionStatus={session?.subscriptionStatus} planTitle={session?.planTitle} subscriptionExpiresAt={session?.subscriptionExpiresAt} token={session?.token} onLogout={logout} onSwitchAccount={switchAccount} onRecheck={recheck} />;
+    return <SubscribePage firstName={session?.firstName} email={session?.email} subscriptionStatus={session?.subscriptionStatus} planTitle={session?.planTitle} subscriptionExpiresAt={session?.subscriptionExpiresAt} token={session?.token} devices={session?.devices} onLogout={logout} onSwitchAccount={switchAccount} onRecheck={recheck} />;
   }
 
   function buildColorRefCanvas(refColors: RGB[], dpi = 72): HTMLCanvasElement {

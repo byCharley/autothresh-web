@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const TESTER_EMAILS = new Set(
@@ -421,6 +422,76 @@ function resolveMembership(opts: {
   };
 }
 
+const DEVICE_CAP = 2;
+const LICENSE_SECRET = process.env.LICENSE_TOKEN_SECRET || SERVICE_KEY || 'at-license';
+
+interface LicenseDevice {
+  id: string;
+  device_id: string;
+  device_name: string;
+  last_seen_at: string;
+  created_at: string;
+}
+
+function readLicenseToken(token: string): { email: string; licenseKey: string; orderNumber: string } | null {
+  if (!token.startsWith('atlic.')) return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const expected = createHmac('sha256', LICENSE_SECRET).update(parts[1]).digest('base64url');
+  const a = Buffer.from(parts[2]);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  try {
+    const data = JSON.parse(Buffer.from(parts[1], 'base64url').toString()) as { email?: string; licenseKey?: string; orderNumber?: string; exp?: number };
+    if (!data.exp || data.exp < Date.now() || !data.email || !data.licenseKey) return null;
+    return { email: data.email, licenseKey: data.licenseKey, orderNumber: data.orderNumber ?? '' };
+  } catch { return null; }
+}
+
+async function loadLicenseDevices(email: string, licenseKey?: string): Promise<LicenseDevice[]> {
+  if (!SUPABASE_URL || !SERVICE_KEY) return [];
+  const filters = [`email=eq.${encodeURIComponent(email)}`];
+  if (licenseKey) filters.push(`license_key=eq.${encodeURIComponent(licenseKey)}`);
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/license_devices?or=(${filters.join(',')})&select=id,device_id,device_name,last_seen_at,created_at&order=last_seen_at.desc`,
+    { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } },
+  );
+  if (!r.ok) return [];
+  return await r.json() as LicenseDevice[];
+}
+
+async function claimDevice(opts: {
+  email: string;
+  licenseKey?: string;
+  orderNumber?: string;
+  deviceId: string;
+  deviceName: string;
+  userAgent: string;
+}): Promise<{ ok: boolean; devices: LicenseDevice[] }> {
+  const { email, licenseKey, orderNumber, deviceId, deviceName, userAgent } = opts;
+  if (!deviceId) return { ok: true, devices: [] };
+  const devices = await loadLicenseDevices(email, licenseKey);
+  const existing = devices.find(d => d.device_id === deviceId);
+  if (existing) {
+    fetch(`${SUPABASE_URL}/rest/v1/license_devices?device_id=eq.${encodeURIComponent(deviceId)}&email=eq.${encodeURIComponent(email)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
+      body: JSON.stringify({ last_seen_at: new Date().toISOString(), device_name: deviceName || existing.device_name, user_agent: userAgent }),
+    }).catch(() => {});
+    return { ok: true, devices };
+  }
+  if (devices.length >= DEVICE_CAP) return { ok: false, devices };
+  fetch(`${SUPABASE_URL}/rest/v1/license_devices`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY },
+    body: JSON.stringify({
+      email, license_key: licenseKey || null, order_number: orderNumber || null,
+      device_id: deviceId, device_name: deviceName || 'Device', user_agent: userAgent,
+    }),
+  }).catch(() => {});
+  return { ok: true, devices: [...devices, { id: '', device_id: deviceId, device_name: deviceName, last_seen_at: new Date().toISOString(), created_at: new Date().toISOString() }] };
+}
+
 function flagDuplicateSubs(email: string, ip: string, count: number) {
   if (!SUPABASE_URL || !SERVICE_KEY) return;
   fetch(`${SUPABASE_URL}/rest/v1/security_flags`, {
@@ -450,7 +521,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { token } = req.body as { token?: string };
+  const { token, deviceId, deviceName } = req.body as { token?: string; deviceId?: string; deviceName?: string };
   if (!token) return res.status(400).json({ valid: false, error: 'Token required' });
 
   const clientIp = String(
@@ -458,6 +529,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     req.headers['x-forwarded-for']?.toString().split(',')[0] ??
     ''
   ).trim();
+  const ua = String(req.headers['user-agent'] ?? '');
+
+  const licenseSession = readLicenseToken(token);
+  if (licenseSession) {
+    const claim = await claimDevice({
+      email: licenseSession.email,
+      licenseKey: licenseSession.licenseKey,
+      orderNumber: licenseSession.orderNumber,
+      deviceId: deviceId ?? '',
+      deviceName: deviceName ?? 'Device',
+      userAgent: ua,
+    });
+    const devices = claim.devices.map(d => ({ ...d, isCurrent: d.device_id === deviceId }));
+    if (!claim.ok) {
+      return res.status(200).json({
+        valid: true,
+        hasSubscription: false,
+        subscriptionStatus: 'device_limit',
+        email: licenseSession.email,
+        firstName: '',
+        devices,
+      });
+    }
+    return res.status(200).json({
+      valid: true,
+      hasSubscription: true,
+      subscriptionStatus: 'lifetime',
+      planTitle: 'Lifetime Access',
+      email: licenseSession.email,
+      firstName: '',
+      devices,
+    });
+  }
 
   // ── Validate token + get customer info ────────────────────────────────────
   let custData: { data?: Record<string, unknown>; errors?: unknown[] } = {};
@@ -517,7 +621,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('Verify result:', { email, hasSub, sealLifetime: sealResult.hasLifetime, everInSeal: sealResult.everInSeal, isCreator, isTester, testerRecord, ldtLifetime: ldtLifetime.lifetime, ldtWebOrder: ldtLifetime.webOrder, shopifyLifetime, finalHasSub, finalStatus, planTitle: finalPlan, nextBillingDate: finalExpiry });
 
   // ── Log analytics + security events (fire-and-forget) ────────────────────
-  const ua = String(req.headers['user-agent'] ?? '');
   const country = String(req.headers['x-vercel-ip-country'] ?? req.headers['x-vercel-ip-country-region'] ?? '');
   const city    = req.headers['x-vercel-ip-city'] ? decodeURIComponent(String(req.headers['x-vercel-ip-city'])) : '';
 
@@ -556,14 +659,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
+  let outHasSub = finalHasSub;
+  let outStatus = finalStatus;
+  let devices: Array<LicenseDevice & { isCurrent?: boolean }> | undefined;
+  if (outHasSub && !isCreator && deviceId) {
+    const claim = await claimDevice({
+      email: emailLower,
+      deviceId,
+      deviceName: deviceName ?? 'Device',
+      userAgent: ua,
+    });
+    devices = claim.devices.map(d => ({ ...d, isCurrent: d.device_id === deviceId }));
+    if (!claim.ok) {
+      outHasSub = false;
+      outStatus = 'device_limit';
+    }
+  }
+
   return res.status(200).json({
     valid:                 true,
-    hasSubscription:       finalHasSub,
-    subscriptionStatus:    finalStatus,
+    hasSubscription:       outHasSub,
+    subscriptionStatus:    outStatus,
     subscriptionExpiresAt: finalExpiry,
     planTitle:             finalPlan,
     email,
     firstName:             cust.firstName ?? '',
     accentColor:           userPrefs.accentColor,
+    devices,
   });
 }

@@ -9,17 +9,21 @@ import { useAppVersion } from '../hooks/useAppVersion';
 interface Props {
   onLogin: () => void;
   onSwitchAccount?: () => void;
+  onActivateLicense?: (licenseKey: string, orderNumber: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
-export function LoginPage({ onLogin, onSwitchAccount }: Props) {
+export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense }: Props) {
   const appVersion = useAppVersion();
   const [loading, setLoading]               = useState(false);
+  const [licenseBusy, setLicenseBusy]       = useState(false);
+  const [licenseError, setLicenseError]     = useState('');
+  const [licenseKey, setLicenseKey]         = useState('');
+  const [orderNumber, setOrderNumber]       = useState('');
   const [showContact, setShowContact]       = useState(false);
   const [showEula, setShowEula]             = useState(false);
   const [showFaq, setShowFaq]               = useState(false);
   const [showInfo, setShowInfo]             = useState(false);
   const [showSubscribe, setShowSubscribe]   = useState(false);
-  const [selectedPlan, setSelectedPlan]     = useState<'monthly' | 'yearly'>('yearly');
 
   const handleSignIn = () => {
     setLoading(true);
@@ -78,7 +82,7 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
               Sign In to AutoThresh™ Web
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.65 }}>
-              Use the email you subscribed with. You can sign in with Google or a one-time code.
+              Sign in with the email you bought with, or activate with your license key and order number.
             </div>
           </div>
 
@@ -140,14 +144,66 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
             </div>
           )}
 
-          {/* Subscribe row */}
+          {/* License key */}
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10, textAlign: 'center' }}>
+              Or activate with your license
+            </div>
+            <input
+              value={licenseKey}
+              onChange={e => setLicenseKey(e.target.value)}
+              placeholder="License key"
+              style={{
+                width: '100%', boxSizing: 'border-box', marginBottom: 8,
+                padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--border)',
+                color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12,
+              }}
+            />
+            <input
+              value={orderNumber}
+              onChange={e => setOrderNumber(e.target.value)}
+              placeholder="Order number"
+              style={{
+                width: '100%', boxSizing: 'border-box', marginBottom: 10,
+                padding: '10px 12px', background: 'var(--bg)', border: '1px solid var(--border)',
+                color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12,
+              }}
+            />
+            <button
+              onClick={async () => {
+                if (!onActivateLicense || licenseBusy) return;
+                setLicenseBusy(true);
+                setLicenseError('');
+                const result = await onActivateLicense(licenseKey.trim(), orderNumber.trim());
+                if (!result.ok) setLicenseError(result.error || 'Could not activate that license.');
+                setLicenseBusy(false);
+              }}
+              disabled={licenseBusy || !licenseKey.trim() || !orderNumber.trim()}
+              style={{
+                width: '100%', padding: '10px 16px',
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                cursor: licenseBusy ? 'default' : 'pointer',
+                fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-mono)',
+                color: 'var(--text)',
+              }}
+            >
+              {licenseBusy ? 'Checking license…' : 'Activate license'}
+            </button>
+            {licenseError && (
+              <div style={{ marginTop: 8, fontSize: 11, color: '#f87171', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>
+                {licenseError}
+              </div>
+            )}
+          </div>
+
+          {/* Buy lifetime */}
           <div style={{
             marginTop: 18, paddingTop: 16,
             borderTop: '1px solid var(--border)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
           }}>
             <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-              No subscription yet?
+              Need a license?
             </span>
             <button
               onClick={() => setShowSubscribe(true)}
@@ -155,16 +211,10 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                 background: 'none', border: 'none', cursor: 'pointer',
                 display: 'inline-flex', alignItems: 'center', gap: 5,
                 fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
-                fontWeight: 700, padding: 0, transition: 'color 0.15s',
+                fontWeight: 700, padding: 0,
               }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)')}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="5" y1="12" x2="19" y2="12"/>
-                <polyline points="12 5 19 12 12 19"/>
-              </svg>
-              Subscribe
+              Buy lifetime — $149
             </button>
           </div>
         </div>
@@ -275,169 +325,37 @@ export function LoginPage({ onLogin, onSwitchAccount }: Props) {
                 </button>
               </div>
               <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em', marginBottom: 8 }}>
-                Choose a Plan
+                Lifetime Access
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', lineHeight: 1.55, marginBottom: 24 }}>
-                Unlimited separations. Annual plan includes a 3-day free trial.
+                Pay once. Own it forever. Two devices per license.
               </div>
-
-              {/* Side-by-side plan cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-
-                {/* Monthly */}
-                <div
-                  onClick={(e) => { e.stopPropagation(); setSelectedPlan('monthly'); }}
-                  style={{
-                    padding: '20px 18px 18px',
-                    border: `2px solid ${selectedPlan === 'monthly' ? 'var(--accent)' : 'var(--border)'}`,
-                    background: selectedPlan === 'monthly' ? 'rgba(255,165,0,0.06)' : 'var(--surface-2)',
-                    cursor: 'pointer', position: 'relative',
-                    transition: 'border-color 0.15s, background 0.15s',
-                  }}
-                >
-                  {selectedPlan === 'monthly' && (
-                    <div style={{ position: 'absolute', top: 10, right: 10, color: 'var(--accent)' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                    </div>
-                  )}
-                  <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Monthly</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 3 }}>
-                    <span style={{ fontSize: 30, fontWeight: 700 }}>$8.99</span>
-                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>/mo</span>
-                  </div>
-                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
-                    No free trial · billed now
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', opacity: 0.6, lineHeight: 1.5 }}>
-                    $8.99 billed monthly · cancel anytime
-                  </div>
+              <div style={{ padding: '22px 20px', border: '1px solid #fbbf24', background: 'rgba(251,191,36,0.04)', marginBottom: 16 }}>
+                <div style={{ fontSize: 9, color: '#fbbf24', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>One-time</div>
+                <div style={{ fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 10 }}>
+                  <span style={{ fontSize: 34, fontWeight: 700 }}>$149</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>once</span>
                 </div>
-
-                {/* Annual */}
-                <div
-                  onClick={(e) => { e.stopPropagation(); setSelectedPlan('yearly'); }}
-                  style={{
-                    padding: '20px 18px 18px',
-                    border: `2px solid ${selectedPlan === 'yearly' ? 'var(--accent)' : 'var(--border)'}`,
-                    background: selectedPlan === 'yearly' ? 'rgba(255,165,0,0.06)' : 'var(--surface-2)',
-                    cursor: 'pointer', position: 'relative',
-                    transition: 'border-color 0.15s, background 0.15s',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div style={{
-                    position: 'absolute', top: 0, right: 0,
-                    background: 'var(--accent)', color: '#000',
-                    fontSize: 8, fontWeight: 700, fontFamily: 'var(--font-mono)',
-                    padding: '4px 9px', letterSpacing: '0.08em',
-                  }}>SAVE 27%</div>
-                  {selectedPlan === 'yearly' && (
-                    <div style={{ position: 'absolute', bottom: 14, right: 14, color: 'var(--accent)' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                    </div>
-                  )}
-                  <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Annual</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 3 }}>
-                    <span style={{ fontSize: 30, fontWeight: 700 }}>$79</span>
-                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>/yr</span>
-                  </div>
-                  <div style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginTop: 4, opacity: 0.7 }}>$6.58/mo</div>
-                  <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.8 }}>
-                    3-day free trial<br />Best value
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', opacity: 0.6, lineHeight: 1.5 }}>
-                    $79 charged after trial
-                  </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+                  All separation modes, exports, presets, and future updates. No subscription.
                 </div>
-
               </div>
-
-              {/* CTA */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const url = selectedPlan === 'monthly'
-                    ? 'https://charleypangus.com/checkout/autothresh-web/monthly'
-                    : 'https://charleypangus.com/checkout/autothresh-web/yearly';
-                  window.open(url, '_blank', 'noopener,noreferrer');
-                }}
+              <a
+                href="https://charleypangus.com/checkout/autothresh-web/lifetime"
+                target="_blank" rel="noopener noreferrer"
                 style={{
                   display: 'flex', width: '100%', boxSizing: 'border-box',
-                  alignItems: 'center', justifyContent: 'center', gap: 8,
-                  padding: '14px 20px', border: 'none',
-                  background: 'var(--accent)', color: '#000',
+                  alignItems: 'center', justifyContent: 'center',
+                  padding: '14px 20px', border: '1px solid #fbbf24',
+                  background: '#fbbf24', color: '#000', textDecoration: 'none',
                   fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)',
-                  letterSpacing: '0.04em', cursor: 'pointer',
-                  transition: 'opacity 0.15s',
                 }}
-                onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '0.85')}
-                onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.opacity = '1')}
               >
-                {selectedPlan === 'yearly' ? 'Try It Free — 3 Days' : 'Subscribe Monthly — $8.99'}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-                </svg>
-              </button>
-
-              <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', lineHeight: 1.5, opacity: 0.7 }}>
-                {selectedPlan === 'yearly'
-                  ? 'Card required. No charge until your 3-day trial ends. Cancel anytime.'
-                  : 'Billed immediately. No trial on monthly. Cancel anytime.'}
+                Buy Lifetime Access
+              </a>
+              <div style={{ marginTop: 12, fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'center', lineHeight: 1.5 }}>
+                After checkout, sign in with your Charley Pangus email or enter your license key and order number.
               </div>
-
-              {/* Lifetime divider */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0 16px' }}>
-                <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                <span style={{ fontSize: 9, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', opacity: 0.6 }}>or own it forever</span>
-                <span style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-              </div>
-
-              {/* Lifetime card */}
-              <div style={{
-                padding: '18px 20px',
-                border: '1px solid #fbbf24',
-                background: 'rgba(251,191,36,0.04)',
-                position: 'relative', overflow: 'hidden',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-              }}>
-                <div style={{ position: 'absolute', top: 0, right: 0, background: '#fbbf24', color: '#000', fontSize: 8, fontWeight: 700, fontFamily: 'var(--font-mono)', padding: '3px 9px', letterSpacing: '0.08em' }}>
-                  ONE-TIME
-                </div>
-                <div>
-                  <div style={{ fontSize: 9, color: '#fbbf24', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>Lifetime</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'baseline', gap: 3, marginBottom: 8 }}>
-                    <span style={{ fontSize: 26, fontWeight: 700, color: 'var(--text)' }}>$149</span>
-                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>once</span>
-                  </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', lineHeight: 1.7 }}>
-                    Pay once · Own forever<br/>All future updates included
-                  </div>
-                </div>
-                <a
-                  href="https://charleypangus.com/checkout/autothresh-web/lifetime"
-                  target="_blank" rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  style={{
-                    flexShrink: 0, textDecoration: 'none',
-                    padding: '11px 18px',
-                    border: '1px solid #fbbf24', color: '#fbbf24',
-                    background: 'none',
-                    fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)',
-                    letterSpacing: '0.05em', whiteSpace: 'nowrap',
-                    display: 'inline-block', boxSizing: 'border-box',
-                    transition: 'background 0.15s, color 0.15s',
-                  }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#fbbf24'; (e.currentTarget as HTMLElement).style.color = '#000'; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; (e.currentTarget as HTMLElement).style.color = '#fbbf24'; }}
-                >
-                  Buy Lifetime
-                </a>
-              </div>
-
             </div>
           </div>
         )}

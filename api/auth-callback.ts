@@ -403,6 +403,37 @@ function resolveMembership(opts: {
   };
 }
 
+async function claimDevice(opts: {
+  email: string;
+  deviceId: string;
+  deviceName: string;
+  userAgent: string;
+}): Promise<{ ok: boolean; devices: Array<{ id: string; device_id: string; device_name: string; last_seen_at: string; created_at: string }> }> {
+  const { email, deviceId, deviceName, userAgent } = opts;
+  if (!deviceId || !SUPABASE_URL || !SUPABASE_KEY) return { ok: true, devices: [] };
+  const listed = await fetch(
+    `${SUPABASE_URL}/rest/v1/license_devices?email=eq.${encodeURIComponent(email)}&select=id,device_id,device_name,last_seen_at,created_at&order=last_seen_at.desc`,
+    { headers: { Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY } },
+  );
+  const devices = listed.ok ? await listed.json() as Array<{ id: string; device_id: string; device_name: string; last_seen_at: string; created_at: string }> : [];
+  const existing = devices.find(d => d.device_id === deviceId);
+  if (existing) {
+    fetch(`${SUPABASE_URL}/rest/v1/license_devices?device_id=eq.${encodeURIComponent(deviceId)}&email=eq.${encodeURIComponent(email)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY },
+      body: JSON.stringify({ last_seen_at: new Date().toISOString(), device_name: deviceName || existing.device_name, user_agent: userAgent }),
+    }).catch(() => {});
+    return { ok: true, devices };
+  }
+  if (devices.length >= 2) return { ok: false, devices };
+  fetch(`${SUPABASE_URL}/rest/v1/license_devices`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SUPABASE_KEY}`, apikey: SUPABASE_KEY },
+    body: JSON.stringify({ email, device_id: deviceId, device_name: deviceName || 'Device', user_agent: userAgent }),
+  }).catch(() => {});
+  return { ok: true, devices: [...devices, { id: '', device_id: deviceId, device_name: deviceName, last_seen_at: new Date().toISOString(), created_at: new Date().toISOString() }] };
+}
+
 function flagDuplicateSubs(email: string, ip: string, count: number) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return;
   fetch(`${SUPABASE_URL}/rest/v1/security_flags`, {
@@ -438,7 +469,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { code, codeVerifier } = req.body as { code?: string; codeVerifier?: string };
+  const { code, codeVerifier, deviceId, deviceName } = req.body as { code?: string; codeVerifier?: string; deviceId?: string; deviceName?: string };
   if (!code || !codeVerifier) return res.status(400).json({ error: 'code and codeVerifier required' });
 
   const clientIp = String(
@@ -583,6 +614,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
+  let outHasSub = finalHasSub;
+  let outStatus = finalStatus;
+  let devices: Array<{ id: string; device_id: string; device_name: string; last_seen_at: string; created_at: string; isCurrent?: boolean }> | undefined;
+  if (outHasSub && !isCreator && deviceId) {
+    const claim = await claimDevice({
+      email: emailLower,
+      deviceId,
+      deviceName: deviceName ?? 'Device',
+      userAgent: ua,
+    });
+    devices = claim.devices.map(d => ({ ...d, isCurrent: d.device_id === deviceId }));
+    if (!claim.ok) {
+      outHasSub = false;
+      outStatus = 'device_limit';
+    }
+  }
+
   return res.status(200).json({
     token:                tokens.access_token,
     idToken:              tokens.id_token,
@@ -590,9 +638,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     expiresAt,
     email:                custEmail,
     firstName,
-    hasSubscription:      finalHasSub,
-    subscriptionStatus:   finalStatus,
+    hasSubscription:      outHasSub,
+    subscriptionStatus:   outStatus,
     subscriptionExpiresAt: finalExpiry,
     planTitle:            finalPlan,
+    devices,
   });
 }

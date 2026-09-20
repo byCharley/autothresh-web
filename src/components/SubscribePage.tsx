@@ -4,10 +4,11 @@ import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 import { BillingPanel } from './BillingPanel';
+import { DeviceManager, type LicenseDevice } from './DeviceManager';
 
-const MONTHLY_URL  = 'https://charleypangus.com/checkout/autothresh-web/monthly';
-const ANNUAL_URL   = 'https://charleypangus.com/checkout/autothresh-web/yearly';
 const LIFETIME_URL = 'https://charleypangus.com/checkout/autothresh-web/lifetime';
+const LIFETIME_MONTHLY_URL = 'https://charleypangus.com/discount/ATWEB30';
+const LIFETIME_ANNUAL_URL  = 'https://charleypangus.com/discount/ATWEB50';
 
 interface Props {
   firstName?: string;
@@ -16,31 +17,18 @@ interface Props {
   planTitle?: string;
   subscriptionExpiresAt?: string;
   token?: string;
+  devices?: LicenseDevice[];
   onLogout: () => void;
   onSwitchAccount?: () => void;
   onRecheck?: () => Promise<boolean>;
 }
 
 const PLAN_FEATURES = {
-  monthly: [
-    'All 6 separation modes',
-    'All export formats & mockups',
-    'Unlimited presets & cloud sync',
-    'Billed immediately — no trial',
-    'Cancel anytime',
-  ],
-  annual: [
-    'Everything in Monthly',
-    '3-day free trial',
-    'Priority feature requests',
-    'Early access to new modes',
-    'Cancel anytime',
-  ],
   lifetime: [
-    'Everything in Annual',
+    'Everything in the app',
     'Pay once, own forever',
     'All future updates free',
-    'No subscription fees ever',
+    'Two devices per license',
     'Tutorial library built-in',
   ],
 };
@@ -58,7 +46,10 @@ function PlanFeatures({ features, accent }: { features: string[]; accent: string
   );
 }
 
-function PricingModal({ onClose }: { onClose: () => void }) {
+function PricingModal({ onClose, offer }: { onClose: () => void; offer?: 'monthly30' | 'annual50' }) {
+  const discounted = offer === 'annual50' ? { label: '50% off for annual members', price: '$75', url: LIFETIME_ANNUAL_URL }
+    : offer === 'monthly30' ? { label: '30% off after your monthly plan', price: '$104', url: LIFETIME_MONTHLY_URL }
+    : { label: 'Pay once. Own it forever.', price: '$149', url: LIFETIME_URL };
   return (
     <div
       style={{
@@ -87,84 +78,38 @@ function PricingModal({ onClose }: { onClose: () => void }) {
           <div style={{
             fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
             letterSpacing: '0.14em', textTransform: 'uppercase',
-            color: 'var(--accent)', marginBottom: 8,
-          }}>Choose a Plan</div>
+            color: '#fbbf24', marginBottom: 8,
+          }}>Lifetime</div>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>
-            Choose a Plan
+            Pay once. Own it forever.
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-mono)' }}>
-            Annual plan includes a 3-day free trial · Cancel anytime
+            {discounted.label}
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-
-          {/* Monthly */}
-          <a href={MONTHLY_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'flex' }}>
-            <div
-              style={{ border: '1px solid var(--border)', padding: '22px 20px', width: '100%', cursor: 'pointer', transition: 'border-color 0.15s', display: 'flex', flexDirection: 'column' }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-            >
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Monthly</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginBottom: 20 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$8.99</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-dim)', fontWeight: 400 }}>/mo</span>
-              </div>
-              <PlanFeatures features={PLAN_FEATURES.monthly} accent="var(--accent)" />
-              <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', border: '1px solid var(--accent)', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
-                Subscribe Monthly — $8.99
-              </div>
+        <a href={discounted.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block' }}>
+          <div style={{ border: '1px solid #fbbf24', padding: '22px 20px', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: 0, right: 0, background: '#fbbf24', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', padding: '3px 8px' }}>ONE-TIME</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, color: 'var(--text)' }}>{discounted.price}</span>
+              {discounted.price !== '$149' && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, color: 'var(--text-dim)', textDecoration: 'line-through' }}>$149</span>}
             </div>
-          </a>
-
-          {/* Annual — featured */}
-          <a href={ANNUAL_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'flex' }}>
-            <div style={{ border: '1px solid var(--accent)', padding: '22px 20px', width: '100%', cursor: 'pointer', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-              <div style={{ position: 'absolute', top: 0, right: 0, background: 'var(--accent)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', padding: '3px 8px' }}>SAVE 27%</div>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Annual</div>
-              <div style={{ marginBottom: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$79</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-dim)', fontWeight: 400 }}>/yr</span>
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', marginTop: 5, marginBottom: 14 }}>$6.58/mo · billed annually</div>
-              </div>
-              <PlanFeatures features={PLAN_FEATURES.annual} accent="var(--accent)" />
-              <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', background: 'var(--accent)', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
-                Start Free Trial →
-              </div>
+            <PlanFeatures features={PLAN_FEATURES.lifetime} accent="#fbbf24" />
+            <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', background: '#fbbf24', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700 }}>
+              Buy Lifetime Access →
             </div>
-          </a>
-
-          {/* Lifetime */}
-          <a href={LIFETIME_URL} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'flex' }}>
-            <div style={{ border: '1px solid #fbbf24', padding: '22px 20px', width: '100%', cursor: 'pointer', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-              <div style={{ position: 'absolute', top: 0, right: 0, background: '#fbbf24', color: '#000', fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', padding: '3px 8px' }}>ONE-TIME</div>
-              <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 14 }}>Lifetime</div>
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 34, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', lineHeight: 1 }}>$149</span>
-                </div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--text-dim)', marginTop: 5 }}>one-time · never pay again</div>
-              </div>
-              <PlanFeatures features={PLAN_FEATURES.lifetime} accent="#fbbf24" />
-              <div style={{ marginTop: 20, textAlign: 'center', padding: '9px 0', border: '1px solid #fbbf24', color: '#fbbf24', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
-                Buy Lifetime Access →
-              </div>
-            </div>
-          </a>
-        </div>
-
+          </div>
+        </a>
         <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-          Annual trial requires a credit card · No charge until the 3 days end
+          Two devices per license. Remove a device anytime to free a slot.
         </div>
       </div>
     </div>
   );
 }
 
-export function SubscribePage({ firstName, email, subscriptionStatus, planTitle, subscriptionExpiresAt, token, onLogout, onSwitchAccount, onRecheck }: Props) {
+export function SubscribePage({ firstName, email, subscriptionStatus, planTitle, subscriptionExpiresAt, token, devices, onLogout, onSwitchAccount, onRecheck }: Props) {
   const [showEula,      setShowEula]      = useState(false);
   const [showFaq,       setShowFaq]       = useState(false);
   const [showPricing,   setShowPricing]   = useState(false);
@@ -263,6 +208,36 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
               </button>
             </div>
           </>
+        ) : subscriptionStatus === 'device_limit' ? (
+          <>
+            <div style={{
+              width: 40, height: 40, borderRadius: '50%',
+              background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 20px',
+            }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2">
+                <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>
+              </svg>
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.01em' }}>
+              Device limit reached
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 20 }}>
+              This license is already active on 2 devices. Remove one below, then try this device again.
+            </div>
+            {token && (
+              <div style={{ textAlign: 'left', marginBottom: 20 }}>
+                <DeviceManager token={token} devices={devices} onActivated={onRecheck} />
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {onSwitchAccount && (
+                <button className="btn btn-ghost" onClick={onSwitchAccount} style={{ fontSize: 11, color: 'var(--text-muted)' }}>Different account</button>
+              )}
+              <button className="btn btn-ghost" onClick={onLogout} style={{ fontSize: 11, color: 'var(--text-dim)' }}>Sign out</button>
+            </div>
+          </>
         ) : subscriptionStatus === 'paused' ? (
           <>
             <div style={{
@@ -320,7 +295,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
             </div>
 
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.01em' }}>
-              {firstName ? `Hi ${firstName} —` : ''} Subscription Required
+              {firstName ? `Hi ${firstName} —` : ''} Lifetime license required
             </div>
 
             {email && (
@@ -337,8 +312,8 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
 
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
               {subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled'
-                ? 'This subscription has ended. Choose a plan whenever you are ready to come back.'
-                : 'Your subscription is no longer active. Pick a plan to get back in — monthly, annual, or lifetime.'}
+                ? 'Your subscription has ended. Buy lifetime at 30% off to keep going — pay once, own forever.'
+                : 'AutoThresh Web is a one-time purchase. Pay once and own it forever.'}
             </div>
 
             <button
@@ -346,7 +321,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
               className="btn btn-primary"
               style={{ width: '100%', justifyContent: 'center', marginBottom: 20, color: '#000', fontSize: 13 }}
             >
-              View Plans & Subscribe
+              {subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled' ? 'Buy Lifetime — 30% off' : 'Buy Lifetime — $149'}
             </button>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -396,7 +371,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
       <PageFooter onEula={() => setShowEula(true)} onFaq={() => setShowFaq(true)} />
       {showEula    && <EulaModal onClose={() => setShowEula(false)} />}
       {showFaq     && <FaqModal  onClose={() => setShowFaq(false)} />}
-      {showPricing && <PricingModal onClose={() => setShowPricing(false)} />}
+      {showPricing && <PricingModal onClose={() => setShowPricing(false)} offer={subscriptionStatus === 'cancelled' || subscriptionStatus === 'canceled' ? 'monthly30' : undefined} />}
     </div>
   );
 }
