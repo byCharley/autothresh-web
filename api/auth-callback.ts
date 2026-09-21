@@ -1,6 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sunsetSubscriptionsForEmail } from './_lib/sealSunset.js';
 import { getPlanAccess } from './_lib/planAccess.js';
+import {
+  buildDeviceIdents,
+  claimAppTrialForShopify,
+  lookupAppTrial,
+  shopifyAccountIdent,
+  trialConfigured,
+} from './_lib/appTrial.js';
 
 const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
@@ -559,7 +566,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { code, codeVerifier, deviceId, deviceName } = req.body as { code?: string; codeVerifier?: string; deviceId?: string; deviceName?: string };
+  const { code, codeVerifier, deviceId, deviceName, wantTrial } = req.body as {
+    code?: string;
+    codeVerifier?: string;
+    deviceId?: string;
+    deviceName?: string;
+    wantTrial?: boolean;
+  };
   if (!code || !codeVerifier) return res.status(400).json({ error: 'code and codeVerifier required' });
 
   const clientIp = String(
@@ -714,7 +727,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let outHasSub = finalHasSub;
   let outStatus = finalStatus;
+  let outExpiry = finalExpiry;
+  let outPlan = finalPlan;
   let devices: Array<{ id: string; device_id: string; device_name: string; last_seen_at: string; created_at: string; isCurrent?: boolean }> | undefined;
+
+  // App trial: Start 3 Day Trial signs in with wantTrial; Sign in resumes an existing one.
+  if (!outHasSub && !isCreator && !isTester && !isSecurityExpired && trialConfigured()) {
+    try {
+      const idents = buildDeviceIdents({ req, deviceId });
+      const account = shopifyAccountIdent(emailLower);
+      if (wantTrial) {
+        const claim = await claimAppTrialForShopify(emailLower, idents, {
+          req,
+          res,
+          createIfMissing: true,
+        });
+        if (claim.status === 'active') {
+          outHasSub = true;
+          outStatus = 'app_trial';
+          outExpiry = claim.expiresAt;
+          outPlan = '3-Day Trial';
+        } else if (claim.status === 'expired') {
+          outStatus = 'trial_ended';
+          outExpiry = claim.expiresAt;
+        }
+      } else {
+        const claim = await lookupAppTrial([...idents, account], { req, res });
+        if (claim.status === 'active') {
+          outHasSub = true;
+          outStatus = 'app_trial';
+          outExpiry = claim.expiresAt;
+          outPlan = '3-Day Trial';
+        }
+      }
+    } catch (err) {
+      console.error('[auth app_trial]', err);
+    }
+  }
+
   if (outHasSub && !isCreator && deviceId) {
     const claim = await claimDevice({
       email: emailLower,
@@ -738,8 +788,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     firstName,
     hasSubscription:      outHasSub,
     subscriptionStatus:   outStatus,
-    subscriptionExpiresAt: finalExpiry,
-    planTitle:            finalPlan,
+    subscriptionExpiresAt: outExpiry,
+    planTitle:            outPlan,
     devices,
   });
 }

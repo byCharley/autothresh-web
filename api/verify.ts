@@ -2,6 +2,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { sunsetSubscriptionsForEmail } from './_lib/sealSunset.js';
 import { getPlanAccess } from './_lib/planAccess.js';
+import {
+  buildDeviceIdents,
+  lookupAppTrial,
+  shopifyAccountIdent,
+  trialConfigured,
+} from './_lib/appTrial.js';
 
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const TESTER_EMAILS = new Set(
@@ -759,7 +765,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let outHasSub = finalHasSub;
   let outStatus = finalStatus;
+  let outExpiry = finalExpiry;
+  let outPlan = finalPlan;
   let devices: Array<LicenseDevice & { isCurrent?: boolean }> | undefined;
+
+  // Resume an existing Shopify-bound app trial on any device (Sign in).
+  if (!outHasSub && !isCreator && !isTester && !isSecurityExpired && trialConfigured()) {
+    try {
+      const idents = buildDeviceIdents({ req, deviceId });
+      const claim = await lookupAppTrial([...idents, shopifyAccountIdent(emailLower)], { req, res });
+      if (claim.status === 'active') {
+        outHasSub = true;
+        outStatus = 'app_trial';
+        outExpiry = claim.expiresAt;
+        outPlan = '3-Day Trial';
+      }
+    } catch (err) {
+      console.error('[verify app_trial]', err);
+    }
+  }
+
   if (outHasSub && !isCreator && deviceId) {
     const claim = await claimDevice({
       email: emailLower,
@@ -778,8 +803,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     valid:                 true,
     hasSubscription:       outHasSub,
     subscriptionStatus:    outStatus,
-    subscriptionExpiresAt: finalExpiry,
-    planTitle:             finalPlan,
+    subscriptionExpiresAt: outExpiry,
+    planTitle:             outPlan,
     email,
     firstName:             cust.firstName ?? '',
     accentColor:           userPrefs.accentColor,

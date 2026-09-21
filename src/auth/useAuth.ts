@@ -25,6 +25,7 @@ const SHOPIFY_REFRESH_TOKEN = 'shopify_refresh_token'; // used to get a fresh id
 const SHOPIFY_STORE_ID      = '52142571674';
 const VERIFIER_KEY     = 'at_pkce_verifier';
 const STATE_KEY        = 'at_pkce_state';
+const WANT_TRIAL_KEY   = 'at_want_trial';
 const NONCE_KEY        = 'at_pkce_nonce';
 function isInactiveStatus(status?: string): boolean {
   return status === 'paused' || status === 'cancelled' || status === 'canceled' || status === 'device_limit';
@@ -91,7 +92,7 @@ function trialSession(expiresAt: string): Session {
 
 type TrialClaim = { kind: 'login' } | { kind: 'unavailable' } | { kind: 'active'; expiresAt: string } | { kind: 'ended' };
 
-async function claimAnonymousTrial(email?: string): Promise<TrialClaim> {
+async function claimAnonymousTrial(token?: string): Promise<TrialClaim> {
   try {
     const fingerprint = await getBrowserFingerprint();
     const r = await fetch('/api/trial', {
@@ -101,21 +102,19 @@ async function claimAnonymousTrial(email?: string): Promise<TrialClaim> {
       body: JSON.stringify({
         deviceId: getDeviceId(),
         fingerprint,
-        ...(email ? { email } : {}),
+        ...(token ? { token } : {}),
       }),
     });
     const data = await r.json().catch(() => ({})) as {
       status?: string;
       expiresAt?: string;
-      error?: string;
-      needEmail?: boolean;
+      needSignIn?: boolean;
     };
-    if (!r.ok) {
-      if (data.needEmail) return { kind: 'unavailable' };
-      return { kind: 'unavailable' };
-    }
+    if (r.status === 401 || data.needSignIn) return { kind: 'login' };
+    if (!r.ok) return { kind: 'unavailable' };
     if (data.status === 'active' && data.expiresAt) return { kind: 'active', expiresAt: data.expiresAt };
-    return { kind: 'ended' };
+    if (data.status === 'expired') return { kind: 'ended' };
+    return { kind: 'unavailable' };
   } catch {
     return { kind: 'unavailable' };
   }
@@ -197,10 +196,17 @@ export function useAuth() {
       fetch('/api/auth-callback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, codeVerifier, deviceId: getDeviceId(), deviceName: deviceNameFromUa() }),
+        body: JSON.stringify({
+          code,
+          codeVerifier,
+          deviceId: getDeviceId(),
+          deviceName: deviceNameFromUa(),
+          wantTrial: sessionStorage.getItem(WANT_TRIAL_KEY) === '1',
+        }),
       })
         .then((r) => r.json() as Promise<Partial<Session> & { error?: string; idToken?: string; refreshToken?: string; subscriptionStatus?: string; subscriptionExpiresAt?: string; planTitle?: string }>)
         .then((data) => {
+          sessionStorage.removeItem(WANT_TRIAL_KEY);
           window.history.replaceState({}, '', '/');
           if (data.error || !data.token) {
             setSession(null);
@@ -223,6 +229,15 @@ export function useAuth() {
           });
           saveSession(s);
           setSession(s);
+          if (data.subscriptionStatus === 'trial_ended') {
+            setStatus('trial-ended');
+            return;
+          }
+          if (data.subscriptionStatus === 'app_trial') {
+            try { localStorage.setItem('at_trial_started', '1'); } catch { /* ignore */ }
+            setStatus('authenticated');
+            return;
+          }
           // No active subscription (never subscribed, paused, or cancelled) →
           // show SubscribePage so they can sign up / resubscribe
           if (!s.hasSubscription || isInactiveStatus(s.subscriptionStatus)) {
@@ -440,10 +455,17 @@ export function useAuth() {
     setStatus('unauthenticated');
   }, []);
 
-  const startTrial = useCallback(async (email?: string): Promise<boolean> => {
-    const claim = await claimAnonymousTrial(email);
-    applyTrialClaim(claim, setSession, setStatus);
-    return claim.kind === 'active' || claim.kind === 'ended';
+  const startTrial = useCallback(async (): Promise<boolean> => {
+    // Resume on this browser if a trial is already attached to device/cookie.
+    const existing = await claimAnonymousTrial();
+    if (existing.kind === 'active' || existing.kind === 'ended') {
+      applyTrialClaim(existing, setSession, setStatus);
+      return true;
+    }
+    // New trials require a Shopify account (not a typed email).
+    sessionStorage.setItem(WANT_TRIAL_KEY, '1');
+    await startOAuth();
+    return true;
   }, []);
 
   const updateDisplayName = useCallback((name: string) => {
