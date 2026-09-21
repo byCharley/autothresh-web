@@ -1499,6 +1499,72 @@ function AccessPanel({ session }: { session: Session }) {
   const [addErr, setAddErr]     = useState<string | null>(null);
   const [showAdd, setShowAdd]   = useState(false);
   const [busy, setBusy]         = useState<string | null>(null);
+  const [seedingAccess, setSeedingAccess] = useState(false);
+  const [accessCoverage, setAccessCoverage] = useState<{ total: number; dbRows: number | null; tableMissing?: boolean } | null>(null);
+
+  const loadCoverage = useCallback(() => {
+    fetch('/api/seed-plan-access', { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(r => r.ok ? r.json() as Promise<{ total?: number; dbRows?: number | null; tableMissing?: boolean }> : null)
+      .then(d => {
+        if (!d) return;
+        setAccessCoverage({
+          total: d.total ?? 0,
+          dbRows: d.dbRows ?? null,
+          tableMissing: d.tableMissing,
+        });
+      })
+      .catch(() => {});
+  }, [session.token]);
+
+  async function seedPlanAccessFromExport() {
+    if (!confirm('Save paid-access end dates for all exported Monthly/Annual subscribers?\n\nThis does NOT cancel anything in Seal — only keeps app access until each next billing date.\n\nSafe to re-run anytime.')) return;
+    setSeedingAccess(true);
+    try {
+      let offset = 0;
+      let total = 0;
+      let saved = 0;
+      let failed = 0;
+      let rounds = 0;
+      while (rounds < 20) {
+        rounds++;
+        const r = await fetch('/api/seed-plan-access', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ offset, limit: 50 }),
+        });
+        const text = await r.text();
+        let body: {
+          error?: string;
+          setupError?: string;
+          total?: number;
+          saved?: number;
+          failed?: number;
+          done?: boolean;
+          nextOffset?: number | null;
+        };
+        try {
+          body = JSON.parse(text) as typeof body;
+        } catch {
+          throw new Error(`Server error: ${text.slice(0, 160)}`);
+        }
+        if (!r.ok) throw new Error(body.setupError || body.error || `HTTP ${r.status}`);
+        total = body.total ?? total;
+        saved += body.saved ?? 0;
+        failed += body.failed ?? 0;
+        if (body.done || body.nextOffset == null) break;
+        offset = body.nextOffset;
+      }
+      alert(`Access dates saved.\nTotal in export: ${total}\nSaved: ${saved}\nFailed: ${failed}`);
+      loadCoverage();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Seed failed');
+    } finally {
+      setSeedingAccess(false);
+    }
+  }
 
   const load = useCallback(() => {
     setLoading(true); setError(null);
@@ -1513,7 +1579,7 @@ function AccessPanel({ session }: { session: Session }) {
       .finally(() => setLoading(false));
   }, [session.token]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadCoverage(); }, [load, loadCoverage]);
 
   async function act(action: string, email: string) {
     setBusy(email + action);
@@ -1559,6 +1625,46 @@ function AccessPanel({ session }: { session: Session }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      <div style={{
+        padding: '14px 16px',
+        background: 'var(--surface-2, var(--surface))',
+        border: '1px solid var(--border)',
+        display: 'flex', flexDirection: mobile ? 'column' : 'row',
+        alignItems: mobile ? 'stretch' : 'center',
+        gap: 12,
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 4 }}>
+            Paid-through access
+          </div>
+          <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text)', lineHeight: 1.45 }}>
+            {accessCoverage == null
+              ? 'Checking saved access dates…'
+              : accessCoverage.tableMissing
+                ? 'plan_access table missing in Supabase — create it, then save dates.'
+                : accessCoverage.dbRows == null
+                  ? `Export has ${accessCoverage.total} Monthly/Annual users. Save dates so cancelled subscribers keep access until cycle end.`
+                  : accessCoverage.dbRows >= accessCoverage.total
+                    ? `${accessCoverage.dbRows} / ${accessCoverage.total} access dates saved.`
+                    : `${accessCoverage.dbRows} / ${accessCoverage.total} saved — click Save Access Dates to finish.`}
+          </div>
+        </div>
+        <button
+          onClick={seedPlanAccessFromExport}
+          disabled={seedingAccess}
+          style={{
+            height: 34, padding: '0 14px', flexShrink: 0,
+            background: seedingAccess ? 'var(--surface)' : 'var(--accent)',
+            border: 'none', color: seedingAccess ? 'var(--text-dim)' : '#111',
+            fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: seedingAccess ? 'default' : 'pointer',
+          }}
+        >
+          {seedingAccess ? 'Saving…' : 'Save Access Dates'}
+        </button>
+      </div>
 
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>

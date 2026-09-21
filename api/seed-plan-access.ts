@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { ACTIVE_SUBSCRIPTION_EXPORT } from './_data/activeSubscriptions';
-import { upsertPlanAccess } from './_lib/planAccess';
+import { countPlanAccess, upsertPlanAccess } from './_lib/planAccess';
 
 export const config = { maxDuration: 30 };
 
@@ -53,9 +53,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!(await verifyCreator(token))) return res.status(401).json({ error: 'Unauthorized' });
 
   if (req.method === 'GET') {
+    const coverage = await countPlanAccess();
     return res.status(200).json({
       ok: true,
       total: ACTIVE_SUBSCRIPTION_EXPORT.length,
+      dbRows: coverage.dbRows,
+      tableMissing: coverage.tableMissing ?? false,
       sample: ACTIVE_SUBSCRIPTION_EXPORT.slice(0, 3),
     });
   }
