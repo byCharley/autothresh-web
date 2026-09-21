@@ -1406,6 +1406,19 @@ button.login-cta:disabled {
   color: var(--text);
 }
 
+.login-trial-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.login-trial-note a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .login-screen-footer {
   flex-shrink: 0;
 }
