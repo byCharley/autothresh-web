@@ -3,9 +3,8 @@
  * Uses exact ids + next_billing_date so we stop charges and keep paid access.
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
 import { upsertPlanAccess } from './planAccess';
+import { ACTIVE_SUBSCRIPTION_EXPORT } from '../_data/activeSubscriptions';
 
 const SEAL_TOKEN   = process.env.SEAL_API_TOKEN ?? process.env.SEAL_TOKEN ?? '';
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
@@ -30,77 +29,8 @@ function sealHeaders() {
   return { 'Content-Type': 'application/json', 'X-Seal-Token': SEAL_TOKEN };
 }
 
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    const next = text[i + 1];
-    if (inQuotes) {
-      if (c === '"' && next === '"') { field += '"'; i++; continue; }
-      if (c === '"') { inQuotes = false; continue; }
-      field += c;
-      continue;
-    }
-    if (c === '"') { inQuotes = true; continue; }
-    if (c === ',') { row.push(field); field = ''; continue; }
-    if (c === '\n') {
-      row.push(field);
-      if (row.some(x => x.trim())) rows.push(row);
-      row = [];
-      field = '';
-      continue;
-    }
-    if (c === '\r') continue;
-    field += c;
-  }
-  if (field.length || row.length) {
-    row.push(field);
-    if (row.some(x => x.trim())) rows.push(row);
-  }
-  return rows;
-}
-
-function exportPath(): string {
-  return join(process.cwd(), 'api', '_data', 'active-subscriptions.csv');
-}
-
 export function loadActiveSubscriptionExport(): ExportRow[] {
-  const path = exportPath();
-  if (!existsSync(path)) return [];
-  const raw = readFileSync(path, 'utf8').replace(/^\uFEFF/, '');
-  const grid = parseCsv(raw);
-  if (grid.length < 2) return [];
-  const header = grid[0].map(h => h.trim().toLowerCase());
-  const idx = (name: string) => header.indexOf(name);
-
-  const iId = idx('id');
-  const iEmail = idx('email');
-  const iNext = idx('next_billing_date');
-  const iPlan = idx('selling_plan_name');
-  const iStatus = idx('status');
-  const iInterval = idx('interval');
-  if (iId < 0 || iEmail < 0 || iNext < 0) return [];
-
-  const out: ExportRow[] = [];
-  for (const cells of grid.slice(1)) {
-    const idRaw = String(cells[iId] ?? '').replace(/[^\d]/g, '');
-    const id = Number(idRaw);
-    const email = String(cells[iEmail] ?? '').trim().toLowerCase();
-    const nextBillingDate = String(cells[iNext] ?? '').trim();
-    if (!id || !email || !nextBillingDate) continue;
-    out.push({
-      id,
-      email,
-      nextBillingDate,
-      planTitle: String(cells[iPlan] ?? cells[iInterval] ?? 'Subscription').trim() || 'Subscription',
-      status: String(cells[iStatus] ?? '').trim().toUpperCase(),
-      interval: String(cells[iInterval] ?? '').trim(),
-    });
-  }
-  return out;
+  return ACTIVE_SUBSCRIPTION_EXPORT.map(r => ({ ...r }));
 }
 
 async function cancelNow(subscriptionId: number): Promise<{ ok: boolean; detail?: string }> {
