@@ -305,7 +305,8 @@ export function MobileLayout({ onExport, onMockup, onLogout, onLogin, onAnalytic
           {menuOpen && (
             <div style={{
               position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-              width: 260,
+              width: 280,
+              maxWidth: 'calc(100vw - 20px)',
               background: 'var(--surface)', border: '1px solid var(--border)',
               boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
               zIndex: 200,
@@ -341,13 +342,15 @@ export function MobileLayout({ onExport, onMockup, onLogout, onLogin, onAnalytic
                 </div>
               )}
               {subStatus !== 'creator' && subStatus !== 'app_trial' && session?.token && (
-                <div style={{ padding: '8px 14px 0', borderTop: '1px solid var(--border)' }}>
+                <div style={{ padding: '8px 8px 0' }}>
                   <button
                     onClick={() => { setMenuOpen(false); setShowDevices(true); }}
                     style={{
-                      width: '100%', background: 'none', border: '1px solid var(--border)',
-                      cursor: 'pointer', padding: '7px 10px', fontSize: 11,
-                      color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                      width: '100%', boxSizing: 'border-box',
+                      background: 'none', border: '1px solid var(--border)',
+                      cursor: 'pointer', padding: '8px 12px', fontSize: 11,
+                      color: 'var(--text)', fontFamily: 'var(--font-mono)',
+                      textAlign: 'left', whiteSpace: 'nowrap',
                     }}
                   >
                     Devices
@@ -355,43 +358,61 @@ export function MobileLayout({ onExport, onMockup, onLogout, onLogin, onAnalytic
                 </div>
               )}
               {subStatus !== 'creator' && subStatus !== 'tester' && subStatus !== 'lifetime' && subStatus !== 'app_trial' && session?.token && (
-                <div style={{ padding: '8px 14px 0', borderTop: '1px solid var(--border)' }}>
+                <div style={{ padding: '6px 8px 0' }}>
                   <button
                     onClick={() => { setMenuOpen(false); setShowBilling(true); }}
                     style={{
-                      width: '100%', background: 'none', border: '1px solid var(--border)',
-                      cursor: 'pointer', padding: '7px 10px', fontSize: 11,
-                      color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                      width: '100%', boxSizing: 'border-box',
+                      background: 'none', border: '1px solid var(--border)',
+                      cursor: 'pointer', padding: '8px 12px', fontSize: 11,
+                      color: 'var(--text)', fontFamily: 'var(--font-mono)',
+                      textAlign: 'left', whiteSpace: 'nowrap',
                     }}
                   >
                     Manage subscription
                   </button>
                 </div>
               )}
-              <div style={{ padding: '10px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ padding: '6px 8px 10px' }}>
                 {subStatus === 'app_trial' ? (
-                  <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <a
                       href={PRODUCT_URL}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontWeight: 700, textDecoration: 'none' }}
+                      style={{
+                        display: 'block', boxSizing: 'border-box', width: '100%',
+                        padding: '8px 12px', fontSize: 11, fontWeight: 700,
+                        color: 'var(--accent)', fontFamily: 'var(--font-mono)',
+                        textDecoration: 'none', border: '1px solid var(--border)',
+                        textAlign: 'left', whiteSpace: 'nowrap',
+                      }}
                     >
-                      Buy
+                      Buy license
                     </a>
                     {onLogin && (
                       <button
                         onClick={() => { setMenuOpen(false); onLogin(); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}
+                        style={{
+                          width: '100%', boxSizing: 'border-box',
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)',
+                          fontFamily: 'var(--font-mono)', textAlign: 'left', whiteSpace: 'nowrap',
+                        }}
                       >
                         Sign in
                       </button>
                     )}
-                  </>
+                  </div>
                 ) : (
                   <button
                     onClick={() => { setMenuOpen(false); onLogout(); }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}
+                    style={{
+                      width: '100%', boxSizing: 'border-box',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)',
+                      fontFamily: 'var(--font-mono)', textAlign: 'left', whiteSpace: 'nowrap',
+                    }}
                   >
                     Sign out
                   </button>

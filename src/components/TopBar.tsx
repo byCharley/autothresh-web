@@ -315,7 +315,8 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
             return (
               <div style={{
                 position: 'absolute', top: 'calc(100% + 4px)', right: 6,
-                width: 260,
+                width: 280,
+                maxWidth: 'calc(100vw - 24px)',
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
                 zIndex: 9999,
@@ -381,7 +382,7 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                       </>
                     )}
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {userEmail}
                   </div>
                 </div>
@@ -398,13 +399,13 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                       {subLabel}
                     </span>
                     {planTitle && (
-                      <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                         {planTitle}
                       </span>
                     )}
                   </div>
                   {(nextBillingFormatted || (daysRemaining !== null && daysRemaining > 0) || (isTrial && trialCountdown)) && (
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', lineHeight: 1.45 }}>
                       {isTrial ? (
                         <>
                           <div style={{ color: '#a78bfa', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 12, marginBottom: 3 }}>
@@ -429,30 +430,18 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                 </div>
                 )}
 
-                {/* Actions */}
-                <div style={{ padding: '7px 15px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  {onLogout && (
-                    <button
-                      onClick={() => { setMenuOpen(false); onLogout(); }}
-                      style={{
-                        background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                        fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
-                        transition: 'color 0.12s',
-                      }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)'; }}
-                    >
-                      Sign out
-                    </button>
-                  )}
+                {/* Actions — stacked full-width so labels never wrap */}
+                <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {subscriptionStatus !== 'creator' && subscriptionStatus !== 'app_trial' && (
                     <button
                       onClick={() => { setMenuOpen(false); setShowDevices(true); }}
                       style={{
+                        width: '100%', boxSizing: 'border-box',
                         border: '1px solid var(--border)', cursor: 'pointer',
-                        padding: '4px 10px', fontSize: 10,
-                        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-                        background: 'transparent',
+                        padding: '8px 12px', fontSize: 11,
+                        color: 'var(--text)', fontFamily: 'var(--font-mono)',
+                        background: 'transparent', textAlign: 'left',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       Devices
@@ -462,16 +451,35 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                     <button
                       onClick={() => { setMenuOpen(false); setShowBilling(true); }}
                       style={{
+                        width: '100%', boxSizing: 'border-box',
                         border: '1px solid var(--border)', cursor: 'pointer',
-                        padding: '4px 10px', fontSize: 10,
-                        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
-                        background: 'transparent',
+                        padding: '8px 12px', fontSize: 11,
+                        color: 'var(--text)', fontFamily: 'var(--font-mono)',
+                        background: 'transparent', textAlign: 'left',
+                        whiteSpace: 'nowrap',
                         transition: 'border-color 0.12s, color 0.12s',
                       }}
                       onMouseEnter={(e) => { const b = e.currentTarget; b.style.borderColor = 'var(--accent)'; b.style.color = 'var(--accent)'; }}
-                      onMouseLeave={(e) => { const b = e.currentTarget; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text-muted)'; }}
+                      onMouseLeave={(e) => { const b = e.currentTarget; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text)'; }}
                     >
                       Manage subscription
+                    </button>
+                  )}
+                  {onLogout && (
+                    <button
+                      onClick={() => { setMenuOpen(false); onLogout(); }}
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        padding: '8px 12px', fontSize: 11,
+                        color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
+                        textAlign: 'left', whiteSpace: 'nowrap',
+                        transition: 'color 0.12s',
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; }}
+                    >
+                      Sign out
                     </button>
                   )}
                 </div>
