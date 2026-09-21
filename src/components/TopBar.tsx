@@ -301,13 +301,14 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
             const subColor = subscriptionStatus === 'creator'  ? 'var(--accent)'
               : subscriptionStatus === 'tester'                ? '#38bdf8'
               : subscriptionStatus === 'trial' || subscriptionStatus === 'app_trial' ? '#a78bfa'
-              : subscriptionStatus === 'lifetime'              ? '#fbbf24'
+              : subscriptionStatus === 'lifetime' || subscriptionStatus === 'paid_through' ? '#fbbf24'
               : subscriptionStatus === 'paused' || subscriptionStatus === 'cancelled' ? '#e6a817'
               : '#3ecf4f';
             const subLabel = subscriptionStatus === 'creator' ? 'Creator'
               : subscriptionStatus === 'tester' ? 'Tester'
               : subscriptionStatus === 'trial' || subscriptionStatus === 'app_trial' ? 'Free Trial'
               : subscriptionStatus === 'lifetime' ? 'License'
+              : subscriptionStatus === 'paid_through' ? 'Access'
               : subscriptionStatus === 'paused' ? 'Paused'
               : subscriptionStatus === 'cancelled' ? 'Cancelled'
               : 'Active';

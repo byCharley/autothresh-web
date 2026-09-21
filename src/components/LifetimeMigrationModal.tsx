@@ -22,8 +22,8 @@ export function isLifetimeMigrationAudience(
 ): boolean {
   const status = (subscriptionStatus ?? '').toLowerCase();
   if (status === 'creator') return true;
-  if (status !== 'active' && status !== 'paused' && status !== 'trial') return false;
-  return planLooksRecurring(planTitle);
+  if (status !== 'active' && status !== 'paused' && status !== 'trial' && status !== 'paid_through') return false;
+  return planLooksRecurring(planTitle) || status === 'paid_through';
 }
 
 export function shouldShowLifetimeMigration(
@@ -129,11 +129,12 @@ export function LifetimeMigrationModal({ onClose, planTitle, accessThrough }: Pr
           <p style={{ margin: '0 0 14px' }}>
             Your card will <span style={{ color: 'var(--text)', fontWeight: 600 }}>not be charged again</span>.
             {until
-              ? <> You keep full access through <span style={{ color: 'var(--text)', fontWeight: 600 }}>{until}</span>, then your subscription ends automatically.</>
-              : <> You keep access through the end of your current billing cycle, then your subscription ends automatically.</>}
+              ? <> You keep full access through <span style={{ color: 'var(--text)', fontWeight: 600 }}>{until}</span> — the end of the period you already paid for.</>
+              : <> You keep access through the end of the period you already paid for.</>}
+            {' '}Subscriptions are cancelled; nothing auto-renews.
           </p>
           <p style={{ margin: '0 0 14px' }}>
-            After that, you can buy a Lifetime license. Email me and I’ll send a special discount code that credits what you’ve already paid.
+            When that date hits, you can buy a Lifetime license. Email me and I’ll send a special discount code that credits what you’ve already paid.
           </p>
           <p style={{ margin: 0, fontSize: 12, color: 'var(--text-dim)' }}>
             Include the email on your account so I can match your payments.

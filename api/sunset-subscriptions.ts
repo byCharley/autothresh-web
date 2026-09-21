@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       ok: true,
       scanned: batch.scanned,
-      scheduled: batch.results.filter(r => r.action === 'scheduled').length,
+      scheduled: 0,
       cancelled_now: batch.results.filter(r => r.action === 'cancelled_now').length,
       skipped: batch.results.filter(r => r.action === 'skipped').length,
       failed: batch.results.filter(r => r.action === 'failed').length,
@@ -75,6 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       nextFilter: batch.nextFilter,
       nextPage: batch.nextPage,
       done: batch.done,
+      setupError: batch.setupError,
     });
   } catch (e) {
     console.error('[sunset-subscriptions] error', e);

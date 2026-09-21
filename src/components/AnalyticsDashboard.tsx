@@ -2098,15 +2098,15 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
   const [sunsetting, setSunsetting] = useState(false);
 
   async function runSunsetSubscriptions() {
-    if (!confirm('Stop all Monthly/Annual renewals now?\n\nThis skips upcoming charges and schedules cancel at each subscriber’s period end. Paused plans are cancelled immediately.')) return;
+    if (!confirm('Cancel ALL Monthly/Annual subscriptions in Seal now?\n\nThis stops every card charge immediately. Each user keeps app access until their current paid period ends (their old renewal date).')) return;
     setSunsetting(true);
     try {
       let filter: 'active' | 'paused' = 'active';
       let page = 1;
       let scanned = 0;
-      let scheduled = 0;
       let cancelledNow = 0;
       let failed = 0;
+      let skipped = 0;
       let rounds = 0;
 
       while (rounds < 80) {
@@ -2122,10 +2122,11 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
         const text = await r.text();
         let body: {
           error?: string;
+          setupError?: string;
           scanned?: number;
-          scheduled?: number;
           cancelled_now?: number;
           failed?: number;
+          skipped?: number;
           done?: boolean;
           hasMore?: boolean;
           nextFilter?: 'active' | 'paused' | null;
@@ -2135,17 +2136,16 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
           body = JSON.parse(text) as typeof body;
         } catch {
           throw new Error(
-            (text && text.trim().startsWith('{') === false)
-              ? `Server error (not JSON). Hard-refresh and try again. Details: ${text.slice(0, 140)}`
-              : (text.slice(0, 180) || `HTTP ${r.status}`),
+            `Server error (not JSON). Hard-refresh and try again. Details: ${text.slice(0, 160)}`,
           );
         }
         if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+        if (body.setupError) throw new Error(body.setupError);
 
         scanned += body.scanned ?? 0;
-        scheduled += body.scheduled ?? 0;
         cancelledNow += body.cancelled_now ?? 0;
         failed += body.failed ?? 0;
+        skipped += body.skipped ?? 0;
 
         if (body.done || !body.hasMore || !body.nextFilter || !body.nextPage) break;
         filter = body.nextFilter;
@@ -2153,10 +2153,10 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
       }
 
       alert(
-        `Sunset complete.\nScanned: ${scanned}\nScheduled cancel: ${scheduled}\nCancelled now: ${cancelledNow}\nFailed: ${failed}`,
+        `Done.\nScanned: ${scanned}\nCancelled now (no more charges): ${cancelledNow}\nSkipped: ${skipped}\nFailed: ${failed}\n\nUsers keep access until their paid period ends.`,
       );
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Sunset failed');
+      alert(e instanceof Error ? e.message : 'Cancel failed');
     } finally {
       setSunsetting(false);
     }
@@ -2627,9 +2627,9 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                     display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
                   }}
                 >
-                  <span>{sunsetting ? 'Stopping…' : 'Stop Renewals'}</span>
+                  <span>{sunsetting ? 'Cancelling…' : 'Cancel All Subs'}</span>
                   <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
-                    Schedule cancel · no charges
+                    Stop charges · keep access
                   </span>
                 </button>
               </div>

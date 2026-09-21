@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { sunsetSubscriptionsForEmail } from './_lib/sealSunset';
+import { getPlanAccess } from './_lib/planAccess';
 
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const TESTER_EMAILS = new Set(
@@ -418,6 +419,7 @@ async function sealCheckSubscription(email: string): Promise<SealCheck> {
           if (st === 'CANCELLED' || st === 'CANCELED') {
             subscriptionStatus = 'cancelled';
             planTitle = (s.plan_title ?? s.product_title ?? s.plan_name ?? sealItemPlan(s)) as string | undefined;
+            nextBillingDate = (s.next_billing_date ?? s.next_charge_scheduled_at ?? s.next_charge_at) as string | undefined;
             break;
           }
         }
@@ -451,8 +453,9 @@ function resolveMembership(opts: {
   ldtLifetime: boolean;
   ldtWebOrder: boolean;
   seal: SealCheck;
+  planAccess?: { accessUntil: string; planTitle?: string } | null;
 }): Membership {
-  const { isCreator, envTester, testerRecord, ldtLifetime, seal } = opts;
+  const { isCreator, envTester, testerRecord, ldtLifetime, seal, planAccess } = opts;
   const isTester = envTester || (!isCreator && testerRecord?.status === 'active' && testerRecord.role !== 'lifetime');
   const hasManualLifetime = !isCreator && testerRecord?.status === 'active' && testerRecord.role === 'lifetime';
   const liveSeal = seal.hasSub || seal.subscriptionStatus === 'paused';
@@ -471,6 +474,27 @@ function resolveMembership(opts: {
       hasLifetime: false,
     };
   }
+
+  // Cancelled in Seal, but still inside the paid period we saved (or Seal still reports a future date).
+  const paidThrough =
+    (planAccess?.accessUntil && new Date(planAccess.accessUntil).getTime() > Date.now()
+      ? planAccess.accessUntil
+      : undefined) ??
+    (seal.subscriptionStatus === 'cancelled' && seal.nextBillingDate && new Date(seal.nextBillingDate).getTime() > Date.now()
+      ? seal.nextBillingDate
+      : undefined);
+
+  if (paidThrough) {
+    return {
+      hasSubscription: true,
+      subscriptionStatus: 'paid_through',
+      planTitle: planAccess?.planTitle || seal.planTitle || 'Subscription',
+      subscriptionExpiresAt: paidThrough,
+      isTester,
+      hasLifetime: false,
+    };
+  }
+
   if (isTester) {
     return { hasSubscription: true, subscriptionStatus: 'tester', planTitle: 'Tester Access', isTester: true, hasLifetime: false };
   }
@@ -656,13 +680,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = CREATOR_EMAILS.has(emailLower);
 
   // ── Run all async checks in parallel ─────────────────────────────────────
-  const [sealResult, ldtLifetime, shopifyLifetime, testerRecord, securityResult, userPrefs] = await Promise.all([
+  const [sealResult, ldtLifetime, shopifyLifetime, testerRecord, securityResult, userPrefs, planAccess] = await Promise.all([
     sealCheckSubscription(email),
     (!isCreator) ? checkLdtLifetime(emailLower) : Promise.resolve({ lifetime: false, webOrder: false }),
     (!isCreator) ? checkShopifyLifetime(token) : Promise.resolve(false),
     (!isCreator) ? checkTesterStatus(emailLower) : Promise.resolve(null),
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
     getUserPrefs(emailLower),
+    (!isCreator) ? getPlanAccess(emailLower) : Promise.resolve(null),
   ]);
 
   const isSecurityExpired = securityResult;
@@ -674,6 +699,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ldtLifetime: ldtLifetime.lifetime || shopifyLifetime,
     ldtWebOrder: ldtLifetime.webOrder || shopifyLifetime,
     seal: sealResult,
+    planAccess,
   });
 
   const { hasSub, activeSubs } = sealResult;
