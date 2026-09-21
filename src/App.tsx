@@ -11,6 +11,7 @@ import { CanvasView } from './components/CanvasView';
 import { ControlPanel } from './components/ControlPanel';
 import type { ExportConfig } from './components/ExportModal';
 import { BetaNoticeModal, shouldShowBetaNotice } from './components/BetaNoticeModal';
+import { LifetimeMigrationModal, shouldShowLifetimeMigration } from './components/LifetimeMigrationModal';
 import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components/WhatsNewModal';
 import { LoginSplash } from './components/LoginSplash';
 
@@ -144,6 +145,7 @@ function App() {
   const [showEula, setShowEula]         = useState(false);
   const [showFaq, setShowFaq]           = useState(false);
   const [showBetaNotice, setShowBetaNotice] = useState(() => shouldShowBetaNotice());
+  const [showLifetimeMigration, setShowLifetimeMigration] = useState(false);
   const [showWhatsNew, setShowWhatsNew]   = useState(false);
   const [hasUpdates, setHasUpdates]       = useState(() => hasUnseenUpdates());
   const [showContact, setShowContact]     = useState(false);
@@ -166,6 +168,13 @@ function App() {
       sessionStorage.removeItem('at-pending-welcome');
     }
   }, [status]);
+
+  useEffect(() => {
+    if (status !== 'authenticated' || !session) return;
+    if (shouldShowLifetimeMigration(session.subscriptionStatus, session.planTitle)) {
+      setShowLifetimeMigration(true);
+    }
+  }, [status, session?.subscriptionStatus, session?.planTitle]);
 
   // Apply a pending update on next page load (user chose "update on next login").
   useEffect(() => {
@@ -1709,6 +1718,12 @@ function App() {
         {showVideo    && <TutorialsModal  onClose={() => setShowVideo(false)} />}
         {showSplash   && <LoginSplash firstName={session?.firstName} email={session?.email} onDone={() => setShowSplash(false)} />}
         {showAnalytics && session && <AnalyticsDashboard session={session} onClose={() => setShowAnalytics(false)} />}
+        {showLifetimeMigration && (
+          <LifetimeMigrationModal
+            planTitle={session?.planTitle}
+            onClose={() => setShowLifetimeMigration(false)}
+          />
+        )}
         {session && !isCreator && !isAppTrial && session.token && <ChatWidget session={session} />}
       </MobileLayout>
       </Suspense>
@@ -1846,6 +1861,12 @@ function App() {
       {showFaq      && <FaqModal      onClose={() => setShowFaq(false)}      />}
       {showEula     && <EulaModal     onClose={() => setShowEula(false)}     />}
       {showBetaNotice && <BetaNoticeModal onClose={() => setShowBetaNotice(false)} onContact={() => { setShowBetaNotice(false); setShowContact(true); }} />}
+      {showLifetimeMigration && (
+        <LifetimeMigrationModal
+          planTitle={session?.planTitle}
+          onClose={() => setShowLifetimeMigration(false)}
+        />
+      )}
       {showWhatsNew && <WhatsNewModal onClose={() => setShowWhatsNew(false)} onContact={() => { setShowWhatsNew(false); setShowContact(true); }} />}
       {showContact  && <ContactModal  onClose={() => setShowContact(false)}  />}
       {showTutorial && <TutorialOverlay onClose={() => setShowTutorial(false)} />}
