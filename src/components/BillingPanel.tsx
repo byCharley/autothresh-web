@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useCountdown } from '../hooks/useCountdown';
 
 interface Props {
   token?: string;
@@ -26,6 +27,8 @@ export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionSt
 
   const status = (subscriptionStatus ?? '').toLowerCase();
   const hidden = status === 'creator' || status === 'tester' || status === 'lifetime' || status === 'blocked';
+  const isTrial = status === 'trial';
+  const trialCountdown = useCountdown(nextBillingDate, isTrial && !hidden);
   if (hidden || !token) return null;
   const authToken = token;
 
@@ -74,7 +77,13 @@ export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionSt
           </div>
           <div style={{ fontSize: 11, ...mono, color: 'var(--text-muted)', lineHeight: 1.5 }}>
             {planTitle || 'Subscription'}
-            {accessUntil && !isPaused && !isCancelled ? ` · ${status === 'trial' ? 'Trial ends' : 'Renews'} ${accessUntil}` : ''}
+            {isTrial && trialCountdown ? (
+              <span style={{ color: '#a78bfa', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                {` · ${trialCountdown === 'Ended' ? 'Trial ended' : `Ends in ${trialCountdown}`}`}
+              </span>
+            ) : accessUntil && !isPaused && !isCancelled ? (
+              ` · Renews ${accessUntil}`
+            ) : ''}
             {isPaused ? ' · Paused' : ''}
             {isCancelled ? ' · Cancelled' : ''}
           </div>

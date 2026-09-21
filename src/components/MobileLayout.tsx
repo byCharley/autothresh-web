@@ -10,6 +10,7 @@ import { applyFabricBlend } from '../engine/fabricBlend';
 import { ManageSubscriptionPage } from './ManageSubscriptionPage';
 import { DeviceManager } from './DeviceManager';
 import { PRODUCT_URL, formatTrialLeft } from '../lib/product';
+import { useCountdown } from '../hooks/useCountdown';
 
 interface Session {
   token?: string;
@@ -59,6 +60,9 @@ export function MobileLayout({ onExport, onMockup, onLogout, onLogin, onAnalytic
   const [cmykDisclaimerNeverShow, setCmykDisclaimerNeverShow] = useState(false);
   const [showTextureDisclaimer, setShowTextureDisclaimer] = useState(false);
   const [textureDisclaimerNeverShow, setTextureDisclaimerNeverShow] = useState(false);
+
+  const isTrialStatus = session?.subscriptionStatus === 'trial' || session?.subscriptionStatus === 'app_trial';
+  const trialCountdown = useCountdown(session?.subscriptionExpiresAt, isTrialStatus);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -310,9 +314,11 @@ export function MobileLayout({ onExport, onMockup, onLogout, onLogin, onAnalytic
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', marginBottom: 3 }}>
                   {subStatus === 'app_trial' ? '3-day trial' : (session?.firstName || session?.email?.split('@')[0] || 'User')}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {subStatus === 'app_trial'
-                    ? (session?.subscriptionExpiresAt ? formatTrialLeft(session.subscriptionExpiresAt) : 'Try the full app')
+                <div style={{ fontSize: 10, color: subStatus === 'app_trial' || subStatus === 'trial' ? '#a78bfa' : 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontWeight: isTrialStatus ? 700 : 400, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {subStatus === 'app_trial' || subStatus === 'trial'
+                    ? (trialCountdown && trialCountdown !== 'Ended'
+                      ? `Ends in ${trialCountdown}`
+                      : (session?.subscriptionExpiresAt ? formatTrialLeft(session.subscriptionExpiresAt) : 'Try the full app'))
                     : session?.email}
                 </div>
               </div>

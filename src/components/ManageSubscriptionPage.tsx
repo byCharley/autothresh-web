@@ -6,6 +6,7 @@ import { EulaModal } from './EulaModal';
 import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 import { useAppVersion } from '../hooks/useAppVersion';
+import { useCountdown } from '../hooks/useCountdown';
 
 interface Props {
   onBack: () => void;
@@ -39,8 +40,13 @@ export function ManageSubscriptionPage({ onBack, token, planTitle, nextBillingDa
   const status = (subscriptionStatus ?? '').toLowerCase();
   const until = fmtDate(nextBillingDate);
   const meta = statusMeta(status);
-  const dateLine = until && status !== 'paused' && status !== 'cancelled' && status !== 'canceled'
-    ? `${status === 'trial' ? 'Trial ends' : 'Renews'} ${until}`
+  const trialCountdown = useCountdown(nextBillingDate, status === 'trial');
+  const dateLine = status === 'trial' && trialCountdown
+    ? (trialCountdown === 'Ended'
+      ? 'Trial ended'
+      : `Ends in ${trialCountdown}${until ? ` · Bills ${until} if not cancelled` : ''}`)
+    : until && status !== 'paused' && status !== 'cancelled' && status !== 'canceled'
+    ? `Renews ${until}`
     : status === 'paused'
       ? 'Billing is on hold — resume anytime'
       : status === 'cancelled' || status === 'canceled'
@@ -155,7 +161,13 @@ export function ManageSubscriptionPage({ onBack, token, planTitle, nextBillingDa
                 {planTitle || 'Subscription'}
               </div>
               {dateLine && (
-                <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 22 }}>
+                <div style={{
+                  fontSize: 12, fontFamily: 'var(--font-mono)',
+                  color: status === 'trial' ? '#a78bfa' : 'var(--text-muted)',
+                  fontWeight: status === 'trial' ? 700 : 400,
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1.5, marginBottom: 22,
+                }}>
                   {dateLine}
                 </div>
               )}

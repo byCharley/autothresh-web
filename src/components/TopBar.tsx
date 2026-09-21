@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { AppIcon } from './AppIcon';
 import { useAppVersion } from '../hooks/useAppVersion';
+import { useCountdown } from '../hooks/useCountdown';
 
 import { CHANGELOG, CHANGELOG_LATEST_DATE, markChangelogSeen } from './WhatsNewModal';
 import { ACCENTS, applyAccentByHex } from '../lib/accent';
@@ -51,6 +52,9 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
   const [showDevices, setShowDevices] = useState(false);
 
   useEffect(() => { if (accentColor) { applyAccentByHex(accentColor); setActiveAccent(accentColor); } }, [accentColor]);
+
+  const isTrial = subscriptionStatus === 'trial' || subscriptionStatus === 'app_trial';
+  const trialCountdown = useCountdown(subscriptionExpiresAt, isTrial);
 
   const daysRemaining = subscriptionExpiresAt
     ? Math.ceil((new Date(subscriptionExpiresAt).getTime() - Date.now()) / 86_400_000)
@@ -211,10 +215,11 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
       {subscriptionStatus === 'app_trial' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 6 }}>
           <span style={{
-            fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.06em',
+            fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.04em',
             textTransform: 'uppercase', color: '#111', background: '#a78bfa', padding: '3px 8px',
+            fontVariantNumeric: 'tabular-nums',
           }}>
-            Trial · {subscriptionExpiresAt ? formatTrialLeft(subscriptionExpiresAt) : '3 days'}
+            Trial · {trialCountdown && trialCountdown !== 'Ended' ? trialCountdown : (subscriptionExpiresAt ? formatTrialLeft(subscriptionExpiresAt) : '3 days')}
           </span>
           <a
             href={PRODUCT_URL}
@@ -259,8 +264,8 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
           >
             <span style={{
               width: 6, height: 6, borderRadius: '50%',
-              background: '#3ecf4f', flexShrink: 0,
-              boxShadow: '0 0 4px #3ecf4f88',
+              background: isTrial ? '#a78bfa' : '#3ecf4f', flexShrink: 0,
+              boxShadow: isTrial ? '0 0 4px #a78bfa88' : '0 0 4px #3ecf4f88',
             }} />
             <span style={{
               fontSize: 11, color: 'var(--text)',
@@ -268,6 +273,21 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
             }}>
               {displayName}
             </span>
+            {isTrial && trialCountdown && (
+              <span
+                title="Free trial time remaining"
+                style={{
+                  fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                  letterSpacing: '0.02em', color: '#a78bfa',
+                  background: 'color-mix(in srgb, #a78bfa 14%, transparent)',
+                  border: '1px solid color-mix(in srgb, #a78bfa 35%, transparent)',
+                  padding: '1px 6px', borderRadius: 2, flexShrink: 0,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {trialCountdown === 'Ended' ? 'Trial ended' : trialCountdown}
+              </span>
+            )}
             <svg
               width="10" height="10" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2.5"
@@ -382,11 +402,24 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                       </span>
                     )}
                   </div>
-                  {(nextBillingFormatted || (daysRemaining !== null && daysRemaining > 0)) && (
+                  {(nextBillingFormatted || (daysRemaining !== null && daysRemaining > 0) || (isTrial && trialCountdown)) && (
                     <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                      {subscriptionStatus === 'trial' || subscriptionStatus === 'app_trial' ? 'Trial ends' : subscriptionStatus === 'lifetime' ? 'Never expires' : 'Renews'}{subscriptionStatus !== 'lifetime' && nextBillingFormatted ? ` ${nextBillingFormatted}` : ''}
-                      {daysRemaining !== null && daysRemaining > 0 && (
-                        <span style={{ color: 'var(--text-muted)', marginLeft: 5 }}>· {daysRemaining}d left</span>
+                      {isTrial ? (
+                        <>
+                          <div style={{ color: '#a78bfa', fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 12, marginBottom: 3 }}>
+                            {trialCountdown === 'Ended' ? 'Trial ended' : `Ends in ${trialCountdown}`}
+                          </div>
+                          {nextBillingFormatted && subscriptionStatus !== 'app_trial' && (
+                            <div style={{ color: 'var(--text-muted)' }}>Bills {nextBillingFormatted} if not cancelled</div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {subscriptionStatus === 'lifetime' ? 'Never expires' : `Renews${nextBillingFormatted ? ` ${nextBillingFormatted}` : ''}`}
+                          {daysRemaining !== null && daysRemaining > 0 && (
+                            <span style={{ color: 'var(--text-muted)', marginLeft: 5 }}>· {daysRemaining}d left</span>
+                          )}
+                        </>
                       )}
                     </div>
                   )}
