@@ -5,12 +5,31 @@
 
 const SEAL_TOKEN   = process.env.SEAL_API_TOKEN ?? process.env.SEAL_TOKEN ?? '';
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
+const CONCURRENCY  = 5;
 
 export interface SunsetResult {
   id: number;
   email?: string;
   action: 'scheduled' | 'cancelled_now' | 'skipped' | 'failed';
   detail?: string;
+}
+
+export interface SunsetBatchOptions {
+  /** active | paused */
+  filter?: 'active' | 'paused';
+  page?: number;
+  perPage?: number;
+}
+
+export interface SunsetBatchResult {
+  scanned: number;
+  results: SunsetResult[];
+  filter: 'active' | 'paused';
+  page: number;
+  hasMore: boolean;
+  nextFilter: 'active' | 'paused' | null;
+  nextPage: number | null;
+  done: boolean;
 }
 
 function sealHeaders() {
@@ -109,26 +128,33 @@ function alreadySunsetMarked(s: Record<string, unknown>): boolean {
   });
 }
 
-async function skipFutureBillingAttempts(subscriptionId: number, s: Record<string, unknown>): Promise<number> {
+async function skipNextBillingAttempt(subscriptionId: number, s: Record<string, unknown>): Promise<boolean> {
   const attempts = Array.isArray(s.billing_attempts) ? s.billing_attempts as Array<Record<string, unknown>> : [];
   const now = Date.now();
-  let skipped = 0;
-  for (const a of attempts) {
-    const id = Number(a.id);
-    if (!id) continue;
-    const st = String(a.status ?? '').toLowerCase();
-    if (st === 'completed' || st === 'success' || st === 'skipped' || a.completed_at) continue;
-    const when = parseWhen(a.date);
-    if (when && when.getTime() < now - 60_000) continue;
-    const r = await fetch(`${SEAL_API_URL}/subscription-billing-attempt`, {
-      method: 'PUT',
-      headers: sealHeaders(),
-      body: JSON.stringify({ id, subscription_id: subscriptionId, action: 'skip' }),
-    });
-    if (r.ok) skipped++;
-    else console.error('[sunset] skip attempt failed', subscriptionId, id, r.status, await r.text().catch(() => ''));
+  const upcoming = attempts
+    .map(a => ({ a, when: parseWhen(a.date) }))
+    .filter(({ a, when }) => {
+      const st = String(a.status ?? '').toLowerCase();
+      if (st === 'completed' || st === 'success' || st === 'skipped' || a.completed_at) return false;
+      return !!when && when.getTime() > now - 60_000;
+    })
+    .sort((x, y) => (x.when!.getTime() - y.when!.getTime()));
+
+  const next = upcoming[0];
+  if (!next) return false;
+  const id = Number(next.a.id);
+  if (!id) return false;
+
+  const r = await fetch(`${SEAL_API_URL}/subscription-billing-attempt`, {
+    method: 'PUT',
+    headers: sealHeaders(),
+    body: JSON.stringify({ id, subscription_id: subscriptionId, action: 'skip' }),
+  });
+  if (!r.ok) {
+    console.error('[sunset] skip attempt failed', subscriptionId, id, r.status, await r.text().catch(() => ''));
+    return false;
   }
-  return skipped;
+  return true;
 }
 
 async function scheduleCancellation(subscriptionId: number, when: Date): Promise<boolean> {
@@ -170,21 +196,18 @@ async function cancelNow(subscriptionId: number): Promise<boolean> {
   return true;
 }
 
-async function tagSunsetNote(subscriptionId: number, existingNote: unknown): Promise<void> {
-  const prev = String(existingNote ?? '').trim();
-  if (prev.toLowerCase().includes('autothresh-sunset')) return;
-  const note = prev
-    ? `${prev}\n[autothresh-sunset] No further renewals — cancel at period end.`
-    : '[autothresh-sunset] No further renewals — cancel at period end.';
-  try {
-    await fetch(`${SEAL_API_URL}/subscription`, {
-      method: 'PUT',
-      headers: sealHeaders(),
-      body: JSON.stringify({ id: subscriptionId, action: 'edit', note }),
-    });
-  } catch {
-    /* note is best-effort */
+async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const i = cursor++;
+      out[i] = await fn(items[i]);
+    }
   }
+  const n = Math.min(concurrency, Math.max(1, items.length));
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return out;
 }
 
 /** Stop renewals for one Seal subscription. Keeps access until period end when possible. */
@@ -210,7 +233,10 @@ export async function sunsetSubscription(s: Record<string, unknown>): Promise<Su
     return { id, email, action: 'skipped', detail: `status ${st}` };
   }
 
-  await skipFutureBillingAttempts(id, s);
+  if (alreadySunsetMarked(s)) {
+    await skipNextBillingAttempt(id, s);
+    return { id, email, action: 'scheduled', detail: 'already marked' };
+  }
 
   const when = nextBillingDate(s);
   if (!when) {
@@ -218,18 +244,16 @@ export async function sunsetSubscription(s: Record<string, unknown>): Promise<Su
     return { id, email, action: ok ? 'cancelled_now' : 'failed', detail: 'no next billing date' };
   }
 
-  // If renewal is imminent (under 2 hours), cancel now after skipping attempts.
+  // If renewal is imminent (under 2 hours), cancel now after skipping the next attempt.
   if (when.getTime() - Date.now() < 2 * 60 * 60 * 1000) {
+    await skipNextBillingAttempt(id, s);
     const ok = await cancelNow(id);
     return { id, email, action: ok ? 'cancelled_now' : 'failed', detail: 'imminent renewal' };
   }
 
-  if (alreadySunsetMarked(s)) {
-    return { id, email, action: 'scheduled', detail: 'already marked' };
-  }
-
+  // Skip next charge first, then schedule cancel — two Seal calls max per sub.
+  await skipNextBillingAttempt(id, s);
   const scheduled = await scheduleCancellation(id, when);
-  if (scheduled) await tagSunsetNote(id, s.note);
   return {
     id,
     email,
@@ -250,45 +274,87 @@ export async function sunsetSubscriptionsForEmail(email: string): Promise<Sunset
       console.error('[sunset] list by email failed', r.status, await r.text().catch(() => ''));
       return [];
     }
-    const subs = parseSealSubs(await r.json());
-    const results: SunsetResult[] = [];
-    for (const s of subs) {
-      if (!isRecurringPlan(s)) continue;
-      results.push(await sunsetSubscription(s));
-    }
-    return results;
+    const subs = parseSealSubs(await r.json()).filter(isRecurringPlan);
+    return mapPool(subs, CONCURRENCY, sunsetSubscription);
   } catch (e) {
     console.error('[sunset] email error', e);
     return [];
   }
 }
 
-/** Batch sunset all active/paused Seal subscriptions (cron). */
+/** Process one page of active or paused subscriptions (keeps under Vercel timeouts). */
+export async function sunsetSubscriptionBatch(opts: SunsetBatchOptions = {}): Promise<SunsetBatchResult> {
+  const filter = opts.filter ?? 'active';
+  const page = Math.max(1, opts.page ?? 1);
+  const perPage = Math.min(50, Math.max(10, opts.perPage ?? 25));
+
+  if (!SEAL_TOKEN) {
+    return {
+      scanned: 0, results: [], filter, page,
+      hasMore: false, nextFilter: null, nextPage: null, done: true,
+    };
+  }
+
+  const qs = filter === 'paused' ? 'paused-only=true' : 'active-only=true';
+  const url = `${SEAL_API_URL}/subscriptions?${qs}&with-items=true&with-billing-attempts=true&page=${page}&per_page=${perPage}`;
+  const r = await fetch(url, { headers: sealHeaders() });
+  if (!r.ok) {
+    console.error('[sunset] list failed', filter, page, r.status, await r.text().catch(() => ''));
+    throw new Error(`Seal list failed (${r.status})`);
+  }
+
+  const subs = parseSealSubs(await r.json());
+  const targets = subs.filter(isRecurringPlan);
+  const results = await mapPool(targets, CONCURRENCY, sunsetSubscription);
+
+  const pageFull = subs.length >= perPage;
+  let nextFilter: 'active' | 'paused' | null = null;
+  let nextPage: number | null = null;
+  let hasMore = false;
+  let done = true;
+
+  if (pageFull) {
+    hasMore = true;
+    done = false;
+    nextFilter = filter;
+    nextPage = page + 1;
+  } else if (filter === 'active') {
+    hasMore = true;
+    done = false;
+    nextFilter = 'paused';
+    nextPage = 1;
+  }
+
+  return {
+    scanned: subs.length,
+    results,
+    filter,
+    page,
+    hasMore,
+    nextFilter,
+    nextPage,
+    done,
+  };
+}
+
+/** Batch sunset all active/paused Seal subscriptions (cron — page through until done). */
 export async function sunsetAllRecurringSubscriptions(): Promise<{
   scanned: number;
   results: SunsetResult[];
 }> {
-  if (!SEAL_TOKEN) return { scanned: 0, results: [] };
   const results: SunsetResult[] = [];
   let scanned = 0;
+  let filter: 'active' | 'paused' = 'active';
+  let page = 1;
 
-  for (const filter of ['active-only=true', 'paused-only=true'] as const) {
-    for (let page = 1; page <= 40; page++) {
-      const url = `${SEAL_API_URL}/subscriptions?${filter}&with-items=true&with-billing-attempts=true&page=${page}&per_page=50`;
-      const r = await fetch(url, { headers: sealHeaders() });
-      if (!r.ok) {
-        console.error('[sunset] list failed', filter, page, r.status);
-        break;
-      }
-      const subs = parseSealSubs(await r.json());
-      if (!subs.length) break;
-      for (const s of subs) {
-        scanned++;
-        if (!isRecurringPlan(s)) continue;
-        results.push(await sunsetSubscription(s));
-      }
-      if (subs.length < 50) break;
-    }
+  // Hard cap pages so a stuck Seal API cannot run forever in one cron tick.
+  for (let i = 0; i < 80; i++) {
+    const batch = await sunsetSubscriptionBatch({ filter, page, perPage: 25 });
+    scanned += batch.scanned;
+    results.push(...batch.results);
+    if (batch.done || !batch.nextFilter || !batch.nextPage) break;
+    filter = batch.nextFilter;
+    page = batch.nextPage;
   }
 
   return { scanned, results };

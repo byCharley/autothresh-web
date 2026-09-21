@@ -2101,20 +2101,55 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     if (!confirm('Stop all Monthly/Annual renewals now?\n\nThis skips upcoming charges and schedules cancel at each subscriber’s period end. Paused plans are cancelled immediately.')) return;
     setSunsetting(true);
     try {
-      const r = await fetch('/api/sunset-subscriptions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.token}` },
-      });
-      const body = await r.json() as {
-        error?: string;
-        scanned?: number;
-        scheduled?: number;
-        cancelled_now?: number;
-        failed?: number;
-      };
-      if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+      let filter: 'active' | 'paused' = 'active';
+      let page = 1;
+      let scanned = 0;
+      let scheduled = 0;
+      let cancelledNow = 0;
+      let failed = 0;
+      let rounds = 0;
+
+      while (rounds < 80) {
+        rounds++;
+        const r = await fetch('/api/sunset-subscriptions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ filter, page, perPage: 25 }),
+        });
+        const text = await r.text();
+        let body: {
+          error?: string;
+          scanned?: number;
+          scheduled?: number;
+          cancelled_now?: number;
+          failed?: number;
+          done?: boolean;
+          hasMore?: boolean;
+          nextFilter?: 'active' | 'paused' | null;
+          nextPage?: number | null;
+        };
+        try {
+          body = JSON.parse(text) as typeof body;
+        } catch {
+          throw new Error(text.slice(0, 180) || `HTTP ${r.status}`);
+        }
+        if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+
+        scanned += body.scanned ?? 0;
+        scheduled += body.scheduled ?? 0;
+        cancelledNow += body.cancelled_now ?? 0;
+        failed += body.failed ?? 0;
+
+        if (body.done || !body.hasMore || !body.nextFilter || !body.nextPage) break;
+        filter = body.nextFilter;
+        page = body.nextPage;
+      }
+
       alert(
-        `Sunset complete.\nScanned: ${body.scanned ?? 0}\nScheduled cancel: ${body.scheduled ?? 0}\nCancelled now: ${body.cancelled_now ?? 0}\nFailed: ${body.failed ?? 0}`,
+        `Sunset complete.\nScanned: ${scanned}\nScheduled cancel: ${scheduled}\nCancelled now: ${cancelledNow}\nFailed: ${failed}`,
       );
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Sunset failed');

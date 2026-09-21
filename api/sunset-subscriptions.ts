@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sunsetAllRecurringSubscriptions } from './_lib/sealSunset';
+import { sunsetSubscriptionBatch } from './_lib/sealSunset';
+
+export const config = { maxDuration: 60 };
 
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
@@ -39,27 +41,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = !isCron && await verifyCreator(token);
   if (!isCron && !isCreator) return res.status(401).json({ error: 'Unauthorized' });
 
+  const body = (typeof req.body === 'object' && req.body) ? req.body as Record<string, unknown> : {};
+  const q = req.query;
+  const filterRaw = String(body.filter ?? q.filter ?? 'active');
+  const filter = filterRaw === 'paused' ? 'paused' as const : 'active' as const;
+  const page = Math.max(1, parseInt(String(body.page ?? q.page ?? '1'), 10) || 1);
+  const perPage = Math.min(50, Math.max(10, parseInt(String(body.perPage ?? q.perPage ?? '25'), 10) || 25));
+
   try {
-    const { scanned, results } = await sunsetAllRecurringSubscriptions();
-    const summary = {
+    const batch = await sunsetSubscriptionBatch({ filter, page, perPage });
+    return res.status(200).json({
       ok: true,
-      scanned,
-      scheduled: results.filter(r => r.action === 'scheduled').length,
-      cancelled_now: results.filter(r => r.action === 'cancelled_now').length,
-      skipped: results.filter(r => r.action === 'skipped').length,
-      failed: results.filter(r => r.action === 'failed').length,
-      results,
-    };
-    console.log('[sunset-subscriptions]', JSON.stringify({
-      scanned: summary.scanned,
-      scheduled: summary.scheduled,
-      cancelled_now: summary.cancelled_now,
-      skipped: summary.skipped,
-      failed: summary.failed,
-    }));
-    return res.status(200).json(summary);
+      scanned: batch.scanned,
+      scheduled: batch.results.filter(r => r.action === 'scheduled').length,
+      cancelled_now: batch.results.filter(r => r.action === 'cancelled_now').length,
+      skipped: batch.results.filter(r => r.action === 'skipped').length,
+      failed: batch.results.filter(r => r.action === 'failed').length,
+      filter: batch.filter,
+      page: batch.page,
+      hasMore: batch.hasMore,
+      nextFilter: batch.nextFilter,
+      nextPage: batch.nextPage,
+      done: batch.done,
+      results: batch.results,
+    });
   } catch (e) {
     console.error('[sunset-subscriptions] error', e);
-    return res.status(500).json({ error: 'Failed to sunset subscriptions' });
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Failed to sunset subscriptions',
+    });
   }
 }
