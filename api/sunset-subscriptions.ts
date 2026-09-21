@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sunsetSubscriptionBatch } from './_lib/sealSunset';
+import { cancelExportBatch, loadActiveSubscriptionExport } from './_lib/cancelFromExport';
 
-// Keep under common Vercel limits (hobby ~10s). Client loops pages.
+// Small batches — one Seal cancel + one Supabase write per row.
 export const config = { maxDuration: 30 };
 
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
@@ -53,35 +53,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const isCreator = !isCron && await verifyCreator(token);
     if (!isCron && !isCreator) return res.status(401).json({ error: 'Unauthorized' });
 
-    const body = readBody(req);
-    const q = req.query;
-    const filterRaw = String(body.filter ?? q.filter ?? 'active');
-    const filter = filterRaw === 'paused' ? 'paused' as const : 'active' as const;
-    const page = Math.max(1, parseInt(String(body.page ?? q.page ?? '1'), 10) || 1);
-    // Small pages so each invocation stays under ~10s serverless timeouts.
-    const perPage = Math.min(15, Math.max(5, parseInt(String(body.perPage ?? q.perPage ?? '8'), 10) || 8));
+    // Preview: how many rows the export has loaded.
+    if (req.method === 'GET' || req.query.preview === '1') {
+      const rows = loadActiveSubscriptionExport();
+      return res.status(200).json({
+        ok: true,
+        total: rows.length,
+        sample: rows.slice(0, 3).map(r => ({
+          id: r.id,
+          email: r.email,
+          nextBillingDate: r.nextBillingDate,
+          planTitle: r.planTitle,
+        })),
+      });
+    }
 
-    const batch = await sunsetSubscriptionBatch({ filter, page, perPage });
+    const body = readBody(req);
+    const offset = Math.max(0, parseInt(String(body.offset ?? req.query.offset ?? '0'), 10) || 0);
+    const limit = Math.min(15, Math.max(1, parseInt(String(body.limit ?? req.query.limit ?? '6'), 10) || 6));
+
+    const batch = await cancelExportBatch({ offset, limit });
+    if (batch.setupError) {
+      return res.status(500).json({ error: batch.setupError, setupError: batch.setupError });
+    }
+
     return res.status(200).json({
       ok: true,
-      scanned: batch.scanned,
-      scheduled: 0,
+      total: batch.total,
+      offset: batch.offset,
+      processed: batch.processed,
       cancelled_now: batch.results.filter(r => r.action === 'cancelled_now').length,
       skipped: batch.results.filter(r => r.action === 'skipped').length,
       failed: batch.results.filter(r => r.action === 'failed').length,
-      filter: batch.filter,
-      page: batch.page,
-      hasMore: batch.hasMore,
-      nextFilter: batch.nextFilter,
-      nextPage: batch.nextPage,
       done: batch.done,
-      setupError: batch.setupError,
+      nextOffset: batch.nextOffset,
+      results: batch.results,
     });
   } catch (e) {
     console.error('[sunset-subscriptions] error', e);
-    // Always JSON — never plain-text platform messages for the UI parser.
     return res.status(500).json({
-      error: e instanceof Error ? e.message : 'Failed to sunset subscriptions',
+      error: e instanceof Error ? e.message : 'Failed to cancel subscriptions',
     });
   }
 }

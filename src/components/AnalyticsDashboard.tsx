@@ -2098,18 +2098,17 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
   const [sunsetting, setSunsetting] = useState(false);
 
   async function runSunsetSubscriptions() {
-    if (!confirm('Cancel ALL Monthly/Annual subscriptions in Seal now?\n\nThis stops every card charge immediately. Each user keeps app access until their current paid period ends (their old renewal date).')) return;
+    if (!confirm('Cancel ALL exported Monthly/Annual subscriptions in Seal now?\n\nUses your Seal CSV (exact IDs + renewal dates).\n• Stops every card charge immediately\n• Keeps each user in the app until their next_billing_date\n\nCreate the plan_access table in Supabase first if you have not already.')) return;
     setSunsetting(true);
     try {
-      let filter: 'active' | 'paused' = 'active';
-      let page = 1;
-      let scanned = 0;
+      let offset = 0;
+      let total = 0;
       let cancelledNow = 0;
       let failed = 0;
       let skipped = 0;
       let rounds = 0;
 
-      while (rounds < 80) {
+      while (rounds < 200) {
         rounds++;
         const r = await fetch('/api/sunset-subscriptions', {
           method: 'POST',
@@ -2117,43 +2116,39 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
             Authorization: `Bearer ${session.token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ filter, page, perPage: 8 }),
+          body: JSON.stringify({ offset, limit: 6 }),
         });
         const text = await r.text();
         let body: {
           error?: string;
           setupError?: string;
-          scanned?: number;
+          total?: number;
+          processed?: number;
           cancelled_now?: number;
           failed?: number;
           skipped?: number;
           done?: boolean;
-          hasMore?: boolean;
-          nextFilter?: 'active' | 'paused' | null;
-          nextPage?: number | null;
+          nextOffset?: number | null;
         };
         try {
           body = JSON.parse(text) as typeof body;
         } catch {
-          throw new Error(
-            `Server error (not JSON). Hard-refresh and try again. Details: ${text.slice(0, 160)}`,
-          );
+          throw new Error(`Server error (not JSON). Hard-refresh and try again. Details: ${text.slice(0, 160)}`);
         }
-        if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+        if (!r.ok) throw new Error(body.setupError || body.error || `HTTP ${r.status}`);
         if (body.setupError) throw new Error(body.setupError);
 
-        scanned += body.scanned ?? 0;
+        total = body.total ?? total;
         cancelledNow += body.cancelled_now ?? 0;
         failed += body.failed ?? 0;
         skipped += body.skipped ?? 0;
 
-        if (body.done || !body.hasMore || !body.nextFilter || !body.nextPage) break;
-        filter = body.nextFilter;
-        page = body.nextPage;
+        if (body.done || body.nextOffset == null) break;
+        offset = body.nextOffset;
       }
 
       alert(
-        `Done.\nScanned: ${scanned}\nCancelled now (no more charges): ${cancelledNow}\nSkipped: ${skipped}\nFailed: ${failed}\n\nUsers keep access until their paid period ends.`,
+        `Done.\nIn export: ${total}\nCancelled now (no more charges): ${cancelledNow}\nSkipped: ${skipped}\nFailed: ${failed}\n\nUsers keep access until their paid period ends.`,
       );
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Cancel failed');
