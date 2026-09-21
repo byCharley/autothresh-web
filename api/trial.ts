@@ -48,6 +48,13 @@ function hashIdent(value: string): string {
   return createHash('sha256').update(`${SECRET}|${value}`).digest('hex');
 }
 
+function normalizeEmail(raw: string): string | null {
+  const email = raw.trim().toLowerCase();
+  if (!email || email.length > 254) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
+}
+
 function cookieId(req: VercelRequest): string {
   const raw = String(req.headers.cookie ?? '');
   const m = /(?:^|;\s*)at_tid=([0-9a-f-]{36})/i.exec(raw);
@@ -74,8 +81,9 @@ async function sb(path: string, method = 'GET', body?: unknown) {
 
 function pickTrial(trials: TrialRow[]): TrialRow {
   const now = Date.now();
-  const expired = trials.filter(t => Date.parse(t.expires_at) <= now);
-  const pool = expired.length ? expired : trials;
+  // Prefer an active trial; otherwise the earliest started (so we never "restart").
+  const active = trials.filter(t => Date.parse(t.expires_at) > now);
+  const pool = active.length ? active : trials;
   return pool.sort((a, b) => Date.parse(a.started_at) - Date.parse(b.started_at))[0];
 }
 
@@ -116,9 +124,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!SUPABASE_URL || !SERVICE_KEY) return res.status(500).json({ error: 'Trial is not configured.' });
 
-  const body = (req.body ?? {}) as { deviceId?: string; fingerprint?: string };
+  const body = (req.body ?? {}) as { deviceId?: string; fingerprint?: string; email?: string };
   const deviceId = String(body.deviceId ?? '').trim().slice(0, 80);
   const fingerprint = String(body.fingerprint ?? '').trim().toLowerCase();
+  const email = normalizeEmail(String(body.email ?? ''));
   if (fingerprint && !/^[a-f0-9]{16,64}$/.test(fingerprint)) {
     return res.status(400).json({ error: 'Invalid fingerprint.' });
   }
@@ -128,6 +137,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (tid) idents.push({ kind: 'cookie', value: tid });
   if (deviceId && deviceId !== 'unknown-device') idents.push({ kind: 'device', value: hashIdent(deviceId) });
   if (fingerprint) idents.push({ kind: 'fp', value: fingerprint });
+  // Email lock (works across VPN / phones). Stored as an fp-ident so we do not
+  // need a DB schema change on existing installs.
+  if (email) idents.push({ kind: 'fp', value: hashIdent(`email:${email}`) });
   const ip = clientIp(req);
   idents.push(...ipIdents(ip));
   if (!idents.length) return res.status(400).json({ error: 'Could not start trial.' });
@@ -138,6 +150,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const existing = await findTrials(idents);
     if (!existing.length) {
       if (lookupOnly) return res.status(200).json({ status: 'none' });
+      // New trials must be tied to an email so phones/VPNs cannot mint extras.
+      if (!email) {
+        return res.status(400).json({ error: 'Enter your email to start the free trial.', needEmail: true });
+      }
       const expiresAt = new Date(Date.now() + TRIAL_MS).toISOString();
       const created = await sb('app_trials', 'POST', { expires_at: expiresAt });
       if (!created.ok) {
@@ -158,7 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const trial = pickTrial(existing);
-    // Link this device and the home network to the trial that already exists.
+    // Link this device / email / network to the trial that already exists.
     // Never insert a second trial.
     const cookieIdent: Ident = { kind: 'cookie', value: trial.id };
     await attachIdents(trial.id, [...idents.filter(i => i.kind !== 'cookie'), cookieIdent]);

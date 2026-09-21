@@ -49,7 +49,7 @@ interface Props {
   onLogin: () => void;
   onSwitchAccount?: () => void;
   onActivateLicense?: (licenseKey: string, orderNumber: string) => Promise<{ ok: boolean; error?: string }>;
-  onStartTrial?: () => Promise<boolean>;
+  onStartTrial?: (email?: string) => Promise<boolean>;
 }
 
 export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStartTrial }: Props) {
@@ -65,6 +65,9 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
   const [showInfo, setShowInfo]         = useState(false);
   const [trialBusy, setTrialBusy] = useState(false);
   const [trialError, setTrialError] = useState('');
+  const [trialEmail, setTrialEmail] = useState(() => {
+    try { return localStorage.getItem('at_trial_email') ?? ''; } catch { return ''; }
+  });
   const [trialPhase, setTrialPhase] = useState<'unknown' | 'none' | 'started'>(() => {
     try { return localStorage.getItem('at_trial_started') === '1' ? 'started' : 'unknown'; } catch { return 'unknown'; }
   });
@@ -74,11 +77,18 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
     (async () => {
       try {
         const fingerprint = await getBrowserFingerprint();
+        const savedEmail = (() => {
+          try { return localStorage.getItem('at_trial_email') ?? ''; } catch { return ''; }
+        })();
         const r = await fetch('/api/trial?action=status', {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceId: getDeviceId(), fingerprint }),
+          body: JSON.stringify({
+            deviceId: getDeviceId(),
+            fingerprint,
+            ...(savedEmail ? { email: savedEmail } : {}),
+          }),
         });
         if (!r.ok || cancel) return;
         const data = await r.json() as { status?: string };
@@ -199,20 +209,42 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
             {licenseError && <div className="login-error">{licenseError}</div>}
 
             <div className="login-ctas">
+              {(trialPhase === 'none' || trialPhase === 'started') && (
+                <input
+                  className="login-input"
+                  type="email"
+                  autoComplete="email"
+                  value={trialEmail}
+                  onChange={e => setTrialEmail(e.target.value)}
+                  placeholder={trialPhase === 'started' ? 'Email (keeps trial across devices)' : 'Email for free trial'}
+                />
+              )}
               <button
                 type="button"
                 className="login-cta login-cta-try"
-                disabled={trialBusy || trialPhase === 'unknown'}
+                disabled={trialBusy || trialPhase === 'unknown' || (trialPhase === 'none' && !trialEmail.trim().includes('@'))}
                 onClick={async () => {
                   if (!onStartTrial || trialBusy) return;
+                  const email = trialEmail.trim().toLowerCase();
+                  if (trialPhase === 'none' && (!email || !email.includes('@'))) {
+                    setTrialError('Enter your email to start the free trial.');
+                    return;
+                  }
                   setTrialBusy(true);
                   setTrialError('');
-                  const ok = await onStartTrial();
+                  const ok = await onStartTrial(email || undefined);
                   if (ok) {
-                    try { localStorage.setItem('at_trial_started', '1'); } catch { /* ignore */ }
+                    try {
+                      localStorage.setItem('at_trial_started', '1');
+                      if (email) localStorage.setItem('at_trial_email', email);
+                    } catch { /* ignore */ }
                     setTrialPhase('started');
                   } else {
-                    setTrialError('Could not start your trial. Try again, or sign in if you already have access.');
+                    setTrialError(
+                      trialPhase === 'none'
+                        ? 'Could not start your trial. Try again, or sign in if you already have access.'
+                        : 'Could not continue this trial. Check the email, or sign in if you already have access.',
+                    );
                   }
                   setTrialBusy(false);
                 }}

@@ -91,17 +91,29 @@ function trialSession(expiresAt: string): Session {
 
 type TrialClaim = { kind: 'login' } | { kind: 'unavailable' } | { kind: 'active'; expiresAt: string } | { kind: 'ended' };
 
-async function claimAnonymousTrial(): Promise<TrialClaim> {
+async function claimAnonymousTrial(email?: string): Promise<TrialClaim> {
   try {
     const fingerprint = await getBrowserFingerprint();
     const r = await fetch('/api/trial', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({ deviceId: getDeviceId(), fingerprint }),
+      body: JSON.stringify({
+        deviceId: getDeviceId(),
+        fingerprint,
+        ...(email ? { email } : {}),
+      }),
     });
-    if (!r.ok) return { kind: 'unavailable' };
-    const data = await r.json() as { status?: string; expiresAt?: string };
+    const data = await r.json().catch(() => ({})) as {
+      status?: string;
+      expiresAt?: string;
+      error?: string;
+      needEmail?: boolean;
+    };
+    if (!r.ok) {
+      if (data.needEmail) return { kind: 'unavailable' };
+      return { kind: 'unavailable' };
+    }
     if (data.status === 'active' && data.expiresAt) return { kind: 'active', expiresAt: data.expiresAt };
     return { kind: 'ended' };
   } catch {
@@ -428,8 +440,8 @@ export function useAuth() {
     setStatus('unauthenticated');
   }, []);
 
-  const startTrial = useCallback(async (): Promise<boolean> => {
-    const claim = await claimAnonymousTrial();
+  const startTrial = useCallback(async (email?: string): Promise<boolean> => {
+    const claim = await claimAnonymousTrial(email);
     applyTrialClaim(claim, setSession, setStatus);
     return claim.kind === 'active' || claim.kind === 'ended';
   }, []);
