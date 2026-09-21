@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, timingSafeEqual } from 'crypto';
+import { sunsetSubscriptionsForEmail } from './lib/sealSunset';
 
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const TESTER_EMAILS = new Set(
@@ -683,6 +684,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const finalExpiry = membership.subscriptionExpiresAt;
 
   console.log('Verify result:', { email, hasSub, sealLifetime: sealResult.hasLifetime, everInSeal: sealResult.everInSeal, isCreator, isTester, testerRecord, ldtLifetime: ldtLifetime.lifetime, ldtWebOrder: ldtLifetime.webOrder, shopifyLifetime, finalHasSub, finalStatus, planTitle: finalPlan, nextBillingDate: finalExpiry });
+
+  // Stop Monthly/Annual auto-renew on login (keeps access until period end).
+  if (!isCreator && (finalStatus === 'active' || finalStatus === 'trial' || finalStatus === 'paused')) {
+    void sunsetSubscriptionsForEmail(emailLower)
+      .then(rows => { if (rows.length) console.log('[verify sunset]', emailLower, rows); })
+      .catch(err => console.error('[verify sunset] error', err));
+  }
 
   // ── Log analytics + security events (fire-and-forget) ────────────────────
   const country = String(req.headers['x-vercel-ip-country'] ?? req.headers['x-vercel-ip-country-region'] ?? '');

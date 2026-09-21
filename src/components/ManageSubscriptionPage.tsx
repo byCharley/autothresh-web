@@ -47,7 +47,7 @@ export function ManageSubscriptionPage({ onBack, token, planTitle, nextBillingDa
       ? 'Trial ended'
       : `Ends in ${trialCountdown}${until ? ` · Bills ${until} if not cancelled` : ''}`)
     : until && status !== 'paused' && status !== 'cancelled' && status !== 'canceled'
-    ? `Renews ${until}`
+    ? `Access through ${until} · will not renew`
     : status === 'paused'
       ? 'Billing is on hold — resume anytime'
       : status === 'cancelled' || status === 'canceled'

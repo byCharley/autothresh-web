@@ -186,7 +186,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const action = String((req.body as { action?: string })?.action ?? '');
-  if (!['pause', 'resume', 'cancel'].includes(action)) {
+  if (action === 'pause' || action === 'resume') {
+    return res.status(400).json({
+      error: 'Subscriptions are ending and can no longer be paused or resumed. Your plan will not renew.',
+    });
+  }
+  if (action !== 'cancel') {
     return res.status(400).json({ error: 'Unknown action' });
   }
 
@@ -204,16 +209,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ ok: true, status: 'cancelled' });
   }
 
-  const sealAction = action === 'pause' ? 'pause' : 'resume';
-  const r = await fetch(`${SEAL_API_URL}/subscription`, {
-    method: 'PUT',
-    headers: sealHeaders(),
-    body: JSON.stringify({ id: sub.id, action: sealAction }),
-  });
-  if (!r.ok) {
-    const err = await r.text();
-    console.error('Seal subscription action failed:', sealAction, r.status, err);
-    return res.status(500).json({ error: action === 'pause' ? 'Could not pause your subscription.' : 'Could not resume your subscription.' });
-  }
-  return res.status(200).json({ ok: true, status: action === 'pause' ? 'paused' : 'active' });
+  return res.status(400).json({ error: 'Unknown action' });
 }

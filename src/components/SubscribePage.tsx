@@ -347,7 +347,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
               </svg>
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.01em' }}>
-              Subscription paused
+              Subscription ending
             </div>
             {email && (
               <div style={{
@@ -361,7 +361,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
               </div>
             )}
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 20 }}>
-              Billing is on hold and this account does not have access right now. Resume whenever you are ready — you will not be charged while paused.
+              We’re moving to Lifetime (pay once). Paused subscriptions are being closed and will not renew or charge your card. Email autothreshweb@gmail.com for a discount that credits what you already paid.
             </div>
             {token && (
               <div style={{ textAlign: 'left', marginBottom: 20 }}>

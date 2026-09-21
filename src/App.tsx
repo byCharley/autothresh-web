@@ -1721,6 +1721,7 @@ function App() {
         {showLifetimeMigration && (
           <LifetimeMigrationModal
             planTitle={session?.planTitle}
+            accessThrough={session?.subscriptionExpiresAt}
             onClose={() => setShowLifetimeMigration(false)}
           />
         )}
@@ -1864,6 +1865,7 @@ function App() {
       {showLifetimeMigration && (
         <LifetimeMigrationModal
           planTitle={session?.planTitle}
+          accessThrough={session?.subscriptionExpiresAt}
           onClose={() => setShowLifetimeMigration(false)}
         />
       )}

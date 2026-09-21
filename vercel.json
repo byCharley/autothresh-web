@@ -6,6 +6,10 @@
     {
       "path": "/api/cron/close-tickets",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/sunset-subscriptions",
+      "schedule": "15 * * * *"
     }
   ]
 }

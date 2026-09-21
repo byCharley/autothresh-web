@@ -2095,6 +2095,32 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [exportingCancelled, setExportingCancelled] = useState(false);
+  const [sunsetting, setSunsetting] = useState(false);
+
+  async function runSunsetSubscriptions() {
+    if (!confirm('Stop all Monthly/Annual renewals now?\n\nThis skips upcoming charges and schedules cancel at each subscriber’s period end. Paused plans are cancelled immediately.')) return;
+    setSunsetting(true);
+    try {
+      const r = await fetch('/api/analytics?action=sunset-subscriptions', {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+      const body = await r.json() as {
+        error?: string;
+        scanned?: number;
+        scheduled?: number;
+        cancelled_now?: number;
+        failed?: number;
+      };
+      if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+      alert(
+        `Sunset complete.\nScanned: ${body.scanned ?? 0}\nScheduled cancel: ${body.scheduled ?? 0}\nCancelled now: ${body.cancelled_now ?? 0}\nFailed: ${body.failed ?? 0}`,
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Sunset failed');
+    } finally {
+      setSunsetting(false);
+    }
+  }
 
   async function exportCancelledCsv() {
     setExportingCancelled(true);
@@ -2535,6 +2561,25 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                   <span>{exportingCancelled ? 'Exporting…' : 'Export Cancelled'}</span>
                   <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
                     CSV · email list
+                  </span>
+                </button>
+                <button
+                  onClick={runSunsetSubscriptions}
+                  disabled={sunsetting}
+                  title="Skip renewals and schedule cancel at period end for all Monthly/Annual plans"
+                  style={{
+                    minWidth: 140, padding: '10px 14px',
+                    background: 'var(--surface-2)', border: '1px solid rgba(251,191,36,0.45)',
+                    color: sunsetting ? 'var(--text-dim)' : '#fbbf24',
+                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                    letterSpacing: '0.06em', textTransform: 'uppercase',
+                    cursor: sunsetting ? 'default' : 'pointer',
+                    display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
+                  }}
+                >
+                  <span>{sunsetting ? 'Stopping…' : 'Stop Renewals'}</span>
+                  <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
+                    Schedule cancel · no charges
                   </span>
                 </button>
               </div>

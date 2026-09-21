@@ -20,7 +20,7 @@ function fmtDate(iso?: string) {
 }
 
 export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionStatus, compact, hideSummary, onChanged }: Props) {
-  const [confirm, setConfirm] = useState<'none' | 'pause' | 'cancel'>('none');
+  const [confirm, setConfirm] = useState<'none' | 'cancel'>('none');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
@@ -35,10 +35,10 @@ export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionSt
   const accessUntil = fmtDate(nextBillingDate);
   const isPaused = status === 'paused';
   const isCancelled = status === 'cancelled' || status === 'canceled';
-  const canPause = !isPaused && !isCancelled;
   const canCancel = !isCancelled;
+  // Subscriptions are being phased out — do not offer pause/resume (resume could re-enable charges).
 
-  async function run(action: 'pause' | 'resume' | 'cancel') {
+  async function run(action: 'cancel') {
     setBusy(true);
     setError('');
     try {
@@ -53,11 +53,7 @@ export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionSt
         return;
       }
       setConfirm('none');
-      if (action === 'cancel') {
-        setNote('This plan is cancelled. It will not renew or charge you.');
-      } else if (action === 'pause') {
-        setNote('Billing is paused. You can resume anytime from this account.');
-      }
+      setNote('This plan is cancelled. It will not renew or charge you.');
       onChanged?.();
     } catch {
       setError('Could not reach billing. Check your connection and try again.');
@@ -82,13 +78,19 @@ export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionSt
                 {` · ${trialCountdown === 'Ended' ? 'Trial ended' : `Ends in ${trialCountdown}`}`}
               </span>
             ) : accessUntil && !isPaused && !isCancelled ? (
-              ` · Renews ${accessUntil}`
+              ` · Access through ${accessUntil} · will not renew`
             ) : ''}
             {isPaused ? ' · Paused' : ''}
             {isCancelled ? ' · Cancelled' : ''}
           </div>
         </>
       )}
+
+      <div style={{ fontSize: 11, ...mono, color: 'var(--text)', lineHeight: 1.55, padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+        Subscriptions are ending. Your card will not be charged again
+        {accessUntil && !isCancelled ? ` — access continues through ${accessUntil}` : ''}.
+        After that you can buy Lifetime with credit for what you already paid (email autothreshweb@gmail.com).
+      </div>
 
       {note && (
         <div style={{ fontSize: 11, ...mono, color: 'var(--text)', lineHeight: 1.5, padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
@@ -99,50 +101,25 @@ export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionSt
         <div style={{ fontSize: 11, ...mono, color: '#f87171', lineHeight: 1.5 }}>{error}</div>
       )}
 
-      {confirm === 'pause' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.55 }}>
-            Pause stops access today and holds billing until you come back. Resume anytime from this screen.
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button disabled={busy} onClick={() => setConfirm('none')} style={ghostBtn}>Keep plan</button>
-            <button disabled={busy} onClick={() => run('pause')} style={warnBtn}>{busy ? 'Pausing…' : 'Pause now'}</button>
-          </div>
-        </div>
-      )}
-
       {confirm === 'cancel' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
           <div style={{ fontSize: 11, color: 'var(--text)', lineHeight: 1.55 }}>
-            This cancels your plan now. It will not renew or charge you. Time already billed is not refunded,
-            and this account will not open AutoThresh until you subscribe again.
+            End access now? Your plan already will not renew. Cancelling early ends access today — time already billed is not refunded.
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <button disabled={busy} onClick={() => setConfirm('none')} style={ghostBtn}>Keep my plan</button>
+            <button disabled={busy} onClick={() => setConfirm('none')} style={ghostBtn}>Keep access</button>
             <button disabled={busy} onClick={() => run('cancel')} style={dangerBtn}>
-              {busy ? 'Cancelling…' : 'Cancel plan'}
+              {busy ? 'Cancelling…' : 'End access now'}
             </button>
           </div>
         </div>
       )}
 
-      {confirm === 'none' && (
+      {confirm === 'none' && canCancel && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {isPaused && (
-            <button disabled={busy} onClick={() => run('resume')} style={primaryBtn}>
-              {busy ? 'Resuming…' : 'Resume subscription'}
-            </button>
-          )}
-          {canPause && (
-            <button disabled={busy} onClick={() => { setError(''); setConfirm('pause'); }} style={ghostBtn}>
-              Pause billing
-            </button>
-          )}
-          {canCancel && (
-            <button disabled={busy} onClick={() => { setError(''); setConfirm('cancel'); }} style={{ ...ghostBtn, color: 'var(--text-dim)' }}>
-              Cancel subscription
-            </button>
-          )}
+          <button disabled={busy} onClick={() => { setError(''); setConfirm('cancel'); }} style={{ ...ghostBtn, color: 'var(--text-dim)' }}>
+            End access early
+          </button>
         </div>
       )}
     </div>
@@ -153,15 +130,7 @@ const ghostBtn: CSSProperties = {
   height: 28, padding: '0 10px', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
   background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer',
 };
-const warnBtn: CSSProperties = {
-  height: 28, padding: '0 10px', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
-  background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.4)', color: '#fbbf24', cursor: 'pointer',
-};
 const dangerBtn: CSSProperties = {
   height: 28, padding: '0 10px', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
   background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#f87171', cursor: 'pointer',
-};
-const primaryBtn: CSSProperties = {
-  height: 30, padding: '0 10px', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 700,
-  background: 'var(--accent)', border: 'none', color: '#000', cursor: 'pointer',
 };

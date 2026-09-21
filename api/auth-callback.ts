@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { sunsetSubscriptionsForEmail } from './lib/sealSunset';
 
 const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
@@ -636,6 +637,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const finalExpiry = membership.subscriptionExpiresAt;
 
   console.log('Auth result:', { custEmail, hasSub: sealResult.hasSub, sealLifetime: sealResult.hasLifetime, everInSeal: sealResult.everInSeal, isCreator, isTester, testerRecord, ldtLifetime: ldtLifetime.lifetime, ldtWebOrder: ldtLifetime.webOrder, shopifyLifetime, finalHasSub, finalStatus, planTitle: finalPlan });
+
+  if (!isCreator && (finalStatus === 'active' || finalStatus === 'trial' || finalStatus === 'paused')) {
+    void sunsetSubscriptionsForEmail(emailLower)
+      .then(rows => { if (rows.length) console.log('[auth sunset]', emailLower, rows); })
+      .catch(err => console.error('[auth sunset] error', err));
+  }
 
   // ── Log login + security events (fire-and-forget) ────────────────────────
   const ua = String(req.headers['user-agent'] ?? '');

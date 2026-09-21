@@ -15,14 +15,14 @@ function planLooksRecurring(planTitle?: string): boolean {
   return monthly || annual;
 }
 
-/** Monthly / Annual subscribers (active or paused) and creator admins. */
+/** Monthly / Annual subscribers (active, paused, or trial) and creator admins. */
 export function isLifetimeMigrationAudience(
   subscriptionStatus?: string,
   planTitle?: string,
 ): boolean {
   const status = (subscriptionStatus ?? '').toLowerCase();
   if (status === 'creator') return true;
-  if (status !== 'active' && status !== 'paused') return false;
+  if (status !== 'active' && status !== 'paused' && status !== 'trial') return false;
   return planLooksRecurring(planTitle);
 }
 
@@ -49,10 +49,19 @@ function markLifetimeMigrationSeen() {
 interface Props {
   onClose: () => void;
   planTitle?: string;
+  accessThrough?: string;
 }
 
-export function LifetimeMigrationModal({ onClose, planTitle }: Props) {
+function fmtAccess(iso?: string) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+export function LifetimeMigrationModal({ onClose, planTitle, accessThrough }: Props) {
   const [neverShow, setNeverShow] = useState(true);
+  const until = fmtAccess(accessThrough);
 
   const handleClose = () => {
     if (neverShow) markLifetimeMigrationSeen();
@@ -118,7 +127,13 @@ export function LifetimeMigrationModal({ onClose, planTitle }: Props) {
             We’re ending Monthly and Annual subscriptions and moving to a pay-once, own-for-life model.
           </p>
           <p style={{ margin: '0 0 14px' }}>
-            Your current plan still works — nothing changes for you right away. If you’d rather switch to Lifetime, email me and I’ll send a special discount code that credits what you’ve already paid toward Lifetime membership.
+            Your card will <span style={{ color: 'var(--text)', fontWeight: 600 }}>not be charged again</span>.
+            {until
+              ? <> You keep full access through <span style={{ color: 'var(--text)', fontWeight: 600 }}>{until}</span>, then your subscription ends automatically.</>
+              : <> You keep access through the end of your current billing cycle, then your subscription ends automatically.</>}
+          </p>
+          <p style={{ margin: '0 0 14px' }}>
+            After that, you can buy a Lifetime license. Email me and I’ll send a special discount code that credits what you’ve already paid.
           </p>
           <p style={{ margin: 0, fontSize: 12, color: 'var(--text-dim)' }}>
             Include the email on your account so I can match your payments.

@@ -410,13 +410,15 @@ export function TopBar({ onExport, onMockup, onPresets, onTutorial, onVideo, onA
                             {trialCountdown === 'Ended' ? 'Trial ended' : `Ends in ${trialCountdown}`}
                           </div>
                           {nextBillingFormatted && subscriptionStatus !== 'app_trial' && (
-                            <div style={{ color: 'var(--text-muted)' }}>Bills {nextBillingFormatted} if not cancelled</div>
+                            <div style={{ color: 'var(--text-muted)' }}>Ends {nextBillingFormatted} · will not convert to a paid plan</div>
                           )}
                         </>
                       ) : (
                         <>
-                          {subscriptionStatus === 'lifetime' ? 'Never expires' : `Renews${nextBillingFormatted ? ` ${nextBillingFormatted}` : ''}`}
-                          {daysRemaining !== null && daysRemaining > 0 && (
+                          {subscriptionStatus === 'lifetime'
+                            ? 'Never expires'
+                            : `Access through${nextBillingFormatted ? ` ${nextBillingFormatted}` : ''} · will not renew`}
+                          {daysRemaining !== null && daysRemaining > 0 && subscriptionStatus !== 'lifetime' && (
                             <span style={{ color: 'var(--text-muted)', marginLeft: 5 }}>· {daysRemaining}d left</span>
                           )}
                         </>
