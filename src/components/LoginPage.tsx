@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AppIcon } from './AppIcon';
 import { ContactModal } from './ContactModal';
 import { EulaModal } from './EulaModal';
@@ -6,6 +6,8 @@ import { FaqModal } from './FaqModal';
 import { PageFooter } from './PageFooter';
 import { useAppVersion } from '../hooks/useAppVersion';
 import { PRODUCT_URL, PRODUCT_PRICE } from '../lib/product';
+import { getDeviceId } from '../lib/deviceId';
+import { getBrowserFingerprint } from '../lib/fingerprint';
 
 const LOGIN_HEROES = [
   { src: '/login-hero.webp', alt: 'AutoThresh Web on tablet', fit: 'tablet' },
@@ -63,9 +65,36 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
   const [showInfo, setShowInfo]         = useState(false);
   const [trialBusy, setTrialBusy] = useState(false);
   const [trialError, setTrialError] = useState('');
-  const [trialStarted, setTrialStarted] = useState(() => {
-    try { return localStorage.getItem('at_trial_started') === '1'; } catch { return false; }
+  const [trialPhase, setTrialPhase] = useState<'unknown' | 'none' | 'started'>(() => {
+    try { return localStorage.getItem('at_trial_started') === '1' ? 'started' : 'unknown'; } catch { return 'unknown'; }
   });
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const fingerprint = await getBrowserFingerprint();
+        const r = await fetch('/api/trial?action=status', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceId: getDeviceId(), fingerprint }),
+        });
+        if (!r.ok || cancel) return;
+        const data = await r.json() as { status?: string };
+        const started = data.status === 'active' || data.status === 'expired';
+        if (started) {
+          try { localStorage.setItem('at_trial_started', '1'); } catch { /* ignore */ }
+        } else {
+          try { localStorage.removeItem('at_trial_started'); } catch { /* ignore */ }
+        }
+        if (!cancel) setTrialPhase(started ? 'started' : 'none');
+      } catch {
+        if (!cancel) setTrialPhase(prev => prev === 'unknown' ? 'none' : prev);
+      }
+    })();
+    return () => { cancel = true; };
+  }, []);
   const [switchBusy, setSwitchBusy] = useState(false);
 
   const licenseReady = !!licenseKey.trim() && !!orderNumber.trim();
@@ -173,7 +202,7 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
               <button
                 type="button"
                 className="login-cta login-cta-try"
-                disabled={trialBusy}
+                disabled={trialBusy || trialPhase === 'unknown'}
                 onClick={async () => {
                   if (!onStartTrial || trialBusy) return;
                   setTrialBusy(true);
@@ -181,14 +210,14 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
                   const ok = await onStartTrial();
                   if (ok) {
                     try { localStorage.setItem('at_trial_started', '1'); } catch { /* ignore */ }
-                    setTrialStarted(true);
+                    setTrialPhase('started');
                   } else {
                     setTrialError('Could not start your trial. Try again, or sign in if you already have access.');
                   }
                   setTrialBusy(false);
                 }}
               >
-                {trialBusy ? 'Starting…' : trialStarted ? 'Continue with trial' : 'Start 3 Day Trial'}
+                {trialBusy ? 'Starting…' : trialPhase === 'started' ? 'Continue with trial' : trialPhase === 'unknown' ? 'Checking trial…' : 'Start 3 Day Trial'}
               </button>
               <a
                 href={PRODUCT_URL}

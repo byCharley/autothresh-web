@@ -22,6 +22,28 @@ function clientIp(req: VercelRequest): string {
   return first || String(req.headers['x-real-ip'] ?? '') || req.socket?.remoteAddress || '';
 }
 
+/** First 4 IPv6 groups (/64). Devices on the same home network share this. */
+function ipv6HomePrefix(ip: string): string | null {
+  if (!ip.includes(':')) return null;
+  const halves = ip.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':').filter(Boolean) : [];
+  const tail = halves.length === 2 ? (halves[1] ? halves[1].split(':').filter(Boolean) : []) : null;
+  const parts = tail === null
+    ? head
+    : [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail];
+  if (parts.length !== 8) return null;
+  return parts.slice(0, 4).join(':');
+}
+
+function ipIdents(ip: string): Ident[] {
+  if (!ip) return [];
+  const idents: Ident[] = [{ kind: 'ip', value: hashIdent(ip) }];
+  const home = ipv6HomePrefix(ip);
+  if (home) idents.push({ kind: 'ip', value: hashIdent(`home6:${home}`) });
+  return idents;
+}
+
 function hashIdent(value: string): string {
   return createHash('sha256').update(`${SECRET}|${value}`).digest('hex');
 }
@@ -107,15 +129,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (deviceId && deviceId !== 'unknown-device') idents.push({ kind: 'device', value: hashIdent(deviceId) });
   if (fingerprint) idents.push({ kind: 'fp', value: fingerprint });
   const ip = clientIp(req);
-  if (ip) idents.push({ kind: 'ip', value: hashIdent(ip) });
+  idents.push(...ipIdents(ip));
   if (!idents.length) return res.status(400).json({ error: 'Could not start trial.' });
+
+  const lookupOnly = req.query.action === 'status';
 
   try {
     const existing = await findTrials(idents);
-    let trial: TrialRow;
-    if (existing.length) {
-      trial = pickTrial(existing);
-    } else {
+    if (!existing.length) {
+      if (lookupOnly) return res.status(200).json({ status: 'none' });
       const expiresAt = new Date(Date.now() + TRIAL_MS).toISOString();
       const created = await sb('app_trials', 'POST', { expires_at: expiresAt });
       if (!created.ok) {
@@ -123,10 +145,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({ error: 'Could not start trial.' });
       }
       const rows = await created.json() as TrialRow[];
-      trial = rows[0];
+      const trial = rows[0];
       if (!trial) return res.status(500).json({ error: 'Could not start trial.' });
+      const cookieIdent: Ident = { kind: 'cookie', value: trial.id };
+      await attachIdents(trial.id, [...idents.filter(i => i.kind !== 'cookie'), cookieIdent]);
+      setTrialCookie(req, res, trial.id);
+      return res.status(200).json({
+        status: 'active',
+        expiresAt: trial.expires_at,
+        startedAt: trial.started_at,
+      });
     }
 
+    const trial = pickTrial(existing);
+    // Link this device and the home network to the trial that already exists.
+    // Never insert a second trial.
     const cookieIdent: Ident = { kind: 'cookie', value: trial.id };
     await attachIdents(trial.id, [...idents.filter(i => i.kind !== 'cookie'), cookieIdent]);
     setTrialCookie(req, res, trial.id);
