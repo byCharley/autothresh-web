@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sunsetAllRecurringSubscriptions } from './lib/sealSunset';
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -194,25 +193,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (e) {
       console.error('[analytics] cancelled-export error:', e);
       return res.status(500).json({ error: 'Failed to export cancelled subscribers' });
-    }
-  }
-
-  // ── Force sunset: skip renewals + schedule cancel at period end ───────────
-  if (req.query.action === 'sunset-subscriptions') {
-    try {
-      const { scanned, results } = await sunsetAllRecurringSubscriptions();
-      return res.status(200).json({
-        ok: true,
-        scanned,
-        scheduled: results.filter(r => r.action === 'scheduled').length,
-        cancelled_now: results.filter(r => r.action === 'cancelled_now').length,
-        skipped: results.filter(r => r.action === 'skipped').length,
-        failed: results.filter(r => r.action === 'failed').length,
-        results,
-      });
-    } catch (e) {
-      console.error('[analytics] sunset-subscriptions error:', e);
-      return res.status(500).json({ error: 'Failed to sunset subscriptions' });
     }
   }
 

@@ -2101,7 +2101,8 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
     if (!confirm('Stop all Monthly/Annual renewals now?\n\nThis skips upcoming charges and schedules cancel at each subscriber’s period end. Paused plans are cancelled immediately.')) return;
     setSunsetting(true);
     try {
-      const r = await fetch('/api/analytics?action=sunset-subscriptions', {
+      const r = await fetch('/api/sunset-subscriptions', {
+        method: 'POST',
         headers: { Authorization: `Bearer ${session.token}` },
       });
       const body = await r.json() as {
@@ -2515,9 +2516,19 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
             </div>
           )}
 
-          {activeTab === 'stats' && error && (
+          {activeTab === 'stats' && error && !data && (
             <div style={{ textAlign: 'center', padding: '80px 0', fontSize: 12, fontFamily: 'var(--font-mono)', color: '#f87171' }}>
               {error}
+            </div>
+          )}
+
+          {activeTab === 'stats' && error && data && (
+            <div style={{
+              marginBottom: 8, padding: '8px 12px',
+              fontSize: 10, fontFamily: 'var(--font-mono)', color: '#fbbf24',
+              background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)',
+            }}>
+              Refresh failed ({error}) — showing last cached stats.
             </div>
           )}
 

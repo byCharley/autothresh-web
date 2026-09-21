@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sunsetAllRecurringSubscriptions } from '../lib/sealSunset';
+import { sunsetAllRecurringSubscriptions } from '../_lib/sealSunset';
 
 const CRON_SECRET = process.env.CRON_SECRET ?? '';
 

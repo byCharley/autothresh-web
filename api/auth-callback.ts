@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sunsetSubscriptionsForEmail } from './lib/sealSunset';
+import { sunsetSubscriptionsForEmail } from './_lib/sealSunset';
 
 const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
