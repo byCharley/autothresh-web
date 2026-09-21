@@ -33,8 +33,6 @@ interface AnalyticsData {
   countries: Array<{ country: string; count: number }>;
   dailyTrend: Array<{ date: string; logins: number; opens: number; unique: number; dau?: number }>;
   hourly: number[];
-  subscriptions: { active: number; trial: number; paused: number; cancelled: number; total: number };
-  subTrend: Array<{ date: string; active: number; trial: number; paused: number; cancelled: number; total: number }>;
 }
 
 // ── SVG line + area chart ───────────────────────────────────────────────────
@@ -167,73 +165,6 @@ function DonutChart({ desktop, mobile, tablet }: { desktop: number; mobile: numb
   );
 }
 
-// ── Subscription trend chart ────────────────────────────────────────────────
-function SubTrendChart({ data }: { data: AnalyticsData['subTrend'] }) {
-  if (data.length === 0) {
-    return (
-      <div style={{ textAlign: 'center', padding: '28px 0', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-        No snapshot data yet — first snapshot runs at 6:00 AM UTC daily.
-      </div>
-    );
-  }
-
-  const W = 560; const H = 140; const PAD = { t: 10, r: 10, b: 32, l: 42 };
-  const cW = W - PAD.l - PAD.r; const cH = H - PAD.t - PAD.b;
-
-  const maxVal = Math.max(...data.map(d => d.active + d.trial), 1);
-  const xPos = (i: number) => PAD.l + (data.length === 1 ? cW / 2 : (i / (data.length - 1)) * cW);
-  const yPos = (v: number) => PAD.t + cH - (v / maxVal) * cH;
-
-  const linePath = (vals: number[]) =>
-    vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ');
-
-  const areaPath = (vals: number[]) => {
-    const base = PAD.t + cH;
-    return vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${xPos(i).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ')
-      + ` L${xPos(data.length - 1).toFixed(1)},${base} L${xPos(0).toFixed(1)},${base} Z`;
-  };
-
-  const yTicks = [0, Math.round(maxVal / 2), maxVal];
-  const labelStep = Math.max(1, Math.floor(data.length / 5));
-  const xLabels = data.filter((_, i) => i === 0 || i === data.length - 1 || i % labelStep === 0);
-
-  const activeVals = data.map(d => d.active);
-  const trialVals  = data.map(d => d.trial);
-
-  return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-      <defs>
-        <linearGradient id="grad-active" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id="grad-trial" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#a78bfa" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {yTicks.map(v => (
-        <g key={v}>
-          <line x1={PAD.l} y1={yPos(v)} x2={W - PAD.r} y2={yPos(v)} stroke="var(--border)" strokeWidth="0.5" />
-          <text x={PAD.l - 6} y={yPos(v) + 4} textAnchor="end" fontSize="9" fill="var(--text-dim)" fontFamily="var(--font-mono)">{v}</text>
-        </g>
-      ))}
-      <path d={areaPath(trialVals)}  fill="url(#grad-trial)" />
-      <path d={areaPath(activeVals)} fill="url(#grad-active)" />
-      <path d={linePath(trialVals)}  fill="none" stroke="#a78bfa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-      <path d={linePath(activeVals)} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      {xLabels.map(d => {
-        const i = data.indexOf(d);
-        return (
-          <text key={d.date} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="9" fill="var(--text-dim)" fontFamily="var(--font-mono)">
-            {d.date.slice(5)}
-          </text>
-        );
-      })}
-    </svg>
-  );
-}
-
 // ── Hourly bar chart ────────────────────────────────────────────────────────
 function HourlyChart({ hourly }: { hourly: number[] }) {
   const max = Math.max(...hourly, 1);
@@ -325,7 +256,51 @@ function HorizontalBars({
   );
 }
 
-function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
+function Hint({ text }: { text: string }) {
+  const [box, setBox] = useState<{ x: number; y: number; below: boolean } | null>(null);
+  function show(el: HTMLElement) {
+    const r = el.getBoundingClientRect();
+    const below = r.top < 88;
+    setBox({ x: r.left + r.width / 2, y: below ? r.bottom + 8 : r.top - 8, below });
+  }
+  return (
+    <span
+      onMouseEnter={e => show(e.currentTarget)}
+      onMouseLeave={() => setBox(null)}
+      onFocus={e => show(e.currentTarget)}
+      onBlur={() => setBox(null)}
+      tabIndex={0}
+      aria-label={text}
+      style={{ position: 'relative', display: 'inline-flex', marginLeft: 5, outline: 'none', flexShrink: 0 }}
+    >
+      <span style={{
+        width: 13, height: 13, borderRadius: '50%',
+        border: '1px solid var(--border)',
+        fontSize: 8, fontFamily: 'var(--font-mono)', fontWeight: 700,
+        color: 'var(--text-dim)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        cursor: 'help', lineHeight: 1, textTransform: 'none', letterSpacing: 0,
+      }}>?</span>
+      {box && (
+        <span style={{
+          position: 'fixed',
+          left: Math.min(window.innerWidth - 118, Math.max(118, box.x)),
+          top: box.y,
+          transform: box.below ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
+          width: 220, padding: '8px 10px', zIndex: 4000,
+          background: '#1a1a1a', border: '1px solid var(--border)',
+          color: 'var(--text)', fontSize: 11, fontWeight: 500,
+          fontFamily: 'system-ui, sans-serif',
+          letterSpacing: 0, textTransform: 'none', lineHeight: 1.45, textAlign: 'left',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)', pointerEvents: 'none',
+        }}>
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function StatCard({ label, value, sub, accent, hint }: { label: string; value: string | number; sub?: string; accent?: boolean; hint?: string }) {
   return (
     <div style={{
       flex: '1 1 130px', minWidth: 0, padding: '14px 16px',
@@ -333,8 +308,9 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string 
       border: '1px solid var(--border)',
       display: 'flex', flexDirection: 'column', gap: 4,
     }}>
-      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+      <span style={{ display: 'flex', alignItems: 'center', fontSize: 9, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
         {label}
+        {hint && <Hint text={hint} />}
       </span>
       <span style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-mono)', color: accent ? 'var(--accent)' : 'var(--text)', lineHeight: 1.2 }}>
         {typeof value === 'number' ? value.toLocaleString() : value}
@@ -345,11 +321,12 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string 
 }
 
 // ── Panel wrapper ───────────────────────────────────────────────────────────
-function Panel({ title, children, style }: { title: string; children: React.ReactNode; style?: React.CSSProperties }) {
+function Panel({ title, hint, children, style }: { title: string; hint?: string; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '16px 18px', ...style }}>
-      <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 14 }}>
         {title}
+        {hint && <Hint text={hint} />}
       </div>
       {children}
     </div>
@@ -2158,171 +2135,6 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
   const [loading, setLoading]   = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError]       = useState<string | null>(null);
-  const [exportingCancelled, setExportingCancelled] = useState(false);
-  const [sunsetting, setSunsetting] = useState(false);
-  const [seedingAccess, setSeedingAccess] = useState(false);
-
-  async function seedPlanAccessFromExport() {
-    if (!confirm('Load paid-access end dates for all 126 exported subscribers into the database?\n\nThis does NOT cancel anything in Seal — only grants app access until each next_billing_date.\n\nCreate the plan_access table in Supabase first if needed.')) return;
-    setSeedingAccess(true);
-    try {
-      let offset = 0;
-      let total = 0;
-      let saved = 0;
-      let failed = 0;
-      let rounds = 0;
-      while (rounds < 20) {
-        rounds++;
-        const r = await fetch('/api/seed-plan-access', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${session.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ offset, limit: 50 }),
-        });
-        const text = await r.text();
-        let body: {
-          error?: string;
-          setupError?: string;
-          total?: number;
-          saved?: number;
-          failed?: number;
-          done?: boolean;
-          nextOffset?: number | null;
-        };
-        try {
-          body = JSON.parse(text) as typeof body;
-        } catch {
-          throw new Error(`Server error: ${text.slice(0, 160)}`);
-        }
-        if (!r.ok) throw new Error(body.setupError || body.error || `HTTP ${r.status}`);
-        total = body.total ?? total;
-        saved += body.saved ?? 0;
-        failed += body.failed ?? 0;
-        if (body.done || body.nextOffset == null) break;
-        offset = body.nextOffset;
-      }
-      alert(`Access dates saved.\nTotal in export: ${total}\nSaved: ${saved}\nFailed: ${failed}`);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Seed failed');
-    } finally {
-      setSeedingAccess(false);
-    }
-  }
-
-  async function runSunsetSubscriptions() {
-    if (!confirm('Cancel ALL exported Monthly/Annual subscriptions in Seal now?\n\nUses your Seal CSV (exact IDs + renewal dates).\n• Stops every card charge immediately\n• Keeps each user in the app until their next_billing_date\n\nCreate the plan_access table in Supabase first if you have not already.')) return;
-    setSunsetting(true);
-    try {
-      let offset = 0;
-      let total = 0;
-      let cancelledNow = 0;
-      let failed = 0;
-      let skipped = 0;
-      let rounds = 0;
-
-      while (rounds < 200) {
-        rounds++;
-        const r = await fetch('/api/sunset-subscriptions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${session.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ offset, limit: 6 }),
-        });
-        const text = await r.text();
-        let body: {
-          error?: string;
-          setupError?: string;
-          total?: number;
-          processed?: number;
-          cancelled_now?: number;
-          failed?: number;
-          skipped?: number;
-          done?: boolean;
-          nextOffset?: number | null;
-        };
-        try {
-          body = JSON.parse(text) as typeof body;
-        } catch {
-          throw new Error(`Server error (not JSON). Hard-refresh and try again. Details: ${text.slice(0, 160)}`);
-        }
-        if (!r.ok) throw new Error(body.setupError || body.error || `HTTP ${r.status}`);
-        if (body.setupError) throw new Error(body.setupError);
-
-        total = body.total ?? total;
-        cancelledNow += body.cancelled_now ?? 0;
-        failed += body.failed ?? 0;
-        skipped += body.skipped ?? 0;
-
-        if (body.done || body.nextOffset == null) break;
-        offset = body.nextOffset;
-      }
-
-      alert(
-        `Done.\nIn export: ${total}\nCancelled now (no more charges): ${cancelledNow}\nSkipped: ${skipped}\nFailed: ${failed}\n\nUsers keep access until their paid period ends.`,
-      );
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Cancel failed');
-    } finally {
-      setSunsetting(false);
-    }
-  }
-
-  async function exportCancelledCsv() {
-    setExportingCancelled(true);
-    try {
-      const r = await fetch('/api/analytics?action=cancelled-export', {
-        headers: { Authorization: `Bearer ${session.token}` },
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const body = await r.json() as {
-        count: number;
-        subscribers: Array<{
-          email: string;
-          firstName: string;
-          lastName: string;
-          planTitle: string;
-          billingInterval: string;
-          cancelledOn: string;
-          orderPlaced: string;
-          status: string;
-        }>;
-      };
-      const esc = (v: string) => {
-        const s = String(v ?? '');
-        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-      };
-      const header = ['email', 'first_name', 'last_name', 'plan', 'billing_interval', 'cancelled_on', 'order_placed', 'status'];
-      const lines = [
-        header.join(','),
-        ...body.subscribers.map(s => [
-          esc(s.email),
-          esc(s.firstName),
-          esc(s.lastName),
-          esc(s.planTitle),
-          esc(s.billingInterval),
-          esc(s.cancelledOn),
-          esc(s.orderPlaced),
-          esc(s.status),
-        ].join(',')),
-      ];
-      const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `autothresh-cancelled-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Export failed');
-    } finally {
-      setExportingCancelled(false);
-    }
-  }
-
   const load = useCallback((params: { days: number } | { from: string; to: string }) => {
     setError(null);
     const qs = 'days' in params
@@ -2406,27 +2218,6 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
   const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'security' | 'access' | 'videos' | 'chat' | 'settings'>('stats');
   const [securityUnreviewed, setSecurityUnreviewed] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
-
-  const [snapping, setSnapping] = useState(false);
-  const [snapMsg, setSnapMsg]   = useState<string | null>(null);
-
-  function takeSnapshot() {
-    setSnapping(true);
-    setSnapMsg(null);
-    fetch('/api/analytics?action=snapshot', {
-      headers: { Authorization: `Bearer ${session.token}` },
-    })
-      .then(r => r.json() as Promise<{ ok?: boolean; snapshot?: Record<string, number>; error?: string }>)
-      .then(d => {
-        setSnapMsg(d.ok ? `Saved — Active: ${d.snapshot?.active}, Trial: ${d.snapshot?.trial}` : (d.error ?? 'Failed'));
-        setSnapping(false);
-        if (d.ok) {
-          if (preset === 'custom') load({ from: customFrom, to: customTo });
-          else load({ days: preset });
-        }
-      })
-      .catch(() => { setSnapMsg('Request failed'); setSnapping(false); });
-  }
 
   const formatHour = (h: number) => {
     if (h === 0) return '12:00 AM';
@@ -2692,31 +2483,62 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <StatCard
                   label="DAU"
+                  hint="Daily Active Users — how many different people used the app on the latest day in this range."
                   value={data.summary.dau ?? data.dailyTrend[data.dailyTrend.length - 1]?.dau ?? data.dailyTrend[data.dailyTrend.length - 1]?.unique ?? 0}
                   sub="Latest day"
                   accent
                 />
-                <StatCard label="WAU" value={data.summary.wau ?? 0} sub="Last 7 days" />
-                <StatCard label="MAU" value={data.summary.mau ?? 0} sub="Last 30 days" />
+                <StatCard
+                  label="WAU"
+                  hint="Weekly Active Users — how many different people used the app in the last 7 days."
+                  value={data.summary.wau ?? 0}
+                  sub="Last 7 days"
+                />
+                <StatCard
+                  label="MAU"
+                  hint="Monthly Active Users — how many different people used the app in the last 30 days."
+                  value={data.summary.mau ?? 0}
+                  sub="Last 30 days"
+                />
                 <StatCard
                   label="Unique in Range"
+                  hint="How many different people showed up at least once in the dates you selected."
                   value={data.summary.uniqueUsers}
                   sub={preset === 'custom' ? `${customFrom} → ${customTo}` : `Last ${preset === 365 ? 'year' : `${preset}d`}`}
                 />
-                <StatCard label="Returning" value={data.summary.returningUsers ?? 0} sub="2+ distinct days" />
-                <StatCard label="App Opens" value={data.summary.appOpenCount} sub="Session verifications" />
+                <StatCard
+                  label="Returning"
+                  hint="People who used the app on two or more different days in this range."
+                  value={data.summary.returningUsers ?? 0}
+                  sub="2+ distinct days"
+                />
+                <StatCard
+                  label="App Opens"
+                  hint="How many times the app was opened. One person can open it more than once, so this is usually higher than unique users."
+                  value={data.summary.appOpenCount}
+                  sub="Session checks"
+                />
               </div>
 
               {/* DAU chart */}
-              <Panel title={preset === 'custom' ? `DAU — ${customFrom} to ${customTo}` : `DAU — Last ${preset === 365 ? 'Year' : `${preset} Days`}`}>
+              <Panel
+                title={preset === 'custom' ? `DAU — ${customFrom} to ${customTo}` : `DAU — Last ${preset === 365 ? 'Year' : `${preset} Days`}`}
+                hint="Daily Active Users. Each point is how many different people used the app that day. The blue line is opens, which can be higher if the same person opens more than once."
+              >
                 <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 20, height: 2, background: 'var(--accent)', borderRadius: 1 }} />
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>DAU</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      DAU
+                      <Hint text="Unique people that day." />
+                    </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 20, height: 2, background: '#60a5fa', borderRadius: 1, opacity: 0.6 }} />
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>App Opens</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
+                      App Opens
+                      <Hint text="Times the app was opened that day, not unique people." />
+                    </span>
                   </div>
                 </div>
                 <TrendChart data={data.dailyTrend} />
@@ -2724,7 +2546,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
               {/* Usage mix */}
               <div style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 12 }}>
-                <Panel title="Modes" style={{ flex: 1 }}>
+                <Panel title="Modes" hint="Which separation modes people switched to in this range." style={{ flex: 1 }}>
                   <HorizontalBars
                     items={(data.modes ?? []).map(m => ({
                       label: m.mode,
@@ -2734,7 +2556,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                     emptyHint="Tracking started — numbers fill in as people use the app"
                   />
                 </Panel>
-                <Panel title="Tools & Actions" style={{ flex: 1 }}>
+                <Panel title="Tools & Actions" hint="Exports, mockups, presets, tutorials, brush, remove background, and registration marks." style={{ flex: 1 }}>
                   <HorizontalBars
                     items={(data.tools ?? []).map(t => ({
                       label: t.tool.replace(/_/g, ' '),
@@ -2749,7 +2571,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
 
               {/* Audience */}
               <div style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 12 }}>
-                <Panel title="Devices" style={{ flex: mobile ? 'none' : '0 0 280px' }}>
+                <Panel title="Devices" hint="Computer, phone, or tablet, based on the browser." style={{ flex: mobile ? 'none' : '0 0 280px' }}>
                   <DonutChart
                     desktop={data.devices.desktop ?? 0}
                     mobile={data.devices.mobile ?? 0}
@@ -2757,7 +2579,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                   />
                 </Panel>
 
-                <Panel title="Top Countries" style={{ flex: 1 }}>
+                <Panel title="Top Countries" hint="Where sessions came from." style={{ flex: 1 }}>
                   {data.countries.length === 0 ? (
                     <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>No geographic data yet</div>
                   ) : (() => {
@@ -2782,118 +2604,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                 </Panel>
               </div>
 
-              {/* Business / ops strip */}
-              <Panel title="Subscriptions & Ops">
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                  <StatCard label="Active" value={data.subscriptions.active} accent />
-                  <StatCard label="Trial" value={data.subscriptions.trial} />
-                  <StatCard label="Paused" value={data.subscriptions.paused} />
-                  <StatCard label="Cancelled" value={data.subscriptions.cancelled} />
-                  <StatCard label="Total" value={data.subscriptions.total} />
-                  <StatCard
-                    label="Actives vs Purchased"
-                    value={`${data.summary.uniqueUsers} / ${data.subscriptions.active}`}
-                    sub="Unique in range / live Active"
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'stretch' }}>
-                  <button
-                    onClick={seedPlanAccessFromExport}
-                    disabled={seedingAccess}
-                    title="Save next_billing_date for all exported subscribers so they keep access after you cancel in Seal"
-                    style={{
-                      minWidth: 140, padding: '10px 14px',
-                      background: 'var(--surface-2)', border: '1px solid rgba(62,207,79,0.45)',
-                      color: seedingAccess ? 'var(--text-dim)' : '#3ecf4f',
-                      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
-                      letterSpacing: '0.06em', textTransform: 'uppercase',
-                      cursor: seedingAccess ? 'default' : 'pointer',
-                      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
-                    }}
-                  >
-                    <span>{seedingAccess ? 'Saving…' : 'Save Access Dates'}</span>
-                    <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
-                      Upsert safe · re-run anytime
-                    </span>
-                  </button>
-                  <button
-                    onClick={runSunsetSubscriptions}
-                    disabled={sunsetting}
-                    title="Cancel Monthly/Annual plans now; access until period end via plan_access"
-                    style={{
-                      minWidth: 140, padding: '10px 14px',
-                      background: 'var(--surface-2)', border: '1px solid rgba(251,191,36,0.45)',
-                      color: sunsetting ? 'var(--text-dim)' : '#fbbf24',
-                      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
-                      letterSpacing: '0.06em', textTransform: 'uppercase',
-                      cursor: sunsetting ? 'default' : 'pointer',
-                      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
-                    }}
-                  >
-                    <span>{sunsetting ? 'Cancelling…' : 'Cancel All Subs'}</span>
-                    <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
-                      Stop charges · keep access
-                    </span>
-                  </button>
-                  <button
-                    onClick={exportCancelledCsv}
-                    disabled={exportingCancelled || data.subscriptions.cancelled === 0}
-                    title="Download CSV of cancelled subscribers for win-back emails"
-                    style={{
-                      minWidth: 140, padding: '10px 14px',
-                      background: 'var(--surface-2)', border: '1px solid var(--border)',
-                      color: exportingCancelled ? 'var(--text-dim)' : 'var(--accent)',
-                      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
-                      letterSpacing: '0.06em', textTransform: 'uppercase',
-                      cursor: exportingCancelled || data.subscriptions.cancelled === 0 ? 'default' : 'pointer',
-                      opacity: data.subscriptions.cancelled === 0 ? 0.4 : 1,
-                      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
-                    }}
-                  >
-                    <span>{exportingCancelled ? 'Exporting…' : 'Export Cancelled'}</span>
-                    <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
-                      CSV · email list
-                    </span>
-                  </button>
-                </div>
-              </Panel>
-
-              {/* Subscription trend (compact, secondary) */}
-              <Panel title="Subscription Trend (Daily Snapshots)">
-                <div style={{ display: 'flex', gap: 16, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 20, height: 2, background: 'var(--accent)', borderRadius: 1 }} />
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Active</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 20, height: 2, background: '#a78bfa', borderRadius: 1, opacity: 0.7 }} />
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Trial</span>
-                  </div>
-                  <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {snapMsg && (
-                      <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{snapMsg}</span>
-                    )}
-                    <button
-                      onClick={takeSnapshot}
-                      disabled={snapping}
-                      style={{
-                        height: 22, padding: '0 10px',
-                        background: 'transparent', border: '1px solid var(--border)',
-                        color: 'var(--text-dim)', fontSize: 9,
-                        fontFamily: 'var(--font-mono)', fontWeight: 700,
-                        cursor: snapping ? 'default' : 'pointer', opacity: snapping ? 0.5 : 1,
-                        letterSpacing: '0.06em', textTransform: 'uppercase',
-                      }}
-                    >
-                      {snapping ? 'Saving…' : 'Snapshot Now'}
-                    </button>
-                  </div>
-                </div>
-                <SubTrendChart data={data.subTrend} />
-              </Panel>
-
-              {/* Hourly activity */}
-              <Panel title="Hourly Activity (UTC)">
+              <Panel title="Hourly Activity (UTC)" hint="What time of day people use the app. Times are UTC, not your local timezone.">
                 <HourlyChart hourly={data.hourly} />
                 <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
