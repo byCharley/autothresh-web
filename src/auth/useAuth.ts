@@ -22,7 +22,6 @@ const SESSION_KEY           = 'at_session';
 const DISPLAY_NAME_KEY      = 'at_display_name';
 const SHOPIFY_ID_TOKEN      = 'shopify_id_token';      // saved at login, used as logout hint
 const SHOPIFY_REFRESH_TOKEN = 'shopify_refresh_token'; // used to get a fresh id_token for logout
-const SHOPIFY_STORE_ID     = '52142571674';
 const VERIFIER_KEY     = 'at_pkce_verifier';
 const STATE_KEY        = 'at_pkce_state';
 const NONCE_KEY        = 'at_pkce_nonce';
