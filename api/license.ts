@@ -25,93 +25,107 @@ function cors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
-function normOrder(value: string): string {
-  return String(value ?? '').trim().toLowerCase().replace(/^#/, '').replace(/\s+/g, '');
+function normalizeOrder(value: string): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/^order\s*#?\s*/i, '')
+    .replace(/^#/, '')
+    .replace(/\s+/g, '');
 }
 
-function walkStrings(o: unknown, pick: (key: string, val: string) => void) {
-  if (o == null) return;
-  if (Array.isArray(o)) { o.forEach(v => walkStrings(v, pick)); return; }
-  if (typeof o !== 'object') return;
-  for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
-    if (typeof v === 'string' || typeof v === 'number') pick(k, String(v));
-    else walkStrings(v, pick);
+type LdtOrder = {
+  orderId?: string;
+  orderName?: string;
+  orderEmail?: string;
+  isDisabled?: boolean;
+  isCancelled?: boolean;
+  itemName?: string;
+  itemSku?: string | null;
+  shopifyOrderName?: string;
+  shopifyOrderId?: string;
+  shopify_order_id?: string;
+  id?: string;
+  digitalOrderId?: string;
+};
+
+type LdtLicense = {
+  key: string;
+  order: LdtOrder | null;
+};
+
+/** Unwrap LDT /license?key=… which may be an array, bare object, or envelope. */
+function pickLicense(data: unknown): LdtLicense | null {
+  if (!data) return null;
+  if (Array.isArray(data)) {
+    if (!data.length) return null;
+    return pickLicense(data[0]);
   }
+  if (typeof data !== 'object') return null;
+  const obj = data as Record<string, unknown>;
+  if (obj.license && typeof obj.license === 'object') return pickLicense(obj.license);
+  if (obj.data && (Array.isArray(obj.data) || typeof obj.data === 'object')) return pickLicense(obj.data);
+
+  const key = obj.key || obj.licenseKey || obj.license_key;
+  if (!key) return null;
+  const order = (obj.order || obj.Order || null) as LdtOrder | null;
+  return { key: String(key), order };
 }
 
-function extractLicenseFields(o: unknown): { licenseKey: string; orderNumber: string; email: string; product: string } {
-  let licenseKey = '';
-  let orderNumber = '';
-  let email = '';
-  let product = '';
-  walkStrings(o, (key, val) => {
-    const k = key.toLowerCase();
-    const v = val.trim();
-    if (!v) return;
-    if (!licenseKey && /(license[_-]?key|licensekey|license_code|serial)$/.test(k) && v.length >= 6) licenseKey = v;
-    if (!licenseKey && k === 'key' && v.length >= 8) licenseKey = v;
-    if (!orderNumber && /(order[_-]?(number|name|id)|ordername)$/.test(k)) orderNumber = v;
-    if (!orderNumber && (k === 'name' || k === 'order') && /#?\d+/.test(v)) orderNumber = v;
-    if (!email && k.includes('email') && v.includes('@')) email = v.toLowerCase();
-    if (!product && /(product[_-]?title|producttitle|title|product)$/.test(k)) product += ` ${v}`;
+/**
+ * Match the typed order number against every Shopify / LDT order identifier
+ * on the license. Customers type `#5845` from the email; LDT also stores the
+ * internal Shopify id (`6961…`) on `orderId` — accepting either is required.
+ */
+function orderMatches(licenseOrder: LdtOrder | null, userOrder: string): boolean {
+  if (!licenseOrder) return false;
+  const want = normalizeOrder(userOrder);
+  if (!want) return false;
+  const candidates = [
+    licenseOrder.orderName,
+    licenseOrder.orderId,
+    licenseOrder.shopifyOrderName,
+    licenseOrder.shopifyOrderId,
+    licenseOrder.shopify_order_id,
+    licenseOrder.id,
+    licenseOrder.digitalOrderId,
+  ];
+  return candidates.some(c => {
+    const n = normalizeOrder(String(c ?? ''));
+    return !!n && (n === want || n.includes(want) || want.includes(n));
   });
-  return { licenseKey, orderNumber, email, product: product.toLowerCase() };
 }
 
-function isAutothreshWeb(text: string): boolean {
-  const t = text.toLowerCase().replace(/™/g, '');
-  if (t.includes('autothresh pro') || t.includes('autothresh lite')) return false;
-  return t.includes('autothresh web') || t.includes('autothresh-web') || t.includes('autothreshweb');
+function isAutothreshWebProduct(itemName?: string, itemSku?: string | null): boolean {
+  const blob = `${itemName ?? ''} ${itemSku ?? ''}`.toLowerCase().replace(/™/g, '');
+  if (
+    blob.includes('autothresh pro') ||
+    blob.includes('autothresh lite') ||
+    blob.includes('autobitmap') ||
+    blob.includes('displacecraft') ||
+    blob.includes('filter dock') ||
+    blob.includes('filterforge') ||
+    blob.includes('filter forge')
+  ) {
+    return false;
+  }
+  return (
+    blob.includes('autothresh web') ||
+    blob.includes('autothresh-web') ||
+    blob.includes('autothreshweb') ||
+    // Lifetime / one-time AutoThresh Web titles sometimes omit "Web"
+    (blob.includes('autothresh') && !blob.includes('pro') && !blob.includes('lite'))
+  );
 }
 
 async function ldtGet(path: string): Promise<{ ok: boolean; raw: unknown; text: string }> {
   const r = await fetch(`${LDT_API_URL}${path}`, {
-    headers: { 'LDT-X-Access-Token': LDT_ACCESS },
+    headers: { Accept: 'application/json', 'LDT-X-Access-Token': LDT_ACCESS },
   });
   const text = await r.text();
   let raw: unknown = null;
   try { raw = JSON.parse(text); } catch { raw = text; }
   return { ok: r.ok, raw, text };
-}
-
-async function lookupLicense(licenseKey: string): Promise<{ ok: boolean; email: string; orderNumber: string; product: string; raw: unknown }> {
-  const { ok, raw } = await ldtGet(`/license?key=${encodeURIComponent(licenseKey)}`);
-  const fields = extractLicenseFields(raw);
-  return {
-    ok,
-    email: fields.email,
-    orderNumber: fields.orderNumber,
-    product: fields.product,
-    raw,
-  };
-}
-
-async function lookupOrderByEmail(email: string): Promise<{ licenseKey: string; orderNumber: string; product: string } | null> {
-  const { ok, raw } = await ldtGet(`/order/search?email=${encodeURIComponent(email)}&page=1&pageSize=50`);
-  if (!ok) return null;
-  let orders: unknown[] = [];
-  if (Array.isArray(raw)) orders = raw;
-  else if (raw && typeof raw === 'object') {
-    const obj = raw as Record<string, unknown>;
-    for (const key of ['data', 'orders', 'items', 'result', 'list', 'payload']) {
-      const v = obj[key];
-      if (Array.isArray(v)) { orders = v; break; }
-      if (v && typeof v === 'object') {
-        const nested = v as Record<string, unknown>;
-        for (const k2 of ['data', 'orders', 'items', 'list']) {
-          if (Array.isArray(nested[k2])) { orders = nested[k2] as unknown[]; break; }
-        }
-      }
-    }
-  }
-  for (const order of orders) {
-    const fields = extractLicenseFields(order);
-    if (!isAutothreshWeb(fields.product)) continue;
-    if (fields.licenseKey) {
-      return { licenseKey: fields.licenseKey, orderNumber: fields.orderNumber, product: fields.product };
-    }
-  }
-  return null;
 }
 
 function signLicenseToken(p: { email: string; licenseKey: string; orderNumber: string }): string {
@@ -226,7 +240,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userAgent = String(req.headers['user-agent'] ?? '');
 
   if (action === 'activate') {
-    const licenseKey = String(body.licenseKey ?? '').trim();
+    // Strip zero-width / non-printable junk from emailed keys.
+    const licenseKey = String(body.licenseKey ?? '').replace(/[^\x21-\x7E]/g, '').trim();
     const orderNumber = String(body.orderNumber ?? '').trim();
     if (!licenseKey || !orderNumber) {
       return res.status(400).json({ error: 'License key and order number are required.' });
@@ -234,34 +249,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!deviceId) return res.status(400).json({ error: 'Device id required.' });
     if (!LDT_ACCESS) return res.status(500).json({ error: 'License lookup is not configured.' });
 
-    const license = await lookupLicense(licenseKey);
-    console.log('LDT license lookup:', { ok: license.ok, hasEmail: !!license.email, hasOrder: !!license.orderNumber });
-    if (!license.ok) {
-      return res.status(200).json({ ok: false, error: 'That license key was not found. Check the key from your order email or Charley Pangus account.' });
-    }
-    const productText = license.product;
-    if (productText.includes('autothresh pro') || productText.includes('autothresh lite')) {
-      return res.status(200).json({ ok: false, error: 'That license is not for AutoThresh Web.' });
-    }
-    if (productText && !isAutothreshWeb(productText)) {
-      return res.status(200).json({ ok: false, error: 'That license is not for AutoThresh Web.' });
-    }
-    const expectedOrder = normOrder(license.orderNumber);
-    const givenOrder = normOrder(orderNumber);
-    if (expectedOrder && givenOrder && expectedOrder !== givenOrder && !expectedOrder.includes(givenOrder) && !givenOrder.includes(expectedOrder)) {
-      return res.status(200).json({ ok: false, error: 'That order number does not match this license key.' });
+    const licenseRes = await ldtGet(`/license?key=${encodeURIComponent(licenseKey)}`);
+    const license = pickLicense(licenseRes.raw);
+    console.log('LDT license lookup:', {
+      httpOk: licenseRes.ok,
+      found: !!license,
+      orderName: license?.order?.orderName ?? null,
+      orderId: license?.order?.orderId ?? null,
+      itemName: license?.order?.itemName ?? null,
+    });
+
+    if (!licenseRes.ok || !license) {
+      return res.status(200).json({
+        ok: false,
+        error: 'That license key was not found. Check the key from your order email or Charley Pangus account.',
+      });
     }
 
-    const email = license.email || `license-${licenseKey.slice(0, 8).toLowerCase()}@autothresh.local`;
+    const order = license.order;
+    if (!order) {
+      return res.status(200).json({ ok: false, error: 'That license is not linked to an order yet. Try again in a minute.' });
+    }
+    if (order.isCancelled) {
+      return res.status(200).json({ ok: false, error: 'That order was cancelled, so this license cannot be activated.' });
+    }
+    if (order.isDisabled) {
+      return res.status(200).json({ ok: false, error: 'That license has been disabled. Contact support if this is a mistake.' });
+    }
+    if (!isAutothreshWebProduct(order.itemName, order.itemSku)) {
+      return res.status(200).json({ ok: false, error: 'That license is not for AutoThresh Web.' });
+    }
+    if (!orderMatches(order, orderNumber)) {
+      return res.status(200).json({
+        ok: false,
+        error: 'That order number does not match this license key. Use the Shopify order number from the same purchase (e.g. #5845).',
+      });
+    }
+
+    const email = (order.orderEmail || `license-${licenseKey.slice(0, 8).toLowerCase()}@autothresh.local`).toLowerCase();
+    const resolvedOrder = order.orderName || order.orderId || orderNumber;
     const claim = await claimDevice({
       email,
       licenseKey,
-      orderNumber: license.orderNumber || orderNumber,
+      orderNumber: resolvedOrder,
       deviceId,
       deviceName,
       userAgent,
     });
-    const token = signLicenseToken({ email, licenseKey, orderNumber: license.orderNumber || orderNumber });
+    const token = signLicenseToken({ email, licenseKey, orderNumber: resolvedOrder });
     if (!claim.ok) {
       return res.status(200).json({
         ok: false,
