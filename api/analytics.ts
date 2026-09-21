@@ -214,35 +214,100 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const untilMs = new Date(until).getTime();
+    const mauSince = new Date(untilMs - 30 * 86_400_000).toISOString();
+    const wauSince = new Date(untilMs - 7 * 86_400_000).toISOString();
+    const fetchSince = since < mauSince ? since : mauSince;
+
     // ── Parallel fetch: events + snapshots + Seal live counts ───────────────
-    const [events, snapshots, subscriptions] = await Promise.all([
+    let events: Array<Record<string, unknown>> = [];
+    try {
+      events = await sbQuery(
+        `analytics_events?select=created_at,event_type,email,device_type,country,city,meta&created_at=gte.${fetchSince}&created_at=lte.${until}&order=created_at.asc&limit=20000`,
+      );
+    } catch {
+      // meta column may not exist yet
+      events = await sbQuery(
+        `analytics_events?select=created_at,event_type,email,device_type,country,city&created_at=gte.${fetchSince}&created_at=lte.${until}&order=created_at.asc&limit=20000`,
+      );
+    }
+
+    const [snapshots, subscriptions] = await Promise.all([
       sbQuery(
-        `analytics_events?select=created_at,event_type,email,device_type,country,city&created_at=gte.${since}&created_at=lte.${until}&order=created_at.asc&limit=10000`
-      ),
-      sbQuery(
-        `subscription_snapshots?select=created_at,active,trial,paused,cancelled,total&created_at=gte.${since}&created_at=lte.${until}&order=created_at.asc&limit=1000`
+        `subscription_snapshots?select=created_at,active,trial,paused,cancelled,total&created_at=gte.${since}&created_at=lte.${until}&order=created_at.asc&limit=1000`,
       ).catch(() => [] as Array<Record<string, unknown>>),
       getSealSubscriptionCounts(),
     ]);
 
-    // ── Daily aggregation ───────────────────────────────────────────────────
+    const inRange = (iso: string, from: string, to: string) => iso >= from && iso <= to;
+    const rangeEvents = events.filter(ev => inRange(String(ev.created_at ?? ''), since, until));
+
+    // ── Daily aggregation (selected range) ──────────────────────────────────
     const dailyMap = new Map<string, { logins: number; opens: number; unique: Set<string> }>();
     const deviceCounts: Record<string, number> = { desktop: 0, mobile: 0, tablet: 0 };
     const countryCounts: Record<string, number> = {};
     const uniqueUsers = new Set<string>();
+    const userDays = new Map<string, Set<string>>();
     let loginCount = 0;
     let appOpenCount = 0;
 
-    for (const ev of events) {
+    const modeCounts: Record<string, number> = {};
+    const modeUsers: Record<string, Set<string>> = {};
+    const toolCounts: Record<string, number> = {};
+    const toolUsers: Record<string, Set<string>> = {};
+
+    const TOOL_EVENTS = new Set([
+      'export', 'mockup_open', 'presets_open', 'tutorial_open',
+      'tool_brush', 'tool_remove_bg', 'tool_registration_marks',
+    ]);
+
+    function parseMeta(ev: Record<string, unknown>): Record<string, unknown> {
+      const m = ev.meta;
+      if (!m) return {};
+      if (typeof m === 'object') return m as Record<string, unknown>;
+      if (typeof m === 'string') {
+        try { return JSON.parse(m) as Record<string, unknown>; } catch { return {}; }
+      }
+      return {};
+    }
+
+    for (const ev of rangeEvents) {
       const day = String(ev.created_at ?? '').slice(0, 10);
       if (!dailyMap.has(day)) dailyMap.set(day, { logins: 0, opens: 0, unique: new Set() });
       const d = dailyMap.get(day)!;
 
-      const email = String(ev.email ?? '');
-      if (email) { d.unique.add(email); uniqueUsers.add(email); }
+      const email = String(ev.email ?? '').toLowerCase();
+      const type = String(ev.event_type ?? '');
+      if (email) {
+        d.unique.add(email);
+        uniqueUsers.add(email);
+        if (!userDays.has(email)) userDays.set(email, new Set());
+        userDays.get(email)!.add(day);
+      }
 
-      if (ev.event_type === 'login') { d.logins++; loginCount++; }
-      else { d.opens++; appOpenCount++; }
+      if (type === 'login') { d.logins++; loginCount++; }
+      else if (type === 'app_open') { d.opens++; appOpenCount++; }
+      else if (type === 'mode_change') {
+        const meta = parseMeta(ev);
+        const mode = String(meta.mode ?? 'unknown');
+        modeCounts[mode] = (modeCounts[mode] ?? 0) + 1;
+        if (email) {
+          if (!modeUsers[mode]) modeUsers[mode] = new Set();
+          modeUsers[mode].add(email);
+        }
+      } else if (TOOL_EVENTS.has(type)) {
+        const meta = parseMeta(ev);
+        const label = type === 'export'
+          ? `export:${String(meta.format ?? 'file')}`
+          : type === 'tutorial_open'
+            ? `tutorial:${String(meta.kind ?? 'open')}`
+            : type.replace(/^tool_/, '');
+        toolCounts[label] = (toolCounts[label] ?? 0) + 1;
+        if (email) {
+          if (!toolUsers[label]) toolUsers[label] = new Set();
+          toolUsers[label].add(email);
+        }
+      }
 
       const dt = String(ev.device_type ?? 'desktop');
       deviceCounts[dt] = (deviceCounts[dt] ?? 0) + 1;
@@ -252,14 +317,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Fill gaps in daily timeline across the full selected range
-    const dailyTrend: Array<{ date: string; logins: number; opens: number; unique: number }> = [];
+    const dailyTrend: Array<{ date: string; logins: number; opens: number; unique: number; dau: number }> = [];
     const rangeStart = new Date(since); rangeStart.setUTCHours(0, 0, 0, 0);
     const rangeEnd   = new Date(until);
     for (let d = new Date(rangeStart); d <= rangeEnd; d.setUTCDate(d.getUTCDate() + 1)) {
       const key   = d.toISOString().slice(0, 10);
       const entry = dailyMap.get(key);
-      dailyTrend.push({ date: key, logins: entry?.logins ?? 0, opens: entry?.opens ?? 0, unique: entry?.unique.size ?? 0 });
+      const dau = entry?.unique.size ?? 0;
+      dailyTrend.push({
+        date: key,
+        logins: entry?.logins ?? 0,
+        opens: entry?.opens ?? 0,
+        unique: dau,
+        dau,
+      });
     }
+
+    const latestDau = dailyTrend.length ? dailyTrend[dailyTrend.length - 1].dau : 0;
+
+    // Rolling WAU / MAU ending at `until`
+    const wauUsers = new Set<string>();
+    const mauUsers = new Set<string>();
+    for (const ev of events) {
+      const created = String(ev.created_at ?? '');
+      const email = String(ev.email ?? '').toLowerCase();
+      if (!email) continue;
+      if (created >= wauSince && created <= until) wauUsers.add(email);
+      if (created >= mauSince && created <= until) mauUsers.add(email);
+    }
+
+    let returningUsers = 0;
+    for (const daysSet of userDays.values()) {
+      if (daysSet.size >= 2) returningUsers++;
+    }
+
+    const modes = Object.entries(modeCounts)
+      .map(([mode, count]) => ({ mode, count, uniqueUsers: modeUsers[mode]?.size ?? 0 }))
+      .sort((a, b) => b.count - a.count);
+
+    const tools = Object.entries(toolCounts)
+      .map(([tool, count]) => ({ tool, count, uniqueUsers: toolUsers[tool]?.size ?? 0 }))
+      .sort((a, b) => b.count - a.count);
 
     // Top 15 countries
     const topCountries = Object.entries(countryCounts)
@@ -268,9 +366,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .slice(0, 15)
       .map(([country, count]) => ({ country, count }));
 
-    // Peak hour analysis (UTC)
+    // Peak hour analysis (UTC) — activity in selected range
     const hourCounts: number[] = new Array(24).fill(0);
-    for (const ev of events) {
+    for (const ev of rangeEvents) {
       const hour = new Date(String(ev.created_at ?? '')).getUTCHours();
       if (!isNaN(hour)) hourCounts[hour]++;
     }
@@ -287,14 +385,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }));
 
     res.status(200).json({
-      period: { days, since },
+      period: { days, since, until },
       summary: {
-        totalEvents:  events.length,
+        totalEvents:  rangeEvents.length,
         loginCount,
         appOpenCount,
         uniqueUsers:  uniqueUsers.size,
+        returningUsers,
         peakHour,
+        dau: latestDau,
+        wau: wauUsers.size,
+        mau: mauUsers.size,
       },
+      modes,
+      tools,
       devices: deviceCounts,
       countries: topCountries,
       dailyTrend,

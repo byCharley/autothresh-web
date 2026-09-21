@@ -15,11 +15,23 @@ function useMobile(bp = 640) {
 import type { Session } from '../auth/useAuth';
 
 interface AnalyticsData {
-  period: { days: number; since: string };
-  summary: { totalEvents: number; loginCount: number; appOpenCount: number; uniqueUsers: number; peakHour: number };
+  period: { days: number; since: string; until?: string };
+  summary: {
+    totalEvents: number;
+    loginCount: number;
+    appOpenCount: number;
+    uniqueUsers: number;
+    returningUsers?: number;
+    peakHour: number;
+    dau?: number;
+    wau?: number;
+    mau?: number;
+  };
+  modes?: Array<{ mode: string; count: number; uniqueUsers: number }>;
+  tools?: Array<{ tool: string; count: number; uniqueUsers: number }>;
   devices: { desktop: number; mobile: number; tablet: number };
   countries: Array<{ country: string; count: number }>;
-  dailyTrend: Array<{ date: string; logins: number; opens: number; unique: number }>;
+  dailyTrend: Array<{ date: string; logins: number; opens: number; unique: number; dau?: number }>;
   hourly: number[];
   subscriptions: { active: number; trial: number; paused: number; cancelled: number; total: number };
   subTrend: Array<{ date: string; active: number; trial: number; paused: number; cancelled: number; total: number }>;
@@ -30,11 +42,11 @@ function TrendChart({ data }: { data: AnalyticsData['dailyTrend']; days?: number
   const W = 560; const H = 160; const PAD = { t: 10, r: 10, b: 32, l: 42 };
   const cW = W - PAD.l - PAD.r; const cH = H - PAD.t - PAD.b;
 
-  const maxUnique = Math.max(...data.map(d => d.unique), 1);
+  const maxUnique = Math.max(...data.map(d => d.dau ?? d.unique), 1);
   const maxOpens  = Math.max(...data.map(d => d.opens),  1);
   const yMax = Math.max(maxUnique, maxOpens, 1);
 
-  const xPos = (i: number) => PAD.l + (i / (data.length - 1)) * cW;
+  const xPos = (i: number) => PAD.l + (i / Math.max(data.length - 1, 1)) * cW;
   const yPos = (v: number) => PAD.t + cH - (v / yMax) * cH;
 
   const linePath = (vals: number[]) =>
@@ -53,7 +65,7 @@ function TrendChart({ data }: { data: AnalyticsData['dailyTrend']; days?: number
   // y-axis ticks
   const yTicks = [0, Math.round(yMax / 2), yMax];
 
-  const uniqueVals = data.map(d => d.unique);
+  const uniqueVals = data.map(d => d.dau ?? d.unique);
   const opensVals  = data.map(d => d.opens);
 
   return (
@@ -269,6 +281,50 @@ const COUNTRY_NAMES: Record<string, string> = {
 };
 
 // ── Summary card ────────────────────────────────────────────────────────────
+function HorizontalBars({
+  items,
+  emptyHint,
+  labelWidth = 110,
+}: {
+  items: Array<{ label: string; count: number; uniqueUsers?: number }>;
+  emptyHint: string;
+  labelWidth?: number;
+}) {
+  if (!items.length) {
+    return (
+      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', padding: '8px 0' }}>
+        {emptyHint}
+      </div>
+    );
+  }
+  const max = Math.max(...items.map(i => i.count), 1);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {items.map(({ label, count, uniqueUsers }) => (
+        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+            width: labelWidth, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {label}
+          </span>
+          <div style={{ flex: 1, height: 5, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ width: `${(count / max) * 100}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+          </div>
+          <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text)', width: 36, textAlign: 'right', flexShrink: 0 }}>
+            {count.toLocaleString()}
+          </span>
+          {uniqueUsers != null && (
+            <span style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', width: 48, textAlign: 'right', flexShrink: 0 }}>
+              {uniqueUsers}u
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: boolean }) {
   return (
     <div style={{
@@ -2074,8 +2130,16 @@ function SecurityPanel({ session, onDataLoad }: { session: Session; onDataLoad?:
 }
 
 // ── Main dashboard ──────────────────────────────────────────────────────────
-type Preset = 7 | 14 | 30 | 90;
-const PRESETS: Preset[] = [7, 14, 30, 90];
+type Preset = 1 | 7 | 14 | 30 | 90 | 365;
+const PRESETS: Preset[] = [1, 7, 14, 30, 90, 365];
+const PRESET_LABEL: Record<Preset, string> = {
+  1: '1D',
+  7: '7D',
+  14: '14D',
+  30: '30D',
+  90: '90D',
+  365: '1Y',
+};
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function daysAgoStr(n: number) {
@@ -2440,7 +2504,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                   cursor: 'pointer', transition: 'all 0.12s',
                 }}
               >
-                {d}D
+                {PRESET_LABEL[d]}
               </button>
             ))}
 
@@ -2623,87 +2687,32 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                   Refreshing…
                 </div>
               )}
-              {/* Summary cards */}
+
+              {/* Hero KPIs */}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <StatCard label="Unique Users" value={data.summary.uniqueUsers} sub={preset === 'custom' ? `${customFrom} → ${customTo}` : `Last ${preset} days`} accent />
+                <StatCard
+                  label="DAU"
+                  value={data.summary.dau ?? data.dailyTrend[data.dailyTrend.length - 1]?.dau ?? data.dailyTrend[data.dailyTrend.length - 1]?.unique ?? 0}
+                  sub="Latest day"
+                  accent
+                />
+                <StatCard label="WAU" value={data.summary.wau ?? 0} sub="Last 7 days" />
+                <StatCard label="MAU" value={data.summary.mau ?? 0} sub="Last 30 days" />
+                <StatCard
+                  label="Unique in Range"
+                  value={data.summary.uniqueUsers}
+                  sub={preset === 'custom' ? `${customFrom} → ${customTo}` : `Last ${preset === 365 ? 'year' : `${preset}d`}`}
+                />
+                <StatCard label="Returning" value={data.summary.returningUsers ?? 0} sub="2+ distinct days" />
                 <StatCard label="App Opens" value={data.summary.appOpenCount} sub="Session verifications" />
-                <StatCard label="Logins" value={data.summary.loginCount} sub="OAuth completions" />
-                <StatCard label="Peak Hour" value={formatHour(data.summary.peakHour)} sub="UTC time" />
               </div>
 
-              {/* Subscription row */}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'stretch' }}>
-                <StatCard label="Active Subs" value={data.subscriptions.active} accent />
-                <StatCard label="Trials" value={data.subscriptions.trial} />
-                <StatCard label="Paused" value={data.subscriptions.paused} />
-                <StatCard label="Cancelled" value={data.subscriptions.cancelled} />
-                <StatCard label="Total Subs" value={data.subscriptions.total} />
-                <button
-                  onClick={exportCancelledCsv}
-                  disabled={exportingCancelled || data.subscriptions.cancelled === 0}
-                  title="Download CSV of cancelled subscribers for win-back emails"
-                  style={{
-                    minWidth: 140, padding: '10px 14px',
-                    background: 'var(--surface-2)', border: '1px solid var(--border)',
-                    color: exportingCancelled ? 'var(--text-dim)' : 'var(--accent)',
-                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
-                    letterSpacing: '0.06em', textTransform: 'uppercase',
-                    cursor: exportingCancelled || data.subscriptions.cancelled === 0 ? 'default' : 'pointer',
-                    opacity: data.subscriptions.cancelled === 0 ? 0.4 : 1,
-                    display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
-                  }}
-                >
-                  <span>{exportingCancelled ? 'Exporting…' : 'Export Cancelled'}</span>
-                  <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
-                    CSV · email list
-                  </span>
-                </button>
-                <button
-                  onClick={seedPlanAccessFromExport}
-                  disabled={seedingAccess}
-                  title="Save next_billing_date for all exported subscribers so they keep access after you cancel in Seal"
-                  style={{
-                    minWidth: 140, padding: '10px 14px',
-                    background: 'var(--surface-2)', border: '1px solid rgba(62,207,79,0.45)',
-                    color: seedingAccess ? 'var(--text-dim)' : '#3ecf4f',
-                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
-                    letterSpacing: '0.06em', textTransform: 'uppercase',
-                    cursor: seedingAccess ? 'default' : 'pointer',
-                    display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
-                  }}
-                >
-                  <span>{seedingAccess ? 'Saving…' : 'Save Access Dates'}</span>
-                  <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
-                    From export · no cancel
-                  </span>
-                </button>
-                <button
-                  onClick={runSunsetSubscriptions}
-                  disabled={sunsetting}
-                  title="Skip renewals and schedule cancel at period end for all Monthly/Annual plans"
-                  style={{
-                    minWidth: 140, padding: '10px 14px',
-                    background: 'var(--surface-2)', border: '1px solid rgba(251,191,36,0.45)',
-                    color: sunsetting ? 'var(--text-dim)' : '#fbbf24',
-                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
-                    letterSpacing: '0.06em', textTransform: 'uppercase',
-                    cursor: sunsetting ? 'default' : 'pointer',
-                    display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
-                  }}
-                >
-                  <span>{sunsetting ? 'Cancelling…' : 'Cancel All Subs'}</span>
-                  <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
-                    Stop charges · keep access
-                  </span>
-                </button>
-              </div>
-
-              {/* Trend chart */}
-              <Panel title={preset === 'custom' ? `Daily Activity — ${customFrom} to ${customTo}` : `Daily Activity — Last ${preset} Days`}>
+              {/* DAU chart */}
+              <Panel title={preset === 'custom' ? `DAU — ${customFrom} to ${customTo}` : `DAU — Last ${preset === 365 ? 'Year' : `${preset} Days`}`}>
                 <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 20, height: 2, background: 'var(--accent)', borderRadius: 1 }} />
-                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>Unique Users</span>
+                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>DAU</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div style={{ width: 20, height: 2, background: '#60a5fa', borderRadius: 1, opacity: 0.6 }} />
@@ -2713,9 +2722,34 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                 <TrendChart data={data.dailyTrend} />
               </Panel>
 
-              {/* Device + Countries row */}
+              {/* Usage mix */}
               <div style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 12 }}>
-                <Panel title="Device Breakdown" style={{ flex: mobile ? 'none' : '0 0 280px' }}>
+                <Panel title="Modes" style={{ flex: 1 }}>
+                  <HorizontalBars
+                    items={(data.modes ?? []).map(m => ({
+                      label: m.mode,
+                      count: m.count,
+                      uniqueUsers: m.uniqueUsers,
+                    }))}
+                    emptyHint="Tracking started — numbers fill in as people use the app"
+                  />
+                </Panel>
+                <Panel title="Tools & Actions" style={{ flex: 1 }}>
+                  <HorizontalBars
+                    items={(data.tools ?? []).map(t => ({
+                      label: t.tool.replace(/_/g, ' '),
+                      count: t.count,
+                      uniqueUsers: t.uniqueUsers,
+                    }))}
+                    emptyHint="Tracking started — numbers fill in as people use the app"
+                    labelWidth={130}
+                  />
+                </Panel>
+              </div>
+
+              {/* Audience */}
+              <div style={{ display: 'flex', flexDirection: mobile ? 'column' : 'row', gap: 12 }}>
+                <Panel title="Devices" style={{ flex: mobile ? 'none' : '0 0 280px' }}>
                   <DonutChart
                     desktop={data.devices.desktop ?? 0}
                     mobile={data.devices.mobile ?? 0}
@@ -2730,7 +2764,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                     const max = data.countries[0].count;
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                        {data.countries.map(({ country, count }) => (
+                        {data.countries.slice(0, 8).map(({ country, count }) => (
                           <div key={country} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ fontSize: 14, flexShrink: 0, width: 22 }}>{countryFlag(country)}</span>
                             <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', width: mobile ? 80 : 120, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -2748,7 +2782,83 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                 </Panel>
               </div>
 
-              {/* Subscription trend */}
+              {/* Business / ops strip */}
+              <Panel title="Subscriptions & Ops">
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <StatCard label="Active" value={data.subscriptions.active} accent />
+                  <StatCard label="Trial" value={data.subscriptions.trial} />
+                  <StatCard label="Paused" value={data.subscriptions.paused} />
+                  <StatCard label="Cancelled" value={data.subscriptions.cancelled} />
+                  <StatCard label="Total" value={data.subscriptions.total} />
+                  <StatCard
+                    label="Actives vs Purchased"
+                    value={`${data.summary.uniqueUsers} / ${data.subscriptions.active}`}
+                    sub="Unique in range / live Active"
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'stretch' }}>
+                  <button
+                    onClick={seedPlanAccessFromExport}
+                    disabled={seedingAccess}
+                    title="Save next_billing_date for all exported subscribers so they keep access after you cancel in Seal"
+                    style={{
+                      minWidth: 140, padding: '10px 14px',
+                      background: 'var(--surface-2)', border: '1px solid rgba(62,207,79,0.45)',
+                      color: seedingAccess ? 'var(--text-dim)' : '#3ecf4f',
+                      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.06em', textTransform: 'uppercase',
+                      cursor: seedingAccess ? 'default' : 'pointer',
+                      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
+                    }}
+                  >
+                    <span>{seedingAccess ? 'Saving…' : 'Save Access Dates'}</span>
+                    <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
+                      Upsert safe · re-run anytime
+                    </span>
+                  </button>
+                  <button
+                    onClick={runSunsetSubscriptions}
+                    disabled={sunsetting}
+                    title="Cancel Monthly/Annual plans now; access until period end via plan_access"
+                    style={{
+                      minWidth: 140, padding: '10px 14px',
+                      background: 'var(--surface-2)', border: '1px solid rgba(251,191,36,0.45)',
+                      color: sunsetting ? 'var(--text-dim)' : '#fbbf24',
+                      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.06em', textTransform: 'uppercase',
+                      cursor: sunsetting ? 'default' : 'pointer',
+                      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
+                    }}
+                  >
+                    <span>{sunsetting ? 'Cancelling…' : 'Cancel All Subs'}</span>
+                    <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
+                      Stop charges · keep access
+                    </span>
+                  </button>
+                  <button
+                    onClick={exportCancelledCsv}
+                    disabled={exportingCancelled || data.subscriptions.cancelled === 0}
+                    title="Download CSV of cancelled subscribers for win-back emails"
+                    style={{
+                      minWidth: 140, padding: '10px 14px',
+                      background: 'var(--surface-2)', border: '1px solid var(--border)',
+                      color: exportingCancelled ? 'var(--text-dim)' : 'var(--accent)',
+                      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                      letterSpacing: '0.06em', textTransform: 'uppercase',
+                      cursor: exportingCancelled || data.subscriptions.cancelled === 0 ? 'default' : 'pointer',
+                      opacity: data.subscriptions.cancelled === 0 ? 0.4 : 1,
+                      display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
+                    }}
+                  >
+                    <span>{exportingCancelled ? 'Exporting…' : 'Export Cancelled'}</span>
+                    <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
+                      CSV · email list
+                    </span>
+                  </button>
+                </div>
+              </Panel>
+
+              {/* Subscription trend (compact, secondary) */}
               <Panel title="Subscription Trend (Daily Snapshots)">
                 <div style={{ display: 'flex', gap: 16, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

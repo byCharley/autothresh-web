@@ -14,6 +14,7 @@ import { BetaNoticeModal, shouldShowBetaNotice } from './components/BetaNoticeMo
 import { LifetimeMigrationModal, shouldShowLifetimeMigration } from './components/LifetimeMigrationModal';
 import { WhatsNewModal, hasUnseenUpdates, markChangelogSeen } from './components/WhatsNewModal';
 import { LoginSplash } from './components/LoginSplash';
+import { setTrackTokenGetter, trackEvent } from './lib/track';
 
 const ExportModal     = lazy(() => import('./components/ExportModal').then(m => ({ default: m.ExportModal })));
 const MockupPreview   = lazy(() => import('./components/MockupPreview').then(m => ({ default: m.MockupPreview })));
@@ -140,6 +141,10 @@ function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const [chunkError, setChunkError] = useState(false);
   const { status, session, initiateLogin, switchAccount, logout, showLogin, startTrial, recheck, updateDisplayName, syncSubscription, getValidToken, activateLicense } = useAuth();
+
+  useEffect(() => {
+    setTrackTokenGetter(() => session?.token ?? null);
+  }, [session?.token]);
   const [showExport, setShowExport] = useState(false);
   const [sheetGenerating, setSheetGenerating] = useState(false);
   const [showEula, setShowEula]         = useState(false);
@@ -408,6 +413,7 @@ function App() {
 
   const handleExport = async ({ mode: _mode, format, fileName, includeColorInfo, usePantoneNames, underbase, underbaseChoke, cropToArtwork, withFabricView }: ExportConfig) => {
     if (!originalImage) return;
+    trackEvent('export', { format, mode: separationMode });
 
     const loadMods = () => Promise.all([import('jszip'), import('file-saver'), import('ag-psd'), import('pdf-lib')]);
     let modResult: Awaited<ReturnType<typeof loadMods>>;
@@ -1701,7 +1707,7 @@ function App() {
       <Suspense fallback={null}>
       <MobileLayout
         onExport={() => setShowExport(true)}
-        onMockup={() => setMockupOpen(true)}
+        onMockup={() => { trackEvent('mockup_open'); setMockupOpen(true); }}
         onLogout={logout}
         onLogin={showLogin}
         onAnalytics={() => setShowAnalytics(true)}
@@ -1734,7 +1740,7 @@ function App() {
   return (
     <Suspense fallback={null}>
     <div className="app">
-      <TopBar onExport={() => setShowExport(true)} onMockup={() => setMockupOpen(true)} onPresets={() => setPresetsOpen(true)} onTutorial={() => setShowTutorial(true)} onVideo={() => setShowVideo(true)} onAnalytics={() => { setShowAnalytics(true); setCreatorChatUnread(0); }} onWhatsNew={() => setShowWhatsNew(true)} onLogout={logout} onLogin={showLogin} onUpdateName={updateDisplayName} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} accentColor={session?.accentColor} chatUnread={creatorChatUnread} onBillingChanged={syncSubscription} />
+      <TopBar onExport={() => setShowExport(true)} onMockup={() => { trackEvent('mockup_open'); setMockupOpen(true); }} onPresets={() => { trackEvent('presets_open'); setPresetsOpen(true); }} onTutorial={() => { trackEvent('tutorial_open', { kind: 'overlay' }); setShowTutorial(true); }} onVideo={() => { trackEvent('tutorial_open', { kind: 'video' }); setShowVideo(true); }} onAnalytics={() => { setShowAnalytics(true); setCreatorChatUnread(0); }} onWhatsNew={() => setShowWhatsNew(true)} onLogout={logout} onLogin={showLogin} onUpdateName={updateDisplayName} firstName={session?.firstName} userEmail={session?.email} subscriptionExpiresAt={session?.subscriptionExpiresAt} planTitle={session?.planTitle} subscriptionStatus={subStatus} sessionToken={session?.token} accentColor={session?.accentColor} chatUnread={creatorChatUnread} onBillingChanged={syncSubscription} />
 
 
       <div className="workspace">

@@ -6,6 +6,7 @@ export type { V2Settings };
 import type { SheetSettings } from '../engine/sheetEngine';
 import { DEFAULT_SHEET_SETTINGS } from '../engine/sheetEngine';
 export type { SheetSettings };
+import { trackEvent } from '../lib/track';
 
 export type GrainBlendMode = 'multiply' | 'screen' | 'overlay' | 'soft-light' | 'hard-light' | 'color-burn' | 'color-dodge' | 'luminosity';
 
@@ -717,7 +718,10 @@ export const useStore = create<AppState>((set, get) => ({
   updateGlobalPattern: (updates) =>
     set((s) => ({ globalPattern: { ...s.globalPattern, ...updates } })),
   setThresholdPreBlur: (thresholdPreBlur) => set({ thresholdPreBlur }),
-  setBgRemovalEnabled: (bgRemovalEnabled) => set({ bgRemovalEnabled, ...(!bgRemovalEnabled ? { bgPaintMode: 'off' as const } : {}) }),
+  setBgRemovalEnabled: (bgRemovalEnabled) => {
+    if (bgRemovalEnabled) trackEvent('tool_remove_bg', { enabled: true });
+    return set({ bgRemovalEnabled, ...(!bgRemovalEnabled ? { bgPaintMode: 'off' as const } : {}) });
+  },
   setBgTolerance: (bgTolerance) => set({ bgTolerance }),
   setBgEdgeSoftness: (bgEdgeSoftness) => set({ bgEdgeSoftness }),
   setBgSeedColors: (bgSeedColors) => set({ bgSeedColors }),
@@ -727,7 +731,10 @@ export const useStore = create<AppState>((set, get) => ({
   setDtgPaintMask: (dtgPaintMask, dtgPaintMaskDims) => set({ dtgPaintMask, dtgPaintMaskDims }),
   setDtgPaintMode: (dtgPaintMode) => set({ dtgPaintMode }),
   setBgMask: (bgMask) => set({ bgMask }),
-  setShowRegistrationMarks: (showRegistrationMarks) => set({ showRegistrationMarks }),
+  setShowRegistrationMarks: (showRegistrationMarks) => {
+    if (showRegistrationMarks) trackEvent('tool_registration_marks', { enabled: true });
+    return set({ showRegistrationMarks });
+  },
   setRegMarkPadding: (regMarkPadding) => set({ regMarkPadding: Math.max(0.1, Math.min(3, regMarkPadding)) }),
   setDocumentBleed: (documentBleed) => set({ documentBleed: Math.max(0, Math.min(4, documentBleed)) }),
   setTextureEnabled:   (textureEnabled)   => set({ textureEnabled }),
@@ -889,9 +896,15 @@ export const useStore = create<AppState>((set, get) => ({
   setPaintMask: (layerId, mask) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: mask } })),
   clearPaintMask: (layerId) => set((s) => ({ paintMasks: { ...s.paintMasks, [layerId]: null } })),
   clearAllPaintMasks: () => set({ paintMasks: {} }),
-  setPaintMode: (paintMode) => set({ paintMode }),
+  setPaintMode: (paintMode) => {
+    if (paintMode !== 'off') trackEvent('tool_brush', { mode: paintMode });
+    return set({ paintMode });
+  },
   setBrushSize: (brushSize) => set({ brushSize: Math.max(2, Math.min(120, brushSize)) }),
-  setSeparationMode: (separationMode) => { localStorage.setItem('at-mode', separationMode); return set((s) => ({
+  setSeparationMode: (separationMode) => {
+    localStorage.setItem('at-mode', separationMode);
+    trackEvent('mode_change', { mode: separationMode });
+    return set((s) => ({
     historyStack: [captureSnapshot(s), ...s.historyStack].slice(0, 20),
     separationMode,
     // Always reset image adjustments on mode switch — each mode starts from the original image
@@ -972,11 +985,17 @@ export const useStore = create<AppState>((set, get) => ({
   setDitherComposite: (ditherComposite) => set({ ditherComposite }),
   setIsProcessing: (isProcessing) => set({ isProcessing }),
   setSoloLayerId: (soloLayerId) => set({ soloLayerId }),
-  setMockupOpen: (mockupOpen) => set({ mockupOpen }),
+  setMockupOpen: (mockupOpen) => {
+    if (mockupOpen) trackEvent('mockup_open');
+    return set({ mockupOpen });
+  },
   setPrintSimActive: (printSimActive) => set({ printSimActive }),
   setPrintSimLoading: (printSimLoading) => set({ printSimLoading }),
   setViewingDistance: (viewingDistance) => set({ viewingDistance }),
-  setPresetsOpen: (presetsOpen) => set({ presetsOpen }),
+  setPresetsOpen: (presetsOpen) => {
+    if (presetsOpen) trackEvent('presets_open');
+    return set({ presetsOpen });
+  },
   loadPreset: (data) => set((s) => {
     const base = {
       layers:           data.layers,
