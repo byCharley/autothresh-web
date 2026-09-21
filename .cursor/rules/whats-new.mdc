@@ -1,0 +1,11 @@
+---
+description: Never update What's New / CHANGELOG unless the user explicitly asks for public release notes
+alwaysApply: true
+---
+
+# What's New / changelog
+
+- Do **not** edit `WhatsNewModal.tsx` / `CHANGELOG` as part of normal fixes or features.
+- Only add a What's New entry when the user explicitly asks for public notes, release notes, or a What's New update.
+- Skip entries for internal/admin-only work, trial/billing UI tweaks, analytics, and other changes most customers will not care about — even when shipping a customer-visible fix, wait for them to ask before announcing it.
+---

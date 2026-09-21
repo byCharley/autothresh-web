@@ -15,13 +15,6 @@ interface Entry {
 
 export const CHANGELOG: Entry[] = [
   {
-    date: '2026-09-20',
-    label: 'Live Trial Countdown',
-    added: [
-      'Free trial now counts down in real time — you’ll see days, hours, minutes, and seconds remaining next to your name in the top bar, and again in your account menu and Manage Subscription page.',
-    ],
-  },
-  {
     date: '2026-09-18',
     label: 'iPad PSD Export Fix',
     fixed: [
