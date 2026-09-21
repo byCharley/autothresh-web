@@ -2096,6 +2096,56 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
   const [error, setError]       = useState<string | null>(null);
   const [exportingCancelled, setExportingCancelled] = useState(false);
   const [sunsetting, setSunsetting] = useState(false);
+  const [seedingAccess, setSeedingAccess] = useState(false);
+
+  async function seedPlanAccessFromExport() {
+    if (!confirm('Load paid-access end dates for all 126 exported subscribers into the database?\n\nThis does NOT cancel anything in Seal — only grants app access until each next_billing_date.\n\nCreate the plan_access table in Supabase first if needed.')) return;
+    setSeedingAccess(true);
+    try {
+      let offset = 0;
+      let total = 0;
+      let saved = 0;
+      let failed = 0;
+      let rounds = 0;
+      while (rounds < 20) {
+        rounds++;
+        const r = await fetch('/api/seed-plan-access', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ offset, limit: 50 }),
+        });
+        const text = await r.text();
+        let body: {
+          error?: string;
+          setupError?: string;
+          total?: number;
+          saved?: number;
+          failed?: number;
+          done?: boolean;
+          nextOffset?: number | null;
+        };
+        try {
+          body = JSON.parse(text) as typeof body;
+        } catch {
+          throw new Error(`Server error: ${text.slice(0, 160)}`);
+        }
+        if (!r.ok) throw new Error(body.setupError || body.error || `HTTP ${r.status}`);
+        total = body.total ?? total;
+        saved += body.saved ?? 0;
+        failed += body.failed ?? 0;
+        if (body.done || body.nextOffset == null) break;
+        offset = body.nextOffset;
+      }
+      alert(`Access dates saved.\nTotal in export: ${total}\nSaved: ${saved}\nFailed: ${failed}`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Seed failed');
+    } finally {
+      setSeedingAccess(false);
+    }
+  }
 
   async function runSunsetSubscriptions() {
     if (!confirm('Cancel ALL exported Monthly/Annual subscriptions in Seal now?\n\nUses your Seal CSV (exact IDs + renewal dates).\n• Stops every card charge immediately\n• Keeps each user in the app until their next_billing_date\n\nCreate the plan_access table in Supabase first if you have not already.')) return;
@@ -2606,6 +2656,25 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
                   <span>{exportingCancelled ? 'Exporting…' : 'Export Cancelled'}</span>
                   <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
                     CSV · email list
+                  </span>
+                </button>
+                <button
+                  onClick={seedPlanAccessFromExport}
+                  disabled={seedingAccess}
+                  title="Save next_billing_date for all exported subscribers so they keep access after you cancel in Seal"
+                  style={{
+                    minWidth: 140, padding: '10px 14px',
+                    background: 'var(--surface-2)', border: '1px solid rgba(62,207,79,0.45)',
+                    color: seedingAccess ? 'var(--text-dim)' : '#3ecf4f',
+                    fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                    letterSpacing: '0.06em', textTransform: 'uppercase',
+                    cursor: seedingAccess ? 'default' : 'pointer',
+                    display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4,
+                  }}
+                >
+                  <span>{seedingAccess ? 'Saving…' : 'Save Access Dates'}</span>
+                  <span style={{ fontSize: 8, fontWeight: 400, color: 'var(--text-dim)', textTransform: 'none', letterSpacing: 0 }}>
+                    From export · no cancel
                   </span>
                 </button>
                 <button
