@@ -40,8 +40,9 @@ export function ManageSubscriptionPage({ onBack, token, planTitle, nextBillingDa
   const status = (subscriptionStatus ?? '').toLowerCase();
   const until = fmtDate(nextBillingDate);
   const meta = statusMeta(status);
-  const trialCountdown = useCountdown(nextBillingDate, status === 'trial');
-  const dateLine = status === 'trial' && trialCountdown
+  const isTrial = status === 'trial' || status === 'app_trial';
+  const trialCountdown = useCountdown(nextBillingDate, isTrial);
+  const dateLine = isTrial && trialCountdown
     ? (trialCountdown === 'Ended'
       ? 'Trial ended'
       : `Ends in ${trialCountdown}${until ? ` · Bills ${until} if not cancelled` : ''}`)
