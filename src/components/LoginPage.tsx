@@ -63,6 +63,9 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
   const [showInfo, setShowInfo]         = useState(false);
   const [trialBusy, setTrialBusy] = useState(false);
   const [trialError, setTrialError] = useState('');
+  const [trialStarted, setTrialStarted] = useState(() => {
+    try { return localStorage.getItem('at_trial_started') === '1'; } catch { return false; }
+  });
   const [switchBusy, setSwitchBusy] = useState(false);
 
   const licenseReady = !!licenseKey.trim() && !!orderNumber.trim();
@@ -176,11 +179,16 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
                   setTrialBusy(true);
                   setTrialError('');
                   const ok = await onStartTrial();
-                  if (!ok) setTrialError('Could not start your trial. Try again, or sign in if you already have access.');
+                  if (ok) {
+                    try { localStorage.setItem('at_trial_started', '1'); } catch { /* ignore */ }
+                    setTrialStarted(true);
+                  } else {
+                    setTrialError('Could not start your trial. Try again, or sign in if you already have access.');
+                  }
                   setTrialBusy(false);
                 }}
               >
-                {trialBusy ? 'Starting…' : 'Continue with trial'}
+                {trialBusy ? 'Starting…' : trialStarted ? 'Continue with trial' : 'Start 3 Day Trial'}
               </button>
               <a
                 href={PRODUCT_URL}
