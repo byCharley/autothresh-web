@@ -71,9 +71,10 @@ async function startOAuth(prompt?: string) {
 
 export type AuthStatus = 'loading' | 'unauthenticated' | 'no-subscription' | 'authenticated' | 'trial' | 'trial-ended';
 
-function wantsLoginScreen(): boolean {
-  const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  return path === '/login' || new URLSearchParams(window.location.search).has('login');
+function loadAccountSession(): Session | null {
+  const s = loadSession();
+  if (!s?.token || s.subscriptionStatus === 'app_trial') return null;
+  return s;
 }
 
 function trialSession(expiresAt: string): Session {
@@ -91,7 +92,6 @@ function trialSession(expiresAt: string): Session {
 type TrialClaim = { kind: 'login' } | { kind: 'unavailable' } | { kind: 'active'; expiresAt: string } | { kind: 'ended' };
 
 async function claimAnonymousTrial(): Promise<TrialClaim> {
-  if (wantsLoginScreen()) return { kind: 'login' };
   try {
     const fingerprint = await getBrowserFingerprint();
     const r = await fetch('/api/trial', {
@@ -142,7 +142,7 @@ const DEV_SESSION: Session = {
 
 export function useAuth() {
   const [status,  setStatus]  = useState<AuthStatus>(DEV_BYPASS ? 'authenticated' : 'loading');
-  const [session, setSession] = useState<Session | null>(DEV_BYPASS ? DEV_SESSION : loadSession());
+  const [session, setSession] = useState<Session | null>(DEV_BYPASS ? DEV_SESSION : loadAccountSession());
 
   useEffect(() => {
     if (DEV_BYPASS) return;
@@ -159,7 +159,8 @@ export function useAuth() {
     // older session. Just clean up and show the login screen.
     if (localStorage.getItem('at_post_logout')) {
       localStorage.removeItem('at_post_logout');
-      claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+      setSession(null);
+      setStatus('unauthenticated');
       return;
     }
 
@@ -176,7 +177,8 @@ export function useAuth() {
 
       if (!codeVerifier || retState !== storedState) {
         window.history.replaceState({}, '', '/');
-        claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+        setSession(null);
+        setStatus('unauthenticated');
         return;
       }
 
@@ -189,7 +191,8 @@ export function useAuth() {
         .then((data) => {
           window.history.replaceState({}, '', '/');
           if (data.error || !data.token) {
-            claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+            setSession(null);
+            setStatus('unauthenticated');
             return;
           }
           if (data.idToken) saveIdToken(data.idToken);
@@ -218,16 +221,18 @@ export function useAuth() {
         })
         .catch(() => {
           window.history.replaceState({}, '', '/');
-          claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+          setSession(null);
+          setStatus('unauthenticated');
         });
 
       return;
     }
 
     // ── Verify stored session ─────────────────────────────────────────────
-    const stored = loadSession();
-    if (!stored || stored.subscriptionStatus === 'app_trial' || !stored.token) {
-      claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+    const stored = loadAccountSession();
+    if (!stored) {
+      setSession(null);
+      setStatus('unauthenticated');
       return;
     }
 
@@ -240,7 +245,8 @@ export function useAuth() {
       .then((data) => {
         if (!data.valid) {
           clearSession();
-          claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+          setSession(null);
+          setStatus('unauthenticated');
           return;
         }
         // Guard: if logout() ran while verify was in-flight, don't restore.
@@ -271,7 +277,10 @@ export function useAuth() {
           setStatus('trial');
           return;
         }
-        applyTrialClaim(claim, setSession, setStatus);
+        if (claim.kind === 'ended') {
+          setSession(null);
+          setStatus('trial-ended');
+        }
       });
     };
     const id = window.setInterval(tick, 5 * 60 * 1000);
@@ -409,7 +418,8 @@ export function useAuth() {
     clearSession();
     localStorage.removeItem('at-mode');
     localStorage.removeItem('at-accent');
-    claimAnonymousTrial().then(claim => applyTrialClaim(claim, setSession, setStatus));
+    setSession(null);
+    setStatus('unauthenticated');
   }, []);
 
   const showLogin = useCallback(() => {
@@ -419,7 +429,6 @@ export function useAuth() {
   }, []);
 
   const startTrial = useCallback(async (): Promise<boolean> => {
-    window.history.replaceState({}, '', '/');
     const claim = await claimAnonymousTrial();
     applyTrialClaim(claim, setSession, setStatus);
     return claim.kind === 'active' || claim.kind === 'ended';

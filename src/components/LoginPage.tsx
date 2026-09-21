@@ -180,7 +180,7 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
                   setTrialBusy(false);
                 }}
               >
-                {trialBusy ? 'Starting…' : 'Try 3 days free'}
+                {trialBusy ? 'Starting…' : 'Continue with trial'}
               </button>
               <a
                 href={PRODUCT_URL}
