@@ -368,23 +368,13 @@ export function useAuth() {
     return refreshed?.token ?? null;
   }, [refreshAccessToken]);
 
-  // switchAccount: refresh the Shopify id_token, then hit their logout URL.
-  // Shopify clears the customer session and sends the browser to /auth/start,
-  // which starts OAuth with prompt=login (email / Google / Shop).
-  // id_token_hint is required — calling logout without it shows "Invalid id_token".
-  // Requires Customer Account API Logout URIs:
-  //   https://autothresh.com/auth/start
-  //   https://www.autothresh.com/auth/start
+  // Use a different account: Shopify logout (when we still have an id_token)
+  // clears their session and returns to /auth/start, which shows email / Google / Shop.
+  // If the token was already cleared, go straight to Shopify login — never alert.
   const switchAccount = useCallback(async () => {
     const storedIdToken      = localStorage.getItem(SHOPIFY_ID_TOKEN) || session?.idToken || null;
     const storedRefreshToken = localStorage.getItem(SHOPIFY_REFRESH_TOKEN);
 
-    if (!storedIdToken && !storedRefreshToken) {
-      alert('Sign in once with the current account, then use this button to switch.');
-      return;
-    }
-
-    // Clear the app session only. Keep Shopify tokens for the logout hint.
     clearSession();
 
     let idToken = storedIdToken;
@@ -402,15 +392,15 @@ export function useAuth() {
       } catch { /* fall back to stored id token */ }
     }
 
-    if (!idToken) {
-      alert('Sign in once with the current account, then use this button to switch.');
+    if (idToken) {
+      const logoutUrl = new URL(`https://shopify.com/authentication/${SHOPIFY_STORE_ID}/logout`);
+      logoutUrl.searchParams.set('id_token_hint', idToken);
+      logoutUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/auth/start`);
+      window.location.href = logoutUrl.toString();
       return;
     }
 
-    const logoutUrl = new URL(`https://shopify.com/authentication/${SHOPIFY_STORE_ID}/logout`);
-    logoutUrl.searchParams.set('id_token_hint', idToken);
-    logoutUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/auth/start`);
-    window.location.href = logoutUrl.toString();
+    await startOAuth('login');
   }, [session?.idToken]);
 
   // logout: local-only sign-out. Keeps shopify_id_token + shopify_refresh_token

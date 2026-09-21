@@ -79,7 +79,7 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
     setSwitchBusy(true);
     try {
       await onSwitchAccount();
-    } catch {
+    } finally {
       setSwitchBusy(false);
     }
   };
