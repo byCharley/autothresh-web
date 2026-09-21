@@ -23,33 +23,6 @@ export function shopifyAccountIdent(emailLower: string): TrialIdent {
   return { kind: 'fp', value: hashIdent(`shopify:${emailLower.trim().toLowerCase()}`) };
 }
 
-export function clientIp(req: VercelRequest): string {
-  const forwarded = String(req.headers['x-forwarded-for'] ?? '');
-  const first = forwarded.split(',')[0]?.trim();
-  return first || String(req.headers['x-real-ip'] ?? '') || req.socket?.remoteAddress || '';
-}
-
-function ipv6HomePrefix(ip: string): string | null {
-  if (!ip.includes(':')) return null;
-  const halves = ip.split('::');
-  if (halves.length > 2) return null;
-  const head = halves[0] ? halves[0].split(':').filter(Boolean) : [];
-  const tail = halves.length === 2 ? (halves[1] ? halves[1].split(':').filter(Boolean) : []) : null;
-  const parts = tail === null
-    ? head
-    : [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail];
-  if (parts.length !== 8) return null;
-  return parts.slice(0, 4).join(':');
-}
-
-export function ipIdents(ip: string): TrialIdent[] {
-  if (!ip) return [];
-  const idents: TrialIdent[] = [{ kind: 'ip', value: hashIdent(ip) }];
-  const home = ipv6HomePrefix(ip);
-  if (home) idents.push({ kind: 'ip', value: hashIdent(`home6:${home}`) });
-  return idents;
-}
-
 export function cookieId(req: VercelRequest): string {
   const raw = String(req.headers.cookie ?? '');
   const m = /(?:^|;\s*)at_tid=([0-9a-f-]{36})/i.exec(raw);
@@ -112,11 +85,14 @@ export async function attachIdents(trialId: string, idents: TrialIdent[]) {
   }
 }
 
+/**
+ * Browser/device signals only — never IP.
+ * Shared home Wi‑Fi must not merge two Shopify accounts into one trial.
+ */
 export function buildDeviceIdents(opts: {
   req: VercelRequest;
   deviceId?: string;
   fingerprint?: string;
-  shopifyEmail?: string;
 }): TrialIdent[] {
   const idents: TrialIdent[] = [];
   const tid = cookieId(opts.req);
@@ -127,25 +103,10 @@ export function buildDeviceIdents(opts: {
   if (fingerprint && /^[a-f0-9]{16,64}$/.test(fingerprint)) {
     idents.push({ kind: 'fp', value: fingerprint });
   }
-  if (opts.shopifyEmail) idents.push(shopifyAccountIdent(opts.shopifyEmail));
-  idents.push(...ipIdents(clientIp(opts.req)));
   return idents;
 }
 
-/**
- * Look up / attach an existing trial. Never creates one.
- * Used for Continue-on-device and for Sign-in resume.
- */
-export async function lookupAppTrial(
-  idents: TrialIdent[],
-  opts?: { req?: VercelRequest; res?: VercelResponse },
-): Promise<TrialClaimResult> {
-  const existing = await findTrials(idents);
-  if (!existing.length) return { status: 'none' };
-  const trial = pickTrial(existing);
-  const cookieIdent: TrialIdent = { kind: 'cookie', value: trial.id };
-  await attachIdents(trial.id, [...idents.filter(i => i.kind !== 'cookie'), cookieIdent]);
-  if (opts?.req && opts?.res) setTrialCookie(opts.req, opts.res, trial.id);
+function toClaimResult(trial: TrialRow): TrialClaimResult {
   const active = Date.parse(trial.expires_at) > Date.now();
   return {
     status: active ? 'active' : 'expired',
@@ -155,21 +116,45 @@ export async function lookupAppTrial(
   };
 }
 
+async function bindAndReturn(
+  trial: TrialRow,
+  attach: TrialIdent[],
+  opts?: { req?: VercelRequest; res?: VercelResponse },
+): Promise<TrialClaimResult> {
+  const cookieIdent: TrialIdent = { kind: 'cookie', value: trial.id };
+  await attachIdents(trial.id, [...attach.filter(i => i.kind !== 'cookie'), cookieIdent]);
+  if (opts?.req && opts?.res) setTrialCookie(opts.req, opts.res, trial.id);
+  return toClaimResult(trial);
+}
+
+/**
+ * Resume a trial from this browser only (cookie / device / fingerprint).
+ * Does not use IP, so household Wi‑Fi cannot steal another person's trial.
+ */
+export async function lookupAppTrial(
+  idents: TrialIdent[],
+  opts?: { req?: VercelRequest; res?: VercelResponse },
+): Promise<TrialClaimResult> {
+  const existing = await findTrials(idents);
+  if (!existing.length) return { status: 'none' };
+  return bindAndReturn(pickTrial(existing), idents, opts);
+}
+
 /**
  * Start or resume a trial for a verified Shopify customer.
- * Creates at most one trial per Shopify account.
+ * Lookup is account-only so two people on the same Wi‑Fi each get their own trial.
  */
 export async function claimAppTrialForShopify(
   emailLower: string,
-  idents: TrialIdent[],
+  deviceIdents: TrialIdent[],
   opts?: { req?: VercelRequest; res?: VercelResponse; createIfMissing?: boolean },
 ): Promise<TrialClaimResult> {
   const email = emailLower.trim().toLowerCase();
   if (!email) return { status: 'none' };
-  const withAccount = [...idents, shopifyAccountIdent(email)];
-  const existing = await findTrials(withAccount);
+  const account = shopifyAccountIdent(email);
+  const existing = await findTrials([account]);
   if (existing.length) {
-    return lookupAppTrial(withAccount, opts);
+    return bindAndReturn(pickTrial(existing), [...deviceIdents, account], opts);
   }
   if (opts?.createIfMissing === false) return { status: 'none' };
 
@@ -182,15 +167,19 @@ export async function claimAppTrialForShopify(
   const rows = await created.json() as TrialRow[];
   const trial = rows[0];
   if (!trial) throw new Error('create');
-  const cookieIdent: TrialIdent = { kind: 'cookie', value: trial.id };
-  await attachIdents(trial.id, [...withAccount.filter(i => i.kind !== 'cookie'), cookieIdent]);
-  if (opts?.req && opts?.res) setTrialCookie(opts.req, opts.res, trial.id);
-  return {
-    status: 'active',
-    expiresAt: trial.expires_at,
-    startedAt: trial.started_at,
-    trialId: trial.id,
-  };
+  return bindAndReturn(trial, [...deviceIdents, account], opts);
+}
+
+/** Resume an existing Shopify-bound trial without creating a new one. */
+export async function resumeAppTrialForShopify(
+  emailLower: string,
+  deviceIdents: TrialIdent[],
+  opts?: { req?: VercelRequest; res?: VercelResponse },
+): Promise<TrialClaimResult> {
+  return claimAppTrialForShopify(emailLower, deviceIdents, {
+    ...opts,
+    createIfMissing: false,
+  });
 }
 
 export function trialConfigured(): boolean {

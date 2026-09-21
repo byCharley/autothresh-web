@@ -4,8 +4,7 @@ import { sunsetSubscriptionsForEmail } from './_lib/sealSunset.js';
 import { getPlanAccess } from './_lib/planAccess.js';
 import {
   buildDeviceIdents,
-  lookupAppTrial,
-  shopifyAccountIdent,
+  resumeAppTrialForShopify,
   trialConfigured,
 } from './_lib/appTrial.js';
 
@@ -769,11 +768,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let outPlan = finalPlan;
   let devices: Array<LicenseDevice & { isCurrent?: boolean }> | undefined;
 
-  // Resume an existing Shopify-bound app trial on any device (Sign in).
+  // Resume an existing Shopify-bound app trial (account-only — not shared Wi‑Fi).
   if (!outHasSub && !isCreator && !isTester && !isSecurityExpired && trialConfigured()) {
     try {
       const idents = buildDeviceIdents({ req, deviceId });
-      const claim = await lookupAppTrial([...idents, shopifyAccountIdent(emailLower)], { req, res });
+      const claim = await resumeAppTrialForShopify(emailLower, idents, { req, res });
       if (claim.status === 'active') {
         outHasSub = true;
         outStatus = 'app_trial';

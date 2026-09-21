@@ -55,14 +55,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     req,
     deviceId: body.deviceId,
     fingerprint,
-    shopifyEmail: shopifyEmail ?? undefined,
   });
-  if (!idents.length) return res.status(400).json({ error: 'Could not start trial.' });
+  if (!idents.length && !shopifyEmail) {
+    return res.status(400).json({ error: 'Could not start trial.' });
+  }
 
   const lookupOnly = req.query.action === 'status';
 
   try {
-    // Resume on this device / signed-in Shopify account — never mint a second trial.
+    if (shopifyEmail) {
+      const claimed = await claimAppTrialForShopify(shopifyEmail, idents, {
+        req,
+        res,
+        createIfMissing: !lookupOnly,
+      });
+      if (lookupOnly && claimed.status === 'none') {
+        return res.status(200).json({ status: 'none' });
+      }
+      return res.status(200).json(claimed);
+    }
+
+    // Anonymous Continue — this browser only (no IP / household merge).
     const existing = await lookupAppTrial(idents, { req, res });
     if (existing.status !== 'none') {
       return res.status(200).json(existing);
@@ -70,20 +83,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (lookupOnly) return res.status(200).json({ status: 'none' });
 
-    // Brand-new trial only after a verified Shopify sign-in.
-    if (!shopifyEmail) {
-      return res.status(401).json({
-        error: 'Sign in to start your free trial.',
-        needSignIn: true,
-      });
-    }
-
-    const claimed = await claimAppTrialForShopify(shopifyEmail, idents, {
-      req,
-      res,
-      createIfMissing: true,
+    return res.status(401).json({
+      error: 'Sign in to start your free trial.',
+      needSignIn: true,
     });
-    return res.status(200).json(claimed);
   } catch {
     return res.status(500).json({ error: 'Could not start trial.' });
   }

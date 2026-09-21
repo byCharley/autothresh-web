@@ -4,8 +4,7 @@ import { getPlanAccess } from './_lib/planAccess.js';
 import {
   buildDeviceIdents,
   claimAppTrialForShopify,
-  lookupAppTrial,
-  shopifyAccountIdent,
+  resumeAppTrialForShopify,
   trialConfigured,
 } from './_lib/appTrial.js';
 
@@ -732,10 +731,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let devices: Array<{ id: string; device_id: string; device_name: string; last_seen_at: string; created_at: string; isCurrent?: boolean }> | undefined;
 
   // App trial: Start 3 Day Trial signs in with wantTrial; Sign in resumes an existing one.
+  // Account-only lookup so two people on the same Wi‑Fi each get their own trial.
   if (!outHasSub && !isCreator && !isTester && !isSecurityExpired && trialConfigured()) {
     try {
       const idents = buildDeviceIdents({ req, deviceId });
-      const account = shopifyAccountIdent(emailLower);
       if (wantTrial) {
         const claim = await claimAppTrialForShopify(emailLower, idents, {
           req,
@@ -752,7 +751,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           outExpiry = claim.expiresAt;
         }
       } else {
-        const claim = await lookupAppTrial([...idents, account], { req, res });
+        const claim = await resumeAppTrialForShopify(emailLower, idents, { req, res });
         if (claim.status === 'active') {
           outHasSub = true;
           outStatus = 'app_trial';
