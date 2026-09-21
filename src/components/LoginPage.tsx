@@ -226,6 +226,11 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
                 Buy license · {PRODUCT_PRICE}
               </a>
             </div>
+            <p className="login-trial-note">
+              A free trial requires an account on{' '}
+              <a href="https://charleypangus.com" target="_blank" rel="noopener noreferrer">charleypangus.com</a>.
+              Sign in with your email — your account is created automatically.
+            </p>
             {trialError && <div className="login-error">{trialError}</div>}
 
             <button className="login-text-btn login-about" onClick={() => setShowInfo(true)}>
