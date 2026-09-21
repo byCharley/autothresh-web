@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { ACTIVE_SUBSCRIPTION_EXPORT } from './_data/activeSubscriptions';
-import { countPlanAccess, upsertPlanAccess } from './_lib/planAccess';
+import { ACTIVE_SUBSCRIPTION_EXPORT } from './_data/activeSubscriptions.js';
+import { countPlanAccess, upsertPlanAccess } from './_lib/planAccess.js';
 
 export const config = { maxDuration: 30 };
 

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, timingSafeEqual } from 'crypto';
-import { sunsetSubscriptionsForEmail } from './_lib/sealSunset';
-import { getPlanAccess } from './_lib/planAccess';
+import { sunsetSubscriptionsForEmail } from './_lib/sealSunset.js';
+import { getPlanAccess } from './_lib/planAccess.js';
 
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const TESTER_EMAILS = new Set(

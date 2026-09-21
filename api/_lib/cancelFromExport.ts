@@ -3,8 +3,8 @@
  * Uses exact ids + next_billing_date so we stop charges and keep paid access.
  */
 
-import { upsertPlanAccess } from './planAccess';
-import { ACTIVE_SUBSCRIPTION_EXPORT } from '../_data/activeSubscriptions';
+import { upsertPlanAccess } from './planAccess.js';
+import { ACTIVE_SUBSCRIPTION_EXPORT } from '../_data/activeSubscriptions.js';
 
 const SEAL_TOKEN   = process.env.SEAL_API_TOKEN ?? process.env.SEAL_TOKEN ?? '';
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';

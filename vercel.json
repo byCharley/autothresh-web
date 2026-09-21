@@ -2,6 +2,11 @@
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
+  "functions": {
+    "api/**/*.ts": {
+      "includeFiles": "api/_lib/**,api/_data/**"
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/close-tickets",

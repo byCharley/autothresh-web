@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sunsetAllRecurringSubscriptions } from '../_lib/sealSunset';
+import { sunsetAllRecurringSubscriptions } from '../_lib/sealSunset.js';
 
 export const config = { maxDuration: 60 };
 

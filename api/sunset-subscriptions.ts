@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { cancelExportBatch, loadActiveSubscriptionExport } from './_lib/cancelFromExport';
+import { cancelExportBatch, loadActiveSubscriptionExport } from './_lib/cancelFromExport.js';
 
 // Small batches — one Seal cancel + one Supabase write per row.
 export const config = { maxDuration: 30 };

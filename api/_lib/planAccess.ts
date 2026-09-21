@@ -7,7 +7,7 @@
  * access through their next_billing_date.
  */
 
-import { ACTIVE_SUBSCRIPTION_EXPORT } from '../_data/activeSubscriptions';
+import { ACTIVE_SUBSCRIPTION_EXPORT } from '../_data/activeSubscriptions.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? '';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';

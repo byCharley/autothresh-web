@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sunsetSubscriptionsForEmail } from './_lib/sealSunset';
-import { getPlanAccess } from './_lib/planAccess';
+import { sunsetSubscriptionsForEmail } from './_lib/sealSunset.js';
+import { getPlanAccess } from './_lib/planAccess.js';
 
 const CLIENT_ID    = process.env.customer!;
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;

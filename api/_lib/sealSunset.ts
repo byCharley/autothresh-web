@@ -3,7 +3,7 @@
  * Paid access through the current period is stored in plan_access and enforced in verify/auth.
  */
 
-import { upsertPlanAccess } from './planAccess';
+import { upsertPlanAccess } from './planAccess.js';
 
 const SEAL_TOKEN   = process.env.SEAL_API_TOKEN ?? process.env.SEAL_TOKEN ?? '';
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
