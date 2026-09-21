@@ -22,6 +22,7 @@ const SESSION_KEY           = 'at_session';
 const DISPLAY_NAME_KEY      = 'at_display_name';
 const SHOPIFY_ID_TOKEN      = 'shopify_id_token';      // saved at login, used as logout hint
 const SHOPIFY_REFRESH_TOKEN = 'shopify_refresh_token'; // used to get a fresh id_token for logout
+const SHOPIFY_STORE_ID      = '52142571674';
 const VERIFIER_KEY     = 'at_pkce_verifier';
 const STATE_KEY        = 'at_pkce_state';
 const NONCE_KEY        = 'at_pkce_nonce';
@@ -51,10 +52,6 @@ function saveSession(s: Session) { localStorage.setItem(SESSION_KEY, JSON.string
 function clearSession() { localStorage.removeItem(SESSION_KEY); }
 function saveIdToken(t: string)     { localStorage.setItem(SHOPIFY_ID_TOKEN, t); }
 function saveRefreshToken(t: string) { localStorage.setItem(SHOPIFY_REFRESH_TOKEN, t); }
-function clearShopifyTokens() {
-  localStorage.removeItem(SHOPIFY_ID_TOKEN);
-  localStorage.removeItem(SHOPIFY_REFRESH_TOKEN);
-}
 
 /** Decode JWT payload without verifying signature (client-side expiry check only). */
 function decodeJwtPayload(token: string): { exp?: number } | null {
@@ -69,12 +66,22 @@ function decodeJwtPayload(token: string): { exp?: number } | null {
   }
 }
 
-/** Shopify logout rejects expired/malformed id_token_hint with "Invalid id_token". */
+/** Shopify logout rejects expired id_token_hint with "Invalid id_token". */
 function isUsableIdToken(token: string | null | undefined): token is string {
   if (!token) return false;
   const payload = decodeJwtPayload(token);
   if (!payload?.exp) return false;
   return payload.exp * 1000 > Date.now() + 30_000;
+}
+
+/** End Shopify customer session, then land on /auth/start → prompt=login picker. */
+function redirectToShopifyLogout(idToken?: string | null) {
+  const logoutUrl = new URL(`https://shopify.com/authentication/${SHOPIFY_STORE_ID}/logout`);
+  if (isUsableIdToken(idToken)) {
+    logoutUrl.searchParams.set('id_token_hint', idToken);
+  }
+  logoutUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/auth/start`);
+  window.location.href = logoutUrl.toString();
 }
 
 // Shared helper: generate PKCE + state, store in sessionStorage, redirect to Shopify OAuth.
@@ -322,15 +329,7 @@ export function useAuth() {
     return () => window.clearTimeout(t);
   }, [status, session?.subscriptionExpiresAt]);
 
-  const initiateLogin = useCallback(() => {
-    // Drop expired logout hints so "Use a different account" can't keep sending
-    // Shopify an Invalid id_token. Soft Sign in still uses SSO when Shopify has a session.
-    const stored = localStorage.getItem(SHOPIFY_ID_TOKEN);
-    if (stored && !isUsableIdToken(stored) && !localStorage.getItem(SHOPIFY_REFRESH_TOKEN)) {
-      clearShopifyTokens();
-    }
-    return startOAuth();
-  }, []);
+  const initiateLogin = useCallback(() => startOAuth(), []);
 
   const recheck = useCallback(async (): Promise<boolean> => {
     const stored = loadSession();
@@ -400,13 +399,42 @@ export function useAuth() {
     return refreshed?.token ?? null;
   }, [refreshAccessToken]);
 
-  // Always available: clear local session and force Shopify's login screen
-  // (email / Google / Shop). Do NOT hit Shopify logout with a stale id_token —
-  // that is what showed "Invalid id_token". prompt=login is enough to get the picker.
+  // switchAccount: Shopify OIDC logout clears their session, then redirects to
+  // /auth/start which starts OAuth with prompt=login → email / Google / Shop.
+  // Requires Customer Account API Logout URIs:
+  //   https://autothresh.com/auth/start
+  //   https://www.autothresh.com/auth/start
   const switchAccount = useCallback(async () => {
+    const storedIdToken      = localStorage.getItem(SHOPIFY_ID_TOKEN);
+    const storedRefreshToken = localStorage.getItem(SHOPIFY_REFRESH_TOKEN);
+
+    // Clear the app session only — keep Shopify tokens for the logout hint.
     clearSession();
-    clearShopifyTokens();
-    await startOAuth('login');
+
+    let idToken: string | null = isUsableIdToken(storedIdToken) ? storedIdToken : null;
+
+    // Refresh so the hint is not expired (Shopify shows Invalid id_token otherwise).
+    if (storedRefreshToken) {
+      try {
+        const r = await fetch('/api/auth-refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: storedRefreshToken }),
+        });
+        if (r.ok) {
+          const data = await r.json() as { idToken?: string; refreshToken?: string };
+          if (data.refreshToken) saveRefreshToken(data.refreshToken);
+          if (isUsableIdToken(data.idToken)) {
+            idToken = data.idToken;
+            saveIdToken(data.idToken);
+          }
+        }
+      } catch { /* fall through */ }
+    }
+
+    // Always go through Shopify logout → /auth/start. Only attach id_token_hint
+    // when it is still valid so we never hit the Invalid id_token error page.
+    redirectToShopifyLogout(idToken);
   }, []);
 
   // logout: local-only sign-out. Keeps shopify_id_token + shopify_refresh_token
