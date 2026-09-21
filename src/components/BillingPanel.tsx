@@ -27,7 +27,7 @@ export function BillingPanel({ token, planTitle, nextBillingDate, subscriptionSt
 
   const status = (subscriptionStatus ?? '').toLowerCase();
   const hidden = status === 'creator' || status === 'tester' || status === 'lifetime' || status === 'blocked';
-  const isTrial = status === 'trial';
+  const isTrial = status === 'trial' || status === 'app_trial';
   const trialCountdown = useCountdown(nextBillingDate, isTrial && !hidden);
   if (hidden || !token) return null;
   const authToken = token;
