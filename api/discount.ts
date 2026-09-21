@@ -194,8 +194,6 @@ async function expiredAppTrialKey(req: VercelRequest, deviceId: string, fingerpr
   if (tid) idents.push({ kind: 'cookie', value: tid });
   if (deviceId && deviceId !== 'unknown-device') idents.push({ kind: 'device', value: hashIdent(deviceId) });
   if (fingerprint && /^[a-f0-9]{16,64}$/.test(fingerprint)) idents.push({ kind: 'fp', value: fingerprint });
-  const ip = clientIp(req);
-  if (ip) idents.push({ kind: 'ip', value: hashIdent(ip) });
   if (!idents.length) return null;
 
   const or = idents.map(i => `and(kind.eq.${i.kind},value.eq.${encodeURIComponent(i.value)})`).join(',');
