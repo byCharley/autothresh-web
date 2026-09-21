@@ -349,7 +349,7 @@ export async function sunsetAllRecurringSubscriptions(): Promise<{
 
   // Hard cap pages so a stuck Seal API cannot run forever in one cron tick.
   for (let i = 0; i < 80; i++) {
-    const batch = await sunsetSubscriptionBatch({ filter, page, perPage: 25 });
+    const batch = await sunsetSubscriptionBatch({ filter, page, perPage: 8 });
     scanned += batch.scanned;
     results.push(...batch.results);
     if (batch.done || !batch.nextFilter || !batch.nextPage) break;
