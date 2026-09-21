@@ -171,12 +171,6 @@ async function entitledSealOffer(email: string): Promise<Offer | null> {
   return null;
 }
 
-function clientIp(req: VercelRequest): string {
-  const forwarded = String(req.headers['x-forwarded-for'] ?? '');
-  const first = forwarded.split(',')[0]?.trim();
-  return first || String(req.headers['x-real-ip'] ?? '') || req.socket?.remoteAddress || '';
-}
-
 function hashIdent(value: string): string {
   return createHash('sha256').update(`${SECRET}|${value}`).digest('hex');
 }
