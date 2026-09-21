@@ -2117,7 +2117,7 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
             Authorization: `Bearer ${session.token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ filter, page, perPage: 25 }),
+          body: JSON.stringify({ filter, page, perPage: 8 }),
         });
         const text = await r.text();
         let body: {
@@ -2134,7 +2134,11 @@ export function AnalyticsDashboard({ session, onClose }: { session: Session; onC
         try {
           body = JSON.parse(text) as typeof body;
         } catch {
-          throw new Error(text.slice(0, 180) || `HTTP ${r.status}`);
+          throw new Error(
+            (text && text.trim().startsWith('{') === false)
+              ? `Server error (not JSON). Hard-refresh and try again. Details: ${text.slice(0, 140)}`
+              : (text.slice(0, 180) || `HTTP ${r.status}`),
+          );
         }
         if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
 

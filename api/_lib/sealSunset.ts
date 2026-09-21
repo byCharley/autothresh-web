@@ -5,7 +5,7 @@
 
 const SEAL_TOKEN   = process.env.SEAL_API_TOKEN ?? process.env.SEAL_TOKEN ?? '';
 const SEAL_API_URL = 'https://app.sealsubscriptions.com/shopify/merchant/api';
-const CONCURRENCY  = 5;
+const CONCURRENCY  = 3;
 
 export interface SunsetResult {
   id: number;
@@ -286,7 +286,7 @@ export async function sunsetSubscriptionsForEmail(email: string): Promise<Sunset
 export async function sunsetSubscriptionBatch(opts: SunsetBatchOptions = {}): Promise<SunsetBatchResult> {
   const filter = opts.filter ?? 'active';
   const page = Math.max(1, opts.page ?? 1);
-  const perPage = Math.min(50, Math.max(10, opts.perPage ?? 25));
+  const perPage = Math.min(50, Math.max(5, opts.perPage ?? 8));
 
   if (!SEAL_TOKEN) {
     return {
@@ -354,7 +354,9 @@ export async function sunsetAllRecurringSubscriptions(): Promise<{
     results.push(...batch.results);
     if (batch.done || !batch.nextFilter || !batch.nextPage) break;
     filter = batch.nextFilter;
-    page = batch.nextPage;
+    page = Math.max(1, batch.nextPage);
+    // Cron: fewer pages per tick to stay under timeout; hourly run continues.
+    if (i >= 12) break;
   }
 
   return { scanned, results };
