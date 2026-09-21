@@ -64,7 +64,11 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
   const [trialBusy, setTrialBusy] = useState(false);
   const [trialError, setTrialError] = useState('');
   const [canSwitch] = useState(() => {
-    try { return !!localStorage.getItem('shopify_id_token'); } catch { return false; }
+    try {
+      return !!(localStorage.getItem('shopify_id_token') || localStorage.getItem('shopify_refresh_token'));
+    } catch {
+      return false;
+    }
   });
 
   const licenseReady = !!licenseKey.trim() && !!orderNumber.trim();

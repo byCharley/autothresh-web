@@ -52,6 +52,31 @@ function saveSession(s: Session) { localStorage.setItem(SESSION_KEY, JSON.string
 function clearSession() { localStorage.removeItem(SESSION_KEY); }
 function saveIdToken(t: string)     { localStorage.setItem(SHOPIFY_ID_TOKEN, t); }
 function saveRefreshToken(t: string) { localStorage.setItem(SHOPIFY_REFRESH_TOKEN, t); }
+function clearShopifyTokens() {
+  localStorage.removeItem(SHOPIFY_ID_TOKEN);
+  localStorage.removeItem(SHOPIFY_REFRESH_TOKEN);
+}
+
+/** Decode JWT payload without verifying signature (client-side expiry check only). */
+function decodeJwtPayload(token: string): { exp?: number } | null {
+  try {
+    const part = token.split('.')[1];
+    if (!part) return null;
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as { exp?: number };
+  } catch {
+    return null;
+  }
+}
+
+/** Shopify logout rejects expired/malformed id_token_hint with "Invalid id_token". */
+function isUsableIdToken(token: string | null | undefined): token is string {
+  if (!token) return false;
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) return false;
+  return payload.exp * 1000 > Date.now() + 30_000;
+}
 
 // Shared helper: generate PKCE + state, store in sessionStorage, redirect to Shopify OAuth.
 async function startOAuth(prompt?: string) {
@@ -298,7 +323,15 @@ export function useAuth() {
     return () => window.clearTimeout(t);
   }, [status, session?.subscriptionExpiresAt]);
 
-  const initiateLogin = useCallback(() => startOAuth(), []);
+  const initiateLogin = useCallback(() => {
+    // Drop expired logout hints so "Use a different account" can't keep sending
+    // Shopify an Invalid id_token. Soft Sign in still uses SSO when Shopify has a session.
+    const stored = localStorage.getItem(SHOPIFY_ID_TOKEN);
+    if (stored && !isUsableIdToken(stored) && !localStorage.getItem(SHOPIFY_REFRESH_TOKEN)) {
+      clearShopifyTokens();
+    }
+    return startOAuth();
+  }, []);
 
   const recheck = useCallback(async (): Promise<boolean> => {
     const stored = loadSession();
@@ -368,28 +401,18 @@ export function useAuth() {
     return refreshed?.token ?? null;
   }, [refreshAccessToken]);
 
-  // switchAccount: reads shopify_id_token/refresh_token (kept across regular
-  // logouts), refreshes to get a non-expired hint, then hits Shopify's OIDC
-  // end-session endpoint. Shopify clears its session and redirects to /auth/start
-  // which fires a fresh OAuth with prompt=login so the email screen appears.
-  // Requires Shopify Customer Account API → Logout URIs:
-  //   https://autothresh.com/auth/start
-  //   https://www.autothresh.com/auth/start  (no trailing slash)
+  // switchAccount: end the Shopify customer session so a different email can sign in.
+  // Shopify's logout endpoint requires a non-expired id_token_hint — an expired one
+  // shows their "Invalid id_token" error page. Refresh first; if we can't get a fresh
+  // token, skip logout and start OAuth with prompt=login instead.
   const switchAccount = useCallback(async () => {
     const storedIdToken      = localStorage.getItem(SHOPIFY_ID_TOKEN);
     const storedRefreshToken = localStorage.getItem(SHOPIFY_REFRESH_TOKEN);
 
-    if (!storedIdToken && !storedRefreshToken) {
-      alert('Sign out and sign back in once to enable account switching.');
-      return;
-    }
-
-    // Clear the app session now (keep Shopify tokens for the logout hint).
     clearSession();
 
-    let idToken = storedIdToken;
+    let idToken: string | null = isUsableIdToken(storedIdToken) ? storedIdToken : null;
 
-    // Refresh to get a guaranteed non-expired id_token (Shopify rejects stale hints).
     if (storedRefreshToken) {
       try {
         const r = await fetch('/api/auth-refresh', {
@@ -397,21 +420,33 @@ export function useAuth() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refresh_token: storedRefreshToken }),
         });
-        const data = await r.json() as { idToken?: string; refreshToken?: string };
-        if (data.idToken) { idToken = data.idToken; saveIdToken(data.idToken); }
-        if (data.refreshToken) saveRefreshToken(data.refreshToken);
-      } catch { /* fall back to storedIdToken */ }
+        if (r.ok) {
+          const data = await r.json() as { idToken?: string; refreshToken?: string };
+          if (data.refreshToken) saveRefreshToken(data.refreshToken);
+          if (isUsableIdToken(data.idToken)) {
+            idToken = data.idToken;
+            saveIdToken(data.idToken);
+          }
+        } else {
+          clearShopifyTokens();
+          idToken = null;
+        }
+      } catch {
+        /* fall through */
+      }
     }
 
-    if (!idToken) {
-      alert('Sign out and sign back in once to enable account switching.');
+    if (isUsableIdToken(idToken)) {
+      const logoutUrl = new URL(`https://shopify.com/authentication/${SHOPIFY_STORE_ID}/logout`);
+      logoutUrl.searchParams.set('id_token_hint', idToken);
+      logoutUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/auth/start`);
+      window.location.href = logoutUrl.toString();
       return;
     }
 
-    const logoutUrl = new URL(`https://shopify.com/authentication/${SHOPIFY_STORE_ID}/logout`);
-    logoutUrl.searchParams.set('id_token_hint', idToken);
-    logoutUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/auth/start`);
-    window.location.href = logoutUrl.toString();
+    // No usable hint — don't call Shopify logout (that page is the Invalid id_token error).
+    clearShopifyTokens();
+    await startOAuth('login');
   }, []);
 
   // logout: local-only sign-out. Keeps shopify_id_token + shopify_refresh_token
