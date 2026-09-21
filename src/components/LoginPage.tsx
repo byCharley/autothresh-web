@@ -63,20 +63,25 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
   const [showInfo, setShowInfo]         = useState(false);
   const [trialBusy, setTrialBusy] = useState(false);
   const [trialError, setTrialError] = useState('');
-  const [canSwitch] = useState(() => {
-    try {
-      return !!(localStorage.getItem('shopify_id_token') || localStorage.getItem('shopify_refresh_token'));
-    } catch {
-      return false;
-    }
-  });
+  const [switchBusy, setSwitchBusy] = useState(false);
 
   const licenseReady = !!licenseKey.trim() && !!orderNumber.trim();
   const canActivate = licenseReady && !licenseBusy;
+  const anyBusy = loading || switchBusy;
 
   const handleSignIn = () => {
     setLoading(true);
     onLogin();
+  };
+
+  const handleSwitchAccount = async () => {
+    if (!onSwitchAccount || anyBusy) return;
+    setSwitchBusy(true);
+    try {
+      await onSwitchAccount();
+    } catch {
+      setSwitchBusy(false);
+    }
   };
 
   return (
@@ -120,14 +125,14 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
               ))}
             </div>
 
-            <button className="login-primary" onClick={handleSignIn} disabled={loading}>
+            <button className="login-primary" onClick={handleSignIn} disabled={anyBusy}>
               {loading ? 'Redirecting…' : 'Sign in'}
               {!loading && <span className="login-primary-arrow" aria-hidden="true">→</span>}
             </button>
 
-            {onSwitchAccount && canSwitch && (
-              <button className="login-text-btn" onClick={onSwitchAccount} disabled={loading}>
-                Use a different account
+            {onSwitchAccount && (
+              <button className="login-text-btn" onClick={handleSwitchAccount} disabled={anyBusy}>
+                {switchBusy ? 'Opening sign-in…' : 'Use a different account'}
               </button>
             )}
 

@@ -401,50 +401,11 @@ export function useAuth() {
     return refreshed?.token ?? null;
   }, [refreshAccessToken]);
 
-  // switchAccount: end the Shopify customer session so a different email can sign in.
-  // Shopify's logout endpoint requires a non-expired id_token_hint — an expired one
-  // shows their "Invalid id_token" error page. Refresh first; if we can't get a fresh
-  // token, skip logout and start OAuth with prompt=login instead.
+  // Always available: clear local session and force Shopify's login screen
+  // (email / Google / Shop). Do NOT hit Shopify logout with a stale id_token —
+  // that is what showed "Invalid id_token". prompt=login is enough to get the picker.
   const switchAccount = useCallback(async () => {
-    const storedIdToken      = localStorage.getItem(SHOPIFY_ID_TOKEN);
-    const storedRefreshToken = localStorage.getItem(SHOPIFY_REFRESH_TOKEN);
-
     clearSession();
-
-    let idToken: string | null = isUsableIdToken(storedIdToken) ? storedIdToken : null;
-
-    if (storedRefreshToken) {
-      try {
-        const r = await fetch('/api/auth-refresh', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: storedRefreshToken }),
-        });
-        if (r.ok) {
-          const data = await r.json() as { idToken?: string; refreshToken?: string };
-          if (data.refreshToken) saveRefreshToken(data.refreshToken);
-          if (isUsableIdToken(data.idToken)) {
-            idToken = data.idToken;
-            saveIdToken(data.idToken);
-          }
-        } else {
-          clearShopifyTokens();
-          idToken = null;
-        }
-      } catch {
-        /* fall through */
-      }
-    }
-
-    if (isUsableIdToken(idToken)) {
-      const logoutUrl = new URL(`https://shopify.com/authentication/${SHOPIFY_STORE_ID}/logout`);
-      logoutUrl.searchParams.set('id_token_hint', idToken);
-      logoutUrl.searchParams.set('post_logout_redirect_uri', `${window.location.origin}/auth/start`);
-      window.location.href = logoutUrl.toString();
-      return;
-    }
-
-    // No usable hint — don't call Shopify logout (that page is the Invalid id_token error).
     clearShopifyTokens();
     await startOAuth('login');
   }, []);
