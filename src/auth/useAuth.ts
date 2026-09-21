@@ -26,6 +26,7 @@ const SHOPIFY_STORE_ID      = '52142571674';
 const VERIFIER_KEY     = 'at_pkce_verifier';
 const STATE_KEY        = 'at_pkce_state';
 const WANT_TRIAL_KEY   = 'at_want_trial';
+const TRIAL_ERROR_KEY  = 'at_trial_error';
 const NONCE_KEY        = 'at_pkce_nonce';
 function isInactiveStatus(status?: string): boolean {
   return status === 'paused' || status === 'cancelled' || status === 'canceled' || status === 'device_limit';
@@ -231,6 +232,18 @@ export function useAuth() {
           setSession(s);
           if (data.subscriptionStatus === 'trial_ended') {
             setStatus('trial-ended');
+            return;
+          }
+          if (data.subscriptionStatus === 'trial_network_limit') {
+            try {
+              sessionStorage.setItem(
+                TRIAL_ERROR_KEY,
+                'A free trial was already started from this network. Sign in with the account that started it, or buy a license.',
+              );
+            } catch { /* ignore */ }
+            clearSession();
+            setSession(null);
+            setStatus('unauthenticated');
             return;
           }
           if (data.subscriptionStatus === 'app_trial') {

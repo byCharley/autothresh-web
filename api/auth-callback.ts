@@ -749,6 +749,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } else if (claim.status === 'expired') {
           outStatus = 'trial_ended';
           outExpiry = claim.expiresAt;
+        } else if (claim.status === 'network_limit') {
+          outStatus = 'trial_network_limit';
         }
       } else {
         const claim = await resumeAppTrialForShopify(emailLower, idents, { req, res });

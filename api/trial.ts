@@ -72,6 +72,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (lookupOnly && claimed.status === 'none') {
         return res.status(200).json({ status: 'none' });
       }
+      if (claimed.status === 'network_limit') {
+        return res.status(403).json({
+          status: 'network_limit',
+          error: 'A free trial was already started from this network.',
+        });
+      }
       return res.status(200).json(claimed);
     }
 

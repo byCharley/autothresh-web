@@ -64,7 +64,15 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
   const [showFaq, setShowFaq]           = useState(false);
   const [showInfo, setShowInfo]         = useState(false);
   const [trialBusy, setTrialBusy] = useState(false);
-  const [trialError, setTrialError] = useState('');
+  const [trialError, setTrialError] = useState(() => {
+    try {
+      const msg = sessionStorage.getItem('at_trial_error') ?? '';
+      if (msg) sessionStorage.removeItem('at_trial_error');
+      return msg;
+    } catch {
+      return '';
+    }
+  });
   const [trialPhase, setTrialPhase] = useState<'unknown' | 'none' | 'started'>(() => {
     try { return localStorage.getItem('at_trial_started') === '1' ? 'started' : 'unknown'; } catch { return 'unknown'; }
   });
