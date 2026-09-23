@@ -48,6 +48,7 @@ interface Props {
   onLogout: () => void;
   onSwitchAccount?: () => void;
   onRecheck?: () => Promise<boolean>;
+  onActivateLicense?: (licenseKey: string, orderNumber: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const PLAN_FEATURES = {
@@ -55,7 +56,7 @@ const PLAN_FEATURES = {
     'Everything in the app',
     'Pay once, own forever',
     'All future updates free',
-    'Two devices per license',
+    'Three devices per license',
     'Tutorial library built-in',
   ],
 };
@@ -171,20 +172,24 @@ function PricingModal({ onClose, issued }: { onClose: () => void; issued?: Issue
         <BundleNote hasCode={!!issued?.code} />
 
         <div style={{ textAlign: 'center', marginTop: 16, fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-          Two devices per license. Remove a device anytime to free a slot.
+          Three devices per license. Remove a device anytime to free a slot.
         </div>
       </div>
     </div>
   );
 }
 
-export function SubscribePage({ firstName, email, subscriptionStatus, planTitle, subscriptionExpiresAt, token, devices, onLogout, onSwitchAccount, onRecheck }: Props) {
+export function SubscribePage({ firstName, email, subscriptionStatus, planTitle, subscriptionExpiresAt, token, devices, onLogout, onSwitchAccount, onRecheck, onActivateLicense }: Props) {
   const appVersion = useAppVersion();
   const [showEula,      setShowEula]      = useState(false);
   const [showFaq,       setShowFaq]       = useState(false);
   const [showPricing,   setShowPricing]   = useState(false);
   const [recheckState,  setRecheckState]  = useState<'idle' | 'checking' | 'denied'>('idle');
   const [issued, setIssued] = useState<IssuedDiscount | null>(null);
+  const [licenseKey, setLicenseKey] = useState('');
+  const [orderNumber, setOrderNumber] = useState('');
+  const [activateBusy, setActivateBusy] = useState(false);
+  const [activateError, setActivateError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -320,7 +325,7 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
               Device limit reached
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 20 }}>
-              This license is already active on 2 devices. Remove one below, then try this device again.
+              This license is already active on 3 devices. Remove one below, then try this device again.
             </div>
             {token && (
               <div style={{ textAlign: 'left', marginBottom: 20 }}>
@@ -430,6 +435,54 @@ export function SubscribePage({ firstName, email, subscriptionStatus, planTitle,
                 ? `Buy license — ${issued.percent}% off`
                 : `Buy license — ${PRODUCT_PRICE}`}
             </button>
+
+            {onActivateLicense && (
+              <div style={{
+                marginBottom: 20, padding: '14px 14px 12px',
+                border: '1px solid var(--border)', background: 'var(--surface-2)',
+              }}>
+                <div style={{
+                  fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                  letterSpacing: '0.08em', textTransform: 'uppercase',
+                  color: 'var(--text-muted)', marginBottom: 10,
+                }}>
+                  Already have a license key?
+                </div>
+                <input
+                  className="login-input"
+                  value={licenseKey}
+                  onChange={e => setLicenseKey(e.target.value)}
+                  placeholder="License key"
+                  style={{ width: '100%', marginBottom: 8, boxSizing: 'border-box' }}
+                />
+                <input
+                  className="login-input"
+                  value={orderNumber}
+                  onChange={e => setOrderNumber(e.target.value)}
+                  placeholder="Order number"
+                  style={{ width: '100%', marginBottom: 8, boxSizing: 'border-box' }}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={activateBusy || !licenseKey.trim() || !orderNumber.trim()}
+                  onClick={async () => {
+                    if (!onActivateLicense || activateBusy) return;
+                    setActivateBusy(true);
+                    setActivateError('');
+                    const result = await onActivateLicense(licenseKey.trim(), orderNumber.trim());
+                    setActivateBusy(false);
+                    if (!result.ok) setActivateError(result.error || 'Could not activate that license.');
+                  }}
+                  style={{ width: '100%', justifyContent: 'center', opacity: (activateBusy || !licenseKey.trim() || !orderNumber.trim()) ? 0.55 : 1 }}
+                >
+                  {activateBusy ? 'Activating…' : 'Activate & convert to Lifetime'}
+                </button>
+                {activateError && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)', lineHeight: 1.45 }}>{activateError}</div>
+                )}
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
               {onSwitchAccount && (

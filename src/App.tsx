@@ -277,7 +277,7 @@ function App() {
   }
 
   if (status === 'no-subscription') {
-    return <SubscribePage firstName={session?.firstName} email={session?.email} subscriptionStatus={session?.subscriptionStatus} planTitle={session?.planTitle} subscriptionExpiresAt={session?.subscriptionExpiresAt} token={session?.token} devices={session?.devices} onLogout={logout} onSwitchAccount={switchAccount} onRecheck={recheck} />;
+    return <SubscribePage firstName={session?.firstName} email={session?.email} subscriptionStatus={session?.subscriptionStatus} planTitle={session?.planTitle} subscriptionExpiresAt={session?.subscriptionExpiresAt} token={session?.token} devices={session?.devices} onLogout={logout} onSwitchAccount={switchAccount} onRecheck={recheck} onActivateLicense={activateLicense} />;
   }
 
   function buildColorRefCanvas(refColors: RGB[], dpi = 72): HTMLCanvasElement {
@@ -1728,6 +1728,7 @@ function App() {
           <LifetimeMigrationModal
             planTitle={session?.planTitle}
             accessThrough={session?.subscriptionExpiresAt}
+            onActivateLicense={activateLicense}
             onClose={() => setShowLifetimeMigration(false)}
           />
         )}
@@ -1872,6 +1873,7 @@ function App() {
         <LifetimeMigrationModal
           planTitle={session?.planTitle}
           accessThrough={session?.subscriptionExpiresAt}
+          onActivateLicense={activateLicense}
           onClose={() => setShowLifetimeMigration(false)}
         />
       )}

@@ -204,6 +204,9 @@ export function LoginPage({ onLogin, onSwitchAccount, onActivateLicense, onStart
             >
               {licenseBusy ? 'Checking…' : 'Activate'}
             </button>
+            <p className="login-trial-note" style={{ marginTop: 8 }}>
+              Activating links this license to your email (up to 3 devices). After that, use Sign in with the same email.
+            </p>
             {licenseError && <div className="login-error">{licenseError}</div>}
 
             <div className="login-ctas">

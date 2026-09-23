@@ -50,6 +50,7 @@ interface Props {
   onClose: () => void;
   planTitle?: string;
   accessThrough?: string;
+  onActivateLicense?: (licenseKey: string, orderNumber: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
 function fmtAccess(iso?: string) {
@@ -59,8 +60,12 @@ function fmtAccess(iso?: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function LifetimeMigrationModal({ onClose, planTitle, accessThrough }: Props) {
+export function LifetimeMigrationModal({ onClose, planTitle, accessThrough, onActivateLicense }: Props) {
   const [neverShow, setNeverShow] = useState(true);
+  const [licenseKey, setLicenseKey] = useState('');
+  const [orderNumber, setOrderNumber] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const until = fmtAccess(accessThrough);
 
   const handleClose = () => {
@@ -76,6 +81,8 @@ export function LifetimeMigrationModal({ onClose, planTitle, accessThrough }: Pr
         (planTitle || 'Monthly / Annual') +
         '\n\nThanks!',
     )}`;
+
+  const canActivate = !!onActivateLicense && !!licenseKey.trim() && !!orderNumber.trim() && !busy;
 
   return (
     <div
@@ -134,11 +141,61 @@ export function LifetimeMigrationModal({ onClose, planTitle, accessThrough }: Pr
             {' '}Subscriptions are cancelled; nothing auto-renews.
           </p>
           <p style={{ margin: '0 0 14px' }}>
-            When that date hits, you can buy a Lifetime license. Email me and I’ll send a special discount code that credits what you’ve already paid.
+            When you buy Lifetime, activate your license key below to convert this account — then Sign in with your email on any device (up to 3).
           </p>
           <p style={{ margin: 0, fontSize: 12, color: 'var(--text-dim)' }}>
-            Include the email on your account so I can match your payments.
+            Need a discount that credits what you already paid? Email me with the address on your account.
           </p>
+
+          {onActivateLicense && (
+            <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+              <div style={{
+                fontSize: 10, fontFamily: 'var(--font-mono)', fontWeight: 700,
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+                color: 'var(--text-muted)', marginBottom: 10,
+              }}>
+                Activate lifetime license
+              </div>
+              <input
+                className="login-input"
+                value={licenseKey}
+                onChange={e => setLicenseKey(e.target.value)}
+                placeholder="License key"
+                style={{ width: '100%', marginBottom: 8, boxSizing: 'border-box' }}
+              />
+              <input
+                className="login-input"
+                value={orderNumber}
+                onChange={e => setOrderNumber(e.target.value)}
+                placeholder="Order number"
+                style={{ width: '100%', marginBottom: 8, boxSizing: 'border-box' }}
+              />
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!canActivate}
+                onClick={async () => {
+                  if (!canActivate) return;
+                  setBusy(true);
+                  setError('');
+                  const result = await onActivateLicense(licenseKey.trim(), orderNumber.trim());
+                  setBusy(false);
+                  if (!result.ok) {
+                    setError(result.error || 'Could not activate that license.');
+                    return;
+                  }
+                  markLifetimeMigrationSeen();
+                  onClose();
+                }}
+                style={{ width: '100%', justifyContent: 'center', color: '#000', opacity: canActivate ? 1 : 0.55 }}
+              >
+                {busy ? 'Activating…' : 'Convert to Lifetime'}
+              </button>
+              {error && (
+                <div style={{ marginTop: 8, fontSize: 12, color: 'var(--danger)', lineHeight: 1.45 }}>{error}</div>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{

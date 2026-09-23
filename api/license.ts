@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createHmac, timingSafeEqual } from 'crypto';
+import { bindLicenseToEmail } from './_lib/licenseBindings.js';
 
 const LDT_ACCESS   = process.env.LDT_ACCESS ?? '';
 const LDT_API_URL  = 'https://digital.ldtsoft.work/api/integrate';
@@ -8,7 +9,7 @@ const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
 const SECRET       = process.env.LICENSE_TOKEN_SECRET || SERVICE_KEY || 'at-license';
 const STORE_ID     = process.env.SHOPIFY_STORE_ID ?? '';
 const CUST_API_URL = `https://shopify.com/${STORE_ID}/account/customer/api/2024-07/graphql`;
-const DEVICE_CAP   = 2;
+const DEVICE_CAP   = 3;
 
 export interface LicenseDevice {
   id: string;
@@ -168,14 +169,25 @@ async function sb(path: string, method = 'GET', body?: unknown) {
 
 async function loadDevices(email: string, licenseKey?: string): Promise<LicenseDevice[]> {
   if (!SUPABASE_URL || !SERVICE_KEY) return [];
-  const filters = [`email=eq.${encodeURIComponent(email)}`];
-  if (licenseKey) filters.push(`license_key=eq.${encodeURIComponent(licenseKey)}`);
-  const r = await sb(`license_devices?or=(${filters.join(',')})&select=id,device_id,device_name,last_seen_at,created_at&order=last_seen_at.desc`);
+  // Cap is per license key when we have one; otherwise fall back to email.
+  const filter = licenseKey
+    ? `license_key=eq.${encodeURIComponent(licenseKey)}`
+    : `email=eq.${encodeURIComponent(email)}`;
+  const r = await sb(`license_devices?${filter}&select=id,device_id,device_name,last_seen_at,created_at&order=last_seen_at.desc`);
   if (!r.ok) {
     console.error('license_devices load failed:', r.status, await r.text());
     return [];
   }
-  return await r.json() as LicenseDevice[];
+  // Dedupe by device_id (older rows may share a key across emails).
+  const rows = await r.json() as LicenseDevice[];
+  const seen = new Set<string>();
+  const out: LicenseDevice[] = [];
+  for (const d of rows) {
+    if (seen.has(d.device_id)) continue;
+    seen.add(d.device_id);
+    out.push(d);
+  }
+  return out;
 }
 
 export async function claimDevice(opts: {
@@ -243,6 +255,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Strip zero-width / non-printable junk from emailed keys.
     const licenseKey = String(body.licenseKey ?? '').replace(/[^\x21-\x7E]/g, '').trim();
     const orderNumber = String(body.orderNumber ?? '').trim();
+    const shopifyToken = String(body.token ?? body.accessToken ?? '').trim();
     if (!licenseKey || !orderNumber) {
       return res.status(400).json({ error: 'License key and order number are required.' });
     }
@@ -286,8 +299,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const email = (order.orderEmail || `license-${licenseKey.slice(0, 8).toLowerCase()}@autothresh.local`).toLowerCase();
+    const orderEmail = (order.orderEmail || '').trim().toLowerCase();
+    const shopifyEmail = shopifyToken ? await emailFromShopify(shopifyToken) : null;
+    // Prefer the signed-in Shopify account so monthly/yearly users convert on their login email.
+    // Fall back to the LDT order email for cold activation from the login form.
+    const email = (shopifyEmail || orderEmail || '').toLowerCase();
+    if (!email || !email.includes('@')) {
+      return res.status(200).json({
+        ok: false,
+        error: 'Could not determine the account email for this license. Sign in first, then activate.',
+      });
+    }
+
     const resolvedOrder = order.orderName || order.orderId || orderNumber;
+    const bound = await bindLicenseToEmail({
+      email,
+      licenseKey,
+      orderNumber: resolvedOrder,
+    });
+    if (!bound.ok) {
+      return res.status(200).json({ ok: false, error: bound.error });
+    }
+
     const claim = await claimDevice({
       email,
       licenseKey,
@@ -296,6 +329,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       deviceName,
       userAgent,
     });
+
+    // Signed-in Shopify session: keep their token; client will re-verify as lifetime.
+    if (shopifyEmail) {
+      if (!claim.ok) {
+        return res.status(200).json({
+          ok: false,
+          bound: true,
+          email,
+          hasSubscription: false,
+          subscriptionStatus: 'device_limit',
+          devices: claim.devices.map(d => ({ ...d, isCurrent: d.device_id === deviceId })),
+          error: `This license is already active on ${DEVICE_CAP} devices. Remove one to continue.`,
+        });
+      }
+      return res.status(200).json({
+        ok: true,
+        bound: true,
+        converted: true,
+        email,
+        firstName: '',
+        hasSubscription: true,
+        subscriptionStatus: 'lifetime',
+        planTitle: 'Lifetime Access',
+        devices: claim.devices,
+      });
+    }
+
     const token = signLicenseToken({ email, licenseKey, orderNumber: resolvedOrder });
     if (!claim.ok) {
       return res.status(200).json({
@@ -305,7 +365,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         hasSubscription: false,
         subscriptionStatus: 'device_limit',
         devices: claim.devices.map(d => ({ ...d, isCurrent: d.device_id === deviceId })),
-        error: 'This license is already active on 2 devices. Remove one to continue.',
+        error: `This license is already active on ${DEVICE_CAP} devices. Remove one to continue.`,
       });
     }
     return res.status(200).json({

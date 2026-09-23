@@ -70,7 +70,7 @@ export function DeviceManager({ token, devices: initial, currentDeviceId, messag
   return (
     <div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 16 }}>
-        {message || 'Each license can be active on 2 devices. Remove one here to free a slot.'}
+        {message || 'Each license can be active on 3 devices. Remove one here to free a slot.'}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {devices.length === 0 && (

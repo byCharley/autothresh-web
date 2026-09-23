@@ -7,6 +7,7 @@ import {
   resumeAppTrialForShopify,
   trialConfigured,
 } from './_lib/appTrial.js';
+import { emailHasBoundLicense, getLicenseBindingByEmail } from './_lib/licenseBindings.js';
 
 const STORE_ID     = process.env.SHOPIFY_STORE_ID!;
 const TESTER_EMAILS = new Set(
@@ -459,15 +460,20 @@ function resolveMembership(opts: {
   ldtWebOrder: boolean;
   seal: SealCheck;
   planAccess?: { accessUntil: string; planTitle?: string } | null;
+  boundLifetime?: boolean;
 }): Membership {
-  const { isCreator, envTester, testerRecord, ldtLifetime, seal, planAccess } = opts;
+  const { isCreator, envTester, testerRecord, ldtLifetime, seal, planAccess, boundLifetime } = opts;
   const isTester = envTester || (!isCreator && testerRecord?.status === 'active' && testerRecord.role !== 'lifetime');
   const hasManualLifetime = !isCreator && testerRecord?.status === 'active' && testerRecord.role === 'lifetime';
   const liveSeal = seal.hasSub || seal.subscriptionStatus === 'paused';
-  const hasLifetime = !liveSeal && (seal.hasLifetime || ldtLifetime || hasManualLifetime);
+  // Bound license / LDT / Seal lifetime wins over an old monthly–yearly plan (conversion).
+  const hasLifetime = !!(boundLifetime || seal.hasLifetime || ldtLifetime || hasManualLifetime);
 
   if (isCreator) {
     return { hasSubscription: true, subscriptionStatus: 'creator', planTitle: 'Creator', isTester: false, hasLifetime: false };
+  }
+  if (hasLifetime) {
+    return { hasSubscription: true, subscriptionStatus: 'lifetime', planTitle: 'Lifetime Access', isTester: false, hasLifetime: true };
   }
   if (liveSeal) {
     return {
@@ -503,9 +509,6 @@ function resolveMembership(opts: {
   if (isTester) {
     return { hasSubscription: true, subscriptionStatus: 'tester', planTitle: 'Tester Access', isTester: true, hasLifetime: false };
   }
-  if (hasLifetime) {
-    return { hasSubscription: true, subscriptionStatus: 'lifetime', planTitle: 'Lifetime Access', isTester: false, hasLifetime: true };
-  }
   return {
     hasSubscription: false,
     subscriptionStatus: seal.subscriptionStatus,
@@ -516,7 +519,7 @@ function resolveMembership(opts: {
   };
 }
 
-const DEVICE_CAP = 2;
+const DEVICE_CAP = 3;
 const LICENSE_SECRET = process.env.LICENSE_TOKEN_SECRET || SERVICE_KEY || 'at-license';
 
 interface LicenseDevice {
@@ -544,14 +547,23 @@ function readLicenseToken(token: string): { email: string; licenseKey: string; o
 
 async function loadLicenseDevices(email: string, licenseKey?: string): Promise<LicenseDevice[]> {
   if (!SUPABASE_URL || !SERVICE_KEY) return [];
-  const filters = [`email=eq.${encodeURIComponent(email)}`];
-  if (licenseKey) filters.push(`license_key=eq.${encodeURIComponent(licenseKey)}`);
+  const filter = licenseKey
+    ? `license_key=eq.${encodeURIComponent(licenseKey)}`
+    : `email=eq.${encodeURIComponent(email)}`;
   const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/license_devices?or=(${filters.join(',')})&select=id,device_id,device_name,last_seen_at,created_at&order=last_seen_at.desc`,
+    `${SUPABASE_URL}/rest/v1/license_devices?${filter}&select=id,device_id,device_name,last_seen_at,created_at&order=last_seen_at.desc`,
     { headers: { Authorization: `Bearer ${SERVICE_KEY}`, apikey: SERVICE_KEY } },
   );
   if (!r.ok) return [];
-  return await r.json() as LicenseDevice[];
+  const rows = await r.json() as LicenseDevice[];
+  const seen = new Set<string>();
+  const out: LicenseDevice[] = [];
+  for (const d of rows) {
+    if (seen.has(d.device_id)) continue;
+    seen.add(d.device_id);
+    out.push(d);
+  }
+  return out;
 }
 
 async function claimDevice(opts: {
@@ -685,7 +697,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const isCreator = CREATOR_EMAILS.has(emailLower);
 
   // ── Run all async checks in parallel ─────────────────────────────────────
-  const [sealResult, ldtLifetime, shopifyLifetime, testerRecord, securityResult, userPrefs, planAccess] = await Promise.all([
+  const [sealResult, ldtLifetime, shopifyLifetime, testerRecord, securityResult, userPrefs, planAccess, boundLifetime] = await Promise.all([
     sealCheckSubscription(email),
     (!isCreator) ? checkLdtLifetime(emailLower) : Promise.resolve({ lifetime: false, webOrder: false }),
     (!isCreator) ? checkShopifyLifetime(token) : Promise.resolve(false),
@@ -693,6 +705,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     (!isCreator) ? checkSecurityFlag(emailLower) : Promise.resolve(false),
     getUserPrefs(emailLower),
     (!isCreator) ? getPlanAccess(emailLower) : Promise.resolve(null),
+    (!isCreator) ? emailHasBoundLicense(emailLower) : Promise.resolve(false),
   ]);
 
   const isSecurityExpired = securityResult;
@@ -705,6 +718,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ldtWebOrder: ldtLifetime.webOrder || shopifyLifetime,
     seal: sealResult,
     planAccess,
+    boundLifetime,
   });
 
   const { hasSub, activeSubs } = sealResult;
@@ -785,8 +799,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (outHasSub && !isCreator && deviceId) {
+    const binding = outStatus === 'lifetime' ? await getLicenseBindingByEmail(emailLower) : null;
     const claim = await claimDevice({
       email: emailLower,
+      licenseKey: binding?.license_key,
+      orderNumber: binding?.order_number ?? undefined,
       deviceId,
       deviceName: deviceName ?? 'Device',
       userAgent: ua,

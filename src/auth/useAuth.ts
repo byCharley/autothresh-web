@@ -514,6 +514,7 @@ export function useAuth() {
 
   const activateLicense = useCallback(async (licenseKey: string, orderNumber: string): Promise<{ ok: boolean; error?: string }> => {
     try {
+      const shopifyToken = loadAccountSession()?.token;
       const r = await fetch('/api/license', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -523,9 +524,75 @@ export function useAuth() {
           orderNumber,
           deviceId: getDeviceId(),
           deviceName: deviceNameFromUa(),
+          ...(shopifyToken && !shopifyToken.startsWith('atlic.') ? { token: shopifyToken } : {}),
         }),
       });
-      const data = await r.json() as Partial<Session> & { ok?: boolean; error?: string; devices?: Session['devices'] };
+      const data = await r.json() as Partial<Session> & {
+        ok?: boolean;
+        error?: string;
+        bound?: boolean;
+        converted?: boolean;
+        devices?: Session['devices'];
+      };
+
+      // Signed-in subscriber converting to lifetime — keep Shopify session and refresh.
+      if (data.ok && data.bound && shopifyToken && !shopifyToken.startsWith('atlic.')) {
+        const refreshed = await (async () => {
+          try {
+            const vr = await fetch('/api/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: shopifyToken, deviceId: getDeviceId(), deviceName: deviceNameFromUa() }),
+            });
+            return await vr.json() as {
+              valid?: boolean;
+              hasSubscription?: boolean;
+              subscriptionStatus?: string;
+              email?: string;
+              firstName?: string;
+              subscriptionExpiresAt?: string;
+              planTitle?: string;
+              accentColor?: string;
+              devices?: Session['devices'];
+            };
+          } catch {
+            return null;
+          }
+        })();
+        const stored = loadAccountSession();
+        if (refreshed?.valid && stored) {
+          const updated: Session = applyDisplayNameOverride({
+            ...stored,
+            hasSubscription: !!refreshed.hasSubscription,
+            subscriptionStatus: refreshed.subscriptionStatus ?? 'lifetime',
+            email: refreshed.email || stored.email,
+            firstName: refreshed.firstName || stored.firstName,
+            subscriptionExpiresAt: refreshed.subscriptionExpiresAt,
+            planTitle: refreshed.planTitle || 'Lifetime Access',
+            accentColor: refreshed.accentColor,
+            devices: refreshed.devices ?? data.devices,
+          });
+          saveSession(updated);
+          setSession(updated);
+          setStatus(updated.hasSubscription && !isInactiveStatus(updated.subscriptionStatus) ? 'authenticated' : 'no-subscription');
+          return { ok: true };
+        }
+        // Fallback: treat as lifetime on current session
+        if (stored) {
+          const updated: Session = applyDisplayNameOverride({
+            ...stored,
+            hasSubscription: true,
+            subscriptionStatus: 'lifetime',
+            planTitle: 'Lifetime Access',
+            devices: data.devices,
+          });
+          saveSession(updated);
+          setSession(updated);
+          setStatus('authenticated');
+          return { ok: true };
+        }
+      }
+
       if (!data.token) return { ok: false, error: data.error || 'Could not activate that license.' };
       const s: Session = applyDisplayNameOverride({
         token: data.token,
